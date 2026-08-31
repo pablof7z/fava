@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use fava_transport::{
-    HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
-    RelaySession, RelaySessionGeneration, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome,
-    TransportAmbiguity, TransportBounds, TransportDeadlines, TransportFailure,
+    HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession, RelayConnection,
+    RelaySession, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, TransportAmbiguity,
+    TransportBounds, TransportDeadlines, TransportFailure,
 };
 use tokio::sync::{Notify, mpsc, oneshot};
 
@@ -34,7 +34,7 @@ impl SessionShared {
     pub(crate) fn new(
         request: &OpenRelaySession,
         entropy: u64,
-        generation: RelaySessionGeneration,
+        generation: RelayConnection,
         generations: Arc<AtomicU64>,
         subscriptions: Arc<AtomicU64>,
     ) -> Self {
@@ -158,4 +158,3 @@ impl RelaySession for WebSocketRelaySession {
         })
     }
 }
-

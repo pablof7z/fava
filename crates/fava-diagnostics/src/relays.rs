@@ -1,6 +1,6 @@
 //! Current facts about the relay sessions Fava holds.
 
-use fava_query::{BoundedText, ObservationId, OperationGeneration};
+use fava_query::{BoundedText, ObservationId, Round};
 use fava_relay::RelaySessionKey;
 use fava_wire::SubscriptionId;
 
@@ -9,8 +9,8 @@ use fava_wire::SubscriptionId;
 pub struct RelayDiagnostic {
     /// Relay and access authority.
     pub session: RelaySessionKey,
-    /// Current observation-owned provider-operation generation, when assigned.
-    pub generation: Option<OperationGeneration>,
+    /// Current observation-owned provider-round, when assigned.
+    pub generation: Option<Round>,
     /// Whether this connection is establishing, live, reconnecting, out of
     /// reconnect budget, or closed.
     pub state: RelaySessionState,

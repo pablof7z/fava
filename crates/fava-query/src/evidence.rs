@@ -15,7 +15,7 @@ use nostr::event::EventId;
 use nostr::types::{RelayUrl, Timestamp};
 
 use crate::SourceRevision;
-use crate::identity::{ObservationId, OperationGeneration, QueryBranchId};
+use crate::identity::{ObservationId, QueryBranchId, Round};
 
 /// Role of one contribution to the universal query merge.
 ///
@@ -149,7 +149,7 @@ pub struct RelayQueryEvidence {
     /// Relay and access authority.
     pub session: RelaySessionKey,
     /// Transport connection generation these facts belong to.
-    pub generation: Option<OperationGeneration>,
+    pub generation: Option<Round>,
     /// Desired-plan revision under which this relay's demand was requested.
     /// A completion carrying an older revision is stale (`GOALS:426`).
     pub plan_revision: u64,

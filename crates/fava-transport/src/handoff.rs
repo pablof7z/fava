@@ -12,7 +12,7 @@ use crate::{BoundedText, HandoffCorrelation, RelaySessionIdentity};
 pub enum HandoffOutcome {
     /// Bytes definitely did not leave Fava.
     NotHandedOff {
-        /// Session and generation the attempt was made against.
+        /// Session and connection the attempt was made against.
         identity: RelaySessionIdentity,
         /// Caller's correlation, returned verbatim.
         correlation: HandoffCorrelation,
@@ -21,14 +21,14 @@ pub enum HandoffOutcome {
     },
     /// The transport accepted the complete frame for the session.
     HandedOff {
-        /// Session and generation that accepted the bytes.
+        /// Session and connection that accepted the bytes.
         identity: RelaySessionIdentity,
         /// Caller's correlation, returned verbatim.
         correlation: HandoffCorrelation,
     },
     /// The transport cannot prove whether the relay received the frame.
     Ambiguous {
-        /// Session and generation the attempt was made against.
+        /// Session and connection the attempt was made against.
         identity: RelaySessionIdentity,
         /// Caller's correlation, returned verbatim.
         correlation: HandoffCorrelation,
@@ -38,7 +38,7 @@ pub enum HandoffOutcome {
 }
 
 impl HandoffOutcome {
-    /// Session and generation this completion belongs to.
+    /// Session and connection this completion belongs to.
     #[must_use]
     pub fn identity(&self) -> &RelaySessionIdentity {
         match self {
@@ -64,9 +64,9 @@ impl HandoffOutcome {
 /// Authority: ARCH:1600-1602 names `TransportFailure` as a distinct type.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportFailure {
-    /// The session generation is closed.
+    /// The connection is closed.
     SessionClosed,
-    /// The transport cannot mint another unique physical generation.
+    /// The transport cannot mint another unique connection.
     GenerationExhausted,
     /// The outbound queue is full at its declared bound.
     OutboundQueueFull {

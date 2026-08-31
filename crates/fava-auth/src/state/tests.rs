@@ -1,5 +1,5 @@
 use fava_relay::{AuthenticationState, BoundedText, RelayAccess, RelaySessionKey};
-use fava_transport::RelaySessionGeneration;
+use fava_transport::RelayConnection;
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
 
@@ -13,8 +13,8 @@ fn session() -> RelaySessionKey {
     }
 }
 
-fn generation(value: u64) -> RelaySessionGeneration {
-    RelaySessionGeneration::new(value).expect("non-zero generation")
+fn generation(value: u64) -> RelayConnection {
+    RelayConnection::new(value).expect("non-zero generation")
 }
 
 fn challenge(text: &str) -> Challenge {

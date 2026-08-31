@@ -5,9 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava_relay::{AuthenticationState, BoundedText, RelaySessionKey};
-use fava_transport::{
-    OpenRelaySession, RelaySession, TransportBounds, TransportDeadlines,
-};
+use fava_transport::{OpenRelaySession, RelaySession, TransportBounds, TransportDeadlines};
 
 use thiserror::Error;
 
@@ -68,7 +66,7 @@ impl Authenticator {
 
         {
             let mut guard = self.lock();
-            guard.entry(&key).reconnected(identity.generation);
+            guard.entry(&key).reconnected(identity.connection);
         }
 
         let owner = self.clone();
@@ -125,8 +123,8 @@ impl Authenticator {
     fn connection_reset(&self, current: &fava_transport::RelaySessionIdentity) {
         let signal = {
             let mut guard = self.lock();
-            guard.entry(&current.key).reconnected(current.generation);
-            guard.drop_deferred_before(&current.key, current.generation)
+            guard.entry(&current.key).reconnected(current.connection);
+            guard.drop_deferred_before(&current.key, current.connection)
         };
         if signal {
             self.signal();

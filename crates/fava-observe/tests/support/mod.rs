@@ -183,9 +183,11 @@ pub fn relay_evidence(observation: &Observation, relay: &RelayUrl) -> RelayQuery
 
 /// Deliver one relay message to every consumer of a session.
 pub fn push(peer: &FakeRelay, message: &RelayMessage<'_>) {
-    peer.push_frame(serde_json::to_string(message)
+    peer.push_frame(
+        serde_json::to_string(message)
             .expect("message encodes")
-            .as_bytes());
+            .as_bytes(),
+    );
 }
 
 /// Wire subscriptions one session was asked to open, in order.

@@ -84,7 +84,6 @@ async fn pending_establishment_that_completes_is_not_a_refusal() {
 
 // -------------------------------------------------- 2. mid-operation failure
 
-
 /// Drain a session's connection stream until one state matches, yielding between
 /// polls so the fake's own tasks can run.
 async fn until(
@@ -208,8 +207,8 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
 
     assert_eq!(identity.key, before.key);
     assert_eq!(
-        identity.generation,
-        before.generation.checked_next().expect("successor exists")
+        identity.connection,
+        before.connection.checked_next().expect("successor exists")
     );
     assert_eq!(lease.session().identity(), identity);
     assert_eq!(transport.dials(&key()), 2);

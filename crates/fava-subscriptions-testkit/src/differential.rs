@@ -87,7 +87,12 @@ pub fn assert_planners_agree(
         .attribution
         .ids()
         .map(|id| settled_by_eose_on(&grouped_plan, id))
-        .chain(grouped_plan.open.iter().map(|planned| planned.serves.clone()))
+        .chain(
+            grouped_plan
+                .open
+                .iter()
+                .map(|planned| planned.serves.clone()),
+        )
     {
         for demand in settled {
             assert!(

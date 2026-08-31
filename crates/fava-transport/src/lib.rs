@@ -1,13 +1,13 @@
 //! Replaceable relay-session transport contracts.
 //!
 //! The implementer of [`Transport`] owns every byte, every socket, every clock
-//! the socket is measured against, and every generation number a session ever
+//! the socket is measured against, and every connection number a session ever
 //! wears. It owns a registry keyed by `RelaySessionKey`, so [`Transport::acquire_session`]
 //! is a lookup-then-maybe-dial rather than a dial (`ARCH:1593`, `GOALS:936`).
 //! It owns the refcount on each entry and the deterministic close that fires
 //! when the count reaches zero (`ARCH:1628`). It owns reconnect policy,
 //! backoff, jitter, and attempt exhaustion (`ARCH:1588-1589`, `ARCH:1625`),
-//! and the fact that a reconnect mints a new generation *inside* the session
+//! and the fact that a reconnect mints a new connection *inside* the session
 //! object the lease holders already hold (`GOALS:1093-1095`, RELAY-006).
 //!
 //! It owns nothing about query meaning, filters, attribution, route policy, or
@@ -30,20 +30,20 @@ use std::time::Duration;
 
 pub use error::TransportError;
 pub use fava_relay::BoundedText;
-pub use fava_wire::SubscriptionId;
 use fava_relay::RelaySessionKey;
+pub use fava_wire::SubscriptionId;
 pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportFailure};
 pub use lease::{LeaseRelease, RelaySessionLease};
 pub use request::{OpenRelaySession, TransportBounds, TransportDeadlines};
-pub use router::{Mailbox, Router, Unrouted};
 pub use routed::{
-    Acknowledgement, ConnectionState, PublishFuture, RelaySessionExt, RoutedAcknowledgement, RoutedSubscription,
-    SubscribeFuture, CloseFuture, Correlation, SessionEnded, Settlement, SettlementFuture,
-    Subscription, SubscriptionFuture, SubscriptionItem, correlation,
+    Acknowledgement, CloseFuture, ConnectionState, Correlation, PublishFuture, RelaySessionExt,
+    RoutedAcknowledgement, RoutedSubscription, SessionEnded, Settlement, SettlementFuture,
+    SubscribeFuture, Subscription, SubscriptionFuture, SubscriptionItem, correlation,
 };
+pub use router::{Mailbox, Router, Unrouted};
 pub use session::{
-    HandoffCorrelation, OpenedSubscription, RelaySession,
-    RelaySessionGeneration, RelaySessionIdentity, SUBSCRIPTION_ID_BYTES, subscription_id,
+    HandoffCorrelation, OpenedSubscription, RelayConnection, RelaySession, RelaySessionIdentity,
+    SUBSCRIPTION_ID_BYTES, subscription_id,
 };
 
 /// Future yielding an acquired lease on the current session for one key.
@@ -72,7 +72,7 @@ pub trait Transport: Send + Sync {
     /// new one only when no live session exists for that key.
     ///
     /// Acquiring an existing session MUST NOT open a second socket and MUST
-    /// NOT change its generation. The returned lease increments the entry's
+    /// NOT change its connection. The returned lease increments the entry's
     /// holder count.
     ///
     /// # Errors

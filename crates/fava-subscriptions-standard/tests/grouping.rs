@@ -9,8 +9,7 @@ use fava_subscriptions::{
     SubscriptionPlanError, SubscriptionPlanner,
 };
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
-use fava_subscriptions_testkit::{
-    all_opened,PlannerScenario, apply_plan, assert_conformant};
+use fava_subscriptions_testkit::{PlannerScenario, all_opened, apply_plan, assert_conformant};
 use nostr::filter::{Filter, SingleLetterTag};
 use nostr::key::Keys;
 use support::{

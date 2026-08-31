@@ -3,11 +3,11 @@
 use std::collections::BTreeSet;
 
 use fava_relay::RelaySessionKey;
-use fava_wire::SubscriptionId;
 use fava_subscriptions::{
     DemandId, InstalledSubscription, InstalledSubscriptions, PlanRevision, PlanRevisionIssuer,
     RelayDemand, RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner, validate_plan,
 };
+use fava_wire::SubscriptionId;
 
 /// Mints a fresh revision from a throwaway single-use authority, for scenarios that need one.
 fn fresh_revision() -> PlanRevision {

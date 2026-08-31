@@ -157,7 +157,7 @@ async fn nip42_auth_handshake_completes_and_event_is_acknowledged() {
             challenge: std::borrow::Cow::Borrowed(challenge),
         })
         .expect("AUTH encodes"),
-        );
+    );
 
     // Give the publisher time to sign and resend EVENT.
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -170,7 +170,7 @@ async fn nip42_auth_handshake_completes_and_event_is_acknowledged() {
             message: std::borrow::Cow::Borrowed(""),
         })
         .expect("OK encodes"),
-        );
+    );
 
     let outcome = publish_fut.await.expect("publisher task completed");
 
@@ -231,7 +231,7 @@ async fn nip42_without_signer_returns_authentication_required() {
             challenge: std::borrow::Cow::Borrowed("challenge"),
         })
         .expect("AUTH encodes"),
-        );
+    );
 
     let outcome = publish_fut.await.expect("publisher task completed");
     assert_eq!(

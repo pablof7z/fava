@@ -1,7 +1,7 @@
 //! Authentication state of one relay session, scoped to its generation.
 
 use fava_relay::{AuthenticationState, RelaySessionKey};
-use fava_transport::RelaySessionGeneration;
+use fava_transport::RelayConnection;
 
 use crate::challenge::Challenge;
 
@@ -12,7 +12,7 @@ use crate::challenge::Challenge;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SessionAuthentication {
     session: RelaySessionKey,
-    generation: Option<RelaySessionGeneration>,
+    generation: Option<RelayConnection>,
     challenge: Option<Challenge>,
     state: Option<AuthenticationState>,
     attempts: u32,
@@ -46,7 +46,7 @@ impl SessionAuthentication {
 
     /// Record a challenge arriving on one generation, replacing any earlier
     /// one. A challenge on a newer generation resets the attempt budget.
-    pub fn challenged(&mut self, generation: RelaySessionGeneration, challenge: Challenge) {
+    pub fn challenged(&mut self, generation: RelayConnection, challenge: Challenge) {
         if self.generation != Some(generation) {
             self.reset_to(generation);
         }
@@ -58,7 +58,7 @@ impl SessionAuthentication {
     ///
     /// A state carrying a generation the session has moved past is stale and
     /// is dropped: it describes a connection that no longer exists.
-    pub fn resolved(&mut self, generation: RelaySessionGeneration, state: AuthenticationState) {
+    pub fn resolved(&mut self, generation: RelayConnection, state: AuthenticationState) {
         if self.generation != Some(generation) {
             return;
         }
@@ -69,7 +69,7 @@ impl SessionAuthentication {
     }
 
     /// Begin a replaced connection unauthenticated.
-    pub fn reconnected(&mut self, generation: RelaySessionGeneration) {
+    pub fn reconnected(&mut self, generation: RelayConnection) {
         self.reset_to(generation);
     }
 
@@ -81,7 +81,7 @@ impl SessionAuthentication {
 
     /// Generation the current state belongs to.
     #[must_use]
-    pub const fn generation(&self) -> Option<RelaySessionGeneration> {
+    pub const fn generation(&self) -> Option<RelayConnection> {
         self.generation
     }
 
@@ -109,7 +109,7 @@ impl SessionAuthentication {
         self.attempts < Self::MAX_ATTEMPTS
     }
 
-    fn reset_to(&mut self, generation: RelaySessionGeneration) {
+    fn reset_to(&mut self, generation: RelayConnection) {
         self.generation = Some(generation);
         self.challenge = None;
         self.state = None;

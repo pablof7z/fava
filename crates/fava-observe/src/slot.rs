@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use fava_query::{ObservationId, OperationGeneration};
+use fava_query::{ObservationId, Round};
 use fava_runtime::CancellationToken;
 use fava_subscriptions::{
     DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision, RelayDemand,
@@ -16,7 +16,7 @@ use fava_wire::SubscriptionId;
 use crate::admission;
 
 pub(crate) struct Slot {
-    pub(crate) generation: OperationGeneration,
+    pub(crate) generation: Round,
     pub(crate) cancel: CancellationToken,
     pub(crate) lease: Option<Box<RelaySessionLease>>,
     pub(crate) session: Option<Arc<dyn RelaySession>>,
@@ -44,7 +44,7 @@ pub(crate) struct Slot {
 }
 
 impl Slot {
-    pub(crate) fn new(cancel: CancellationToken, generation: OperationGeneration) -> Self {
+    pub(crate) fn new(cancel: CancellationToken, generation: Round) -> Self {
         Self {
             generation,
             cancel,
@@ -68,11 +68,7 @@ impl Slot {
     /// Work already issued is cancelled at its next boundary rather than
     /// aborted, so an operation that produced a provider resource always
     /// reaches the owner and the owner always releases it.
-    pub(crate) fn advance(
-        &mut self,
-        root: &CancellationToken,
-        generation: OperationGeneration,
-    ) -> OperationGeneration {
+    pub(crate) fn advance(&mut self, root: &CancellationToken, generation: Round) -> Round {
         self.cancel.cancel();
         self.cancel = root.child();
         // The connection is gone, so every handle it carried is already over.

@@ -26,10 +26,7 @@ use std::time::Duration;
 
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
-use fava_query::{
-    BoundedText, OperationGeneration, OperationGenerationExhausted, OperationGenerationIssuer,
-    RelaySourceState,
-};
+use fava_query::{BoundedText, RelaySourceState, Round, RoundIssuer, RoundsExhausted};
 use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, Runtime, TaskName};
 use fava_subscriptions::{
@@ -80,17 +77,17 @@ impl Reports {
 pub(crate) enum Report {
     Acquired {
         relay: RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
         lease: Box<RelaySessionLease>,
     },
     Refused {
         relay: RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
         detail: BoundedText,
     },
     Installed {
         relay: RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
         revision: fava_subscriptions::PlanRevision,
         plan: Box<SubscriptionPlan>,
         opened: Vec<Option<SubscriptionId>>,
@@ -101,18 +98,18 @@ pub(crate) enum Report {
     },
     Flush {
         relay: RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
     },
     /// One session's connection state changed.
     Connection {
         relay: RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
         state: Box<fava_transport::ConnectionState>,
     },
     /// One installed subscription carried something of its own.
     Carried {
         relay: RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
         subscription: SubscriptionId,
         item: Box<fava_transport::SubscriptionItem>,
     },
@@ -132,8 +129,8 @@ pub(crate) struct Engine {
     pub(crate) reports: Reports,
     pub(crate) inbox: tokio::sync::mpsc::Receiver<Report>,
     pub(crate) slots: BTreeMap<RelaySessionKey, Slot>,
-    /// Source of every operation generation this owner issues.
-    pub(crate) operation_generations: OperationGenerationIssuer,
+    /// Source of every round this owner issues.
+    pub(crate) rounds: RoundIssuer,
     /// Source of every plan revision this owner issues, for every relay.
     ///
     /// Wire identity is minted from a revision, so a revision reused inside
@@ -165,7 +162,7 @@ impl Engine {
             reports: Reports { sender },
             inbox,
             slots: BTreeMap::new(),
-            operation_generations: OperationGenerationIssuer::new()?,
+            rounds: RoundIssuer::new()?,
             plan_revisions: PlanRevisionIssuer::new()?,
         };
         runtime
@@ -310,7 +307,7 @@ impl Engine {
     /// Acquire the relay session this slot needs, once.
     fn establish(&mut self, relay: &RelaySessionKey, demand: &[RelayDemand]) {
         if !self.slots.contains_key(relay) {
-            let generation = match self.next_operation_generation() {
+            let generation = match self.next_round() {
                 Ok(generation) => generation,
                 Err(error) => {
                     self.publish_owner_refusal(relay, demand, &error);
@@ -350,10 +347,8 @@ impl Engine {
         self.plan_revisions.allocate()
     }
 
-    pub(crate) fn next_operation_generation(
-        &mut self,
-    ) -> Result<OperationGeneration, OperationGenerationExhausted> {
-        self.operation_generations.allocate()
+    pub(crate) fn next_round(&mut self) -> Result<Round, RoundsExhausted> {
+        self.rounds.allocate()
     }
 
     pub(crate) fn publish_owner_refusal(
@@ -376,7 +371,7 @@ impl Engine {
     }
 
     /// Arm one fixed, first-arrival-anchored admission window.
-    pub(crate) fn arm(&self, relay: &RelaySessionKey, generation: OperationGeneration) {
+    pub(crate) fn arm(&self, relay: &RelaySessionKey, generation: Round) {
         operations::arm_admission(
             &self.runtime,
             &self.reports,
@@ -392,11 +387,7 @@ impl Engine {
     /// the plan the transport actually accepted, and answers with the diff. It
     /// is the only component that decides grouping, wire identity, and which
     /// running subscription has lost its last logical owner.
-    pub(crate) fn flush(
-        &mut self,
-        relay: &RelaySessionKey,
-        generation: OperationGeneration,
-    ) -> bool {
+    pub(crate) fn flush(&mut self, relay: &RelaySessionKey, generation: Round) -> bool {
         let demand = self.registry.desired().remove(relay).unwrap_or_default();
         let session;
         let installed;

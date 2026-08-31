@@ -247,7 +247,6 @@ fn fit_residual_count(
     candidates
 }
 
-
 /// What an EOSE on one candidate would actually prove.
 ///
 /// The planner is the only component that sees both the filter it is sending

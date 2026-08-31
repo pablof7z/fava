@@ -4,12 +4,12 @@ use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use fava_relay::{RelayAccess, RelaySessionKey};
-use nostr::filter::Filter;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, Transport, TransportBounds,
     TransportDeadlines, TransportFailure,
 };
 use fava_transport_testkit::FakeTransport;
+use nostr::filter::Filter;
 use nostr::types::RelayUrl;
 
 fn key() -> RelaySessionKey {
@@ -84,8 +84,8 @@ async fn acquiring_a_live_session_does_not_dial() {
     assert_eq!(transport.holders(&key()), Some(frames(2)));
     assert_eq!(transport.dials(&key()), 1);
     assert_eq!(
-        first.session().identity().generation,
-        second.session().identity().generation
+        first.session().identity().connection,
+        second.session().identity().connection
     );
 }
 

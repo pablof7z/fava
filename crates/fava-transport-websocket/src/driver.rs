@@ -5,8 +5,7 @@ use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use fava_transport::{
-    BoundedText, HandoffCorrelation, HandoffOutcome,
-    TransportAmbiguity, TransportFailure,
+    BoundedText, HandoffCorrelation, HandoffOutcome, TransportAmbiguity, TransportFailure,
 };
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
@@ -62,7 +61,7 @@ pub(crate) async fn drive(
         // has forgotten it.
         shared
             .router
-            .end_generation(&fava_transport::SessionEnded::Disconnected {
+            .end_connection(&fava_transport::SessionEnded::Disconnected {
                 detail: BoundedText::new(format!("{reason:?}")),
             });
         shared
@@ -88,7 +87,7 @@ pub(crate) async fn drive(
                 shared.closed.store(true, Ordering::SeqCst);
                 shared
                     .router
-                    .end_generation(&fava_transport::SessionEnded::ReconnectExhausted {
+                    .end_connection(&fava_transport::SessionEnded::ReconnectExhausted {
                         attempts,
                         detail: BoundedText::new(format!("{final_reason:?}")),
                     });
@@ -112,7 +111,7 @@ pub(crate) async fn drive(
 async fn reconnect(
     shared: &SessionShared,
     backoff: &mut ReconnectBackoff,
-) -> Result<(Socket, fava_transport::RelaySessionGeneration), (usize, TransportFailure)> {
+) -> Result<(Socket, fava_transport::RelayConnection), (usize, TransportFailure)> {
     let Some(generation) = mint_generation(&shared.generations) else {
         return Err((0, TransportFailure::GenerationExhausted));
     };
@@ -150,7 +149,7 @@ fn drain_unsent(
     }
 }
 
-/// Run one generation until it ends. The return value is why it ended.
+/// Run one connection until it ends. The return value is why it ended.
 async fn pump(
     shared: &SessionShared,
     outbound: &mut mpsc::Receiver<Outbound>,
@@ -282,9 +281,10 @@ fn admit_frame(shared: &SessionShared, frame: &[u8]) -> Option<TransportFailure>
         });
     }
     // Decode exactly once, here, for every handle on this session.
-    match std::str::from_utf8(frame).ok().and_then(|text| {
-        fava_wire::decode_relay(text).ok()
-    }) {
+    match std::str::from_utf8(frame)
+        .ok()
+        .and_then(|text| fava_wire::decode_relay(text).ok())
+    {
         Some(message) => shared.router.deliver(message),
         None => shared.router.undecodable(),
     }

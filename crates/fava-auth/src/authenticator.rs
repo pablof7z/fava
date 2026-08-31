@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use fava_relay::{AuthenticationState, BoundedText, RelayAccess, RelaySessionKey};
 use fava_runtime::{CancellationToken, Runtime, TaskName};
-use fava_transport::{RelaySessionGeneration, RelaySessionIdentity, Transport};
+use fava_transport::{RelayConnection, RelaySessionIdentity, Transport};
 use fava_write::PublicKey;
 use tokio::sync::watch;
 
@@ -70,13 +70,13 @@ impl State {
     pub(crate) fn drop_deferred_before(
         &mut self,
         key: &RelaySessionKey,
-        current: RelaySessionGeneration,
+        current: RelayConnection,
     ) -> bool {
         let stale: Vec<_> = self
             .deferred
             .iter()
             .filter(|(_, demand)| {
-                demand.session.key == *key && demand.session.generation != current
+                demand.session.key == *key && demand.session.connection != current
             })
             .map(|(id, _)| *id)
             .collect();
@@ -165,10 +165,10 @@ impl Authenticator {
     ) -> bool {
         let mut guard = self.lock();
         let entry = guard.entry(&identity.key);
-        if entry.generation() != Some(identity.generation) {
+        if entry.generation() != Some(identity.connection) {
             return false;
         }
-        entry.resolved(identity.generation, state);
+        entry.resolved(identity.connection, state);
         true
     }
 
@@ -178,7 +178,7 @@ impl Authenticator {
         let id = guard.mint_id();
         guard.deferred.insert(id, demand.clone());
         guard.entry(&demand.session.key).resolved(
-            demand.session.generation,
+            demand.session.connection,
             AuthenticationState::AwaitingAnswer,
         );
         drop(guard);
@@ -220,10 +220,10 @@ impl Authenticator {
         {
             let mut guard = self.lock();
             let entry = guard.entry(&identity.key);
-            entry.challenged(identity.generation, demand.challenge.clone());
+            entry.challenged(identity.connection, demand.challenge.clone());
             if !entry.may_attempt() {
                 entry.resolved(
-                    identity.generation,
+                    identity.connection,
                     AuthenticationState::Failed {
                         reason: BoundedText::new(format!(
                             "relay re-challenged past the {} attempt bound",

@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use fava_query::{BoundedText, OperationGeneration};
+use fava_query::{BoundedText, Round};
 
 /// A provider operation Fava has authorized.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -49,7 +49,7 @@ pub struct ProviderOperation {
     pub instance: BoundedText,
     /// Generation of this operation slot. Late completions carrying an older
     /// generation are stale.
-    pub generation: OperationGeneration,
+    pub generation: Round,
 }
 
 /// Disposition of one provider operation.

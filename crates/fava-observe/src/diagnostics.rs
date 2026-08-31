@@ -4,14 +4,14 @@ use fava_diagnostics::{
     BoundKind, LimitDiagnostic, LimitScope, LogicalDemandDiagnostic, QueryDiagnostic,
     RelayDiagnostic, RelaySessionState, WireSubscriptionDiagnostic,
 };
-use fava_query::{BoundedText, ObservationId, OperationGeneration, RelayQueryEvidence};
+use fava_query::{BoundedText, ObservationId, RelayQueryEvidence, Round};
 use fava_relay::RelaySessionKey;
 use fava_wire::SubscriptionId;
 
 /// Current facts for one relay session this owner holds.
 pub(crate) fn relay_fact(
     session: &RelaySessionKey,
-    generation: Option<OperationGeneration>,
+    generation: Option<Round>,
     state: RelaySessionState,
     holders: usize,
     subscriptions: Vec<WireSubscriptionDiagnostic>,

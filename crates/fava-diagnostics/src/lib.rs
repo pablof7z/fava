@@ -26,7 +26,7 @@ use std::num::NonZeroUsize;
 use std::sync::{Mutex, MutexGuard};
 
 pub use fava_query::{
-    BoundedText, ObservationId, OperationGeneration, QueryBounds, QueryBranchId, RelaySourceState,
+    BoundedText, ObservationId, QueryBounds, QueryBranchId, RelaySourceState, Round,
 };
 use fava_relay::RelaySessionKey;
 

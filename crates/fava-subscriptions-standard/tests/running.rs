@@ -10,8 +10,7 @@ use fava_subscriptions::{
 };
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use fava_subscriptions_testkit::{
-    all_opened,
-    PlannerScenario, apply_plan, assert_conformant,
+    PlannerScenario, all_opened, apply_plan, assert_conformant,
     assert_partial_withdrawal_leaves_the_wire_alone, assert_running_subscriptions_are_immutable,
 };
 use nostr::event::Kind;
@@ -82,7 +81,11 @@ fn withdrawing_one_member_leaves_the_survivors_subscription_untouched() {
     let first = PlannerScenario::fresh("grouped pair", relay(), both.clone());
     let grouped = assert_conformant(&planner(), &first);
     assert_eq!(grouped.open.len(), 1, "the pair shares one request");
-    let installed = apply_plan(&InstalledSubscriptions::empty(), &grouped, &all_opened(&grouped));
+    let installed = apply_plan(
+        &InstalledSubscriptions::empty(),
+        &grouped,
+        &all_opened(&grouped),
+    );
     let live: Vec<_> = installed.ids().cloned().collect();
 
     let second = first
@@ -237,7 +240,11 @@ fn a_reopened_filter_never_reuses_the_closed_subscription_id() {
     let filter = Filter::new().search("comes and goes");
     let first = PlannerScenario::fresh("open", relay(), vec![demand(1, filter.clone())]);
     let opened = assert_conformant(&planner(), &first);
-    let installed = apply_plan(&InstalledSubscriptions::empty(), &opened, &all_opened(&opened));
+    let installed = apply_plan(
+        &InstalledSubscriptions::empty(),
+        &opened,
+        &all_opened(&opened),
+    );
 
     let closing = first
         .clone()
@@ -272,7 +279,11 @@ fn a_changed_declared_id_length_does_not_move_installed_subscription_ids() {
             ..RelayReadConstraints::unknown()
         });
     let opened = assert_conformant(&planner(), &first);
-    let installed = apply_plan(&InstalledSubscriptions::empty(), &opened, &all_opened(&opened));
+    let installed = apply_plan(
+        &InstalledSubscriptions::empty(),
+        &opened,
+        &all_opened(&opened),
+    );
 
     let second = first
         .clone()
@@ -325,7 +336,10 @@ fn a_limited_request_records_that_its_eose_proves_nothing() {
         ..RelayReadConstraints::unknown()
     });
     let plan = assert_conformant(&planner(), &declared_default);
-    assert_eq!(plan.open[0].completeness, EoseCompleteness::RelayDefaultLimit);
+    assert_eq!(
+        plan.open[0].completeness,
+        EoseCompleteness::RelayDefaultLimit
+    );
 }
 
 /// The residual budget is what a plan may spend. A relay that lowers its

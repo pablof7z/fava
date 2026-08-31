@@ -27,8 +27,7 @@ pub use evidence::{
     SourceRetraction, SourceStatus, SourceTerminationCause,
 };
 pub use identity::{
-    ObservationId, ObservationIds, OperationGeneration, OperationGenerationExhausted,
-    OperationGenerationIssuer, QueryBounds, QueryBranchId,
+    ObservationId, ObservationIds, QueryBounds, QueryBranchId, Round, RoundIssuer, RoundsExhausted,
 };
 use thiserror::Error;
 

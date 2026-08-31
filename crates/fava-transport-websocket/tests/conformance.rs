@@ -4,7 +4,6 @@ use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use fava_relay::{RelayAccess, RelaySessionKey};
-use nostr::filter::Filter;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, ReleaseOutcome, Transport,
     TransportBounds, TransportDeadlines, TransportError, TransportFailure,
@@ -14,6 +13,7 @@ use fava_transport_testkit::{
     require_bounded_outbound_refusal,
 };
 use futures_util::{SinkExt, StreamExt};
+use nostr::filter::Filter;
 use nostr::types::RelayUrl;
 use tokio::net::TcpListener;
 use tokio_tungstenite::accept_async;
@@ -59,7 +59,6 @@ fn request(key: RelaySessionKey) -> OpenRelaySession {
 }
 
 // ------------------------------------------------------- section 8 falsifiers
-
 
 /// Drain a session's connection stream until one state matches.
 async fn until(
@@ -392,8 +391,8 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
     };
 
     assert_eq!(
-        identity.generation,
-        before.generation.checked_next().expect("successor exists")
+        identity.connection,
+        before.connection.checked_next().expect("successor exists")
     );
     assert_eq!(lease.session().identity(), identity);
     server.abort();

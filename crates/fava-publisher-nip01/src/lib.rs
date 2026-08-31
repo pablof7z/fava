@@ -9,8 +9,7 @@ use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_relay::RelaySessionKey;
 use fava_session::Session;
 use fava_transport::{
-    HandoffOutcome, OpenRelaySession, SessionEnded, Settlement, Transport,
-    TransportBounds,
+    HandoffOutcome, OpenRelaySession, SessionEnded, Settlement, Transport, TransportBounds,
     TransportDeadlines,
 };
 use fava_write::{EventBuilder, Kind, Tag};

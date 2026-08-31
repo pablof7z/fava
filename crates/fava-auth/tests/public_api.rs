@@ -8,7 +8,7 @@ use fava_auth::{
     Challenge, PendingAuthentication,
 };
 use fava_relay::{RelayAccess, RelaySessionKey};
-use fava_transport::{RelaySessionGeneration, RelaySessionIdentity};
+use fava_transport::{RelayConnection, RelaySessionIdentity};
 use nostr::key::{Keys, PublicKey};
 use nostr::types::RelayUrl;
 
@@ -23,7 +23,7 @@ fn demand(url: &str, account: PublicKey, generation: u64) -> AuthenticationDeman
                 relay: relay(url),
                 access: RelayAccess::Authenticated(account),
             },
-            generation: RelaySessionGeneration::new(generation).expect("non-zero generation"),
+            connection: RelayConnection::new(generation).expect("non-zero connection"),
         },
         challenge: Challenge::new("opaque-nonce").expect("bounded challenge"),
     }
@@ -39,7 +39,7 @@ fn a_demand_names_the_exact_session_and_generation_it_arrived_on() {
         RelayAccess::Authenticated(account),
         "the account to authenticate as is part of the session identity"
     );
-    assert_eq!(demand.session.generation.get(), 7);
+    assert_eq!(demand.session.connection.get(), 7);
     assert_eq!(demand.challenge.as_str(), "opaque-nonce");
 }
 
@@ -102,7 +102,7 @@ fn a_deferred_demand_carries_a_stable_identity_and_its_generation() {
 
     assert_eq!(pending.id, id, "an answer names the exact demand");
     assert_eq!(
-        pending.session.generation, demand.session.generation,
+        pending.session.connection, demand.session.connection,
         "an answer given after this generation is replaced resolves nothing"
     );
     assert_ne!(

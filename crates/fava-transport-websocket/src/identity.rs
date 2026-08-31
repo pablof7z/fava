@@ -4,7 +4,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use fava_relay::RelaySessionKey;
-use fava_transport::{RelaySessionGeneration, RelaySessionIdentity};
+use fava_transport::{RelayConnection, RelaySessionIdentity};
 
 /// Live generation of one session, readable without the driver's lock.
 pub(crate) struct LiveIdentity {
@@ -13,7 +13,7 @@ pub(crate) struct LiveIdentity {
 }
 
 impl LiveIdentity {
-    pub(crate) fn new(key: RelaySessionKey, generation: RelaySessionGeneration) -> Self {
+    pub(crate) fn new(key: RelaySessionKey, generation: RelayConnection) -> Self {
         Self {
             key,
             generation: AtomicU64::new(generation.get()),
@@ -23,7 +23,7 @@ impl LiveIdentity {
     pub(crate) fn read(&self) -> RelaySessionIdentity {
         RelaySessionIdentity {
             key: self.key.clone(),
-            generation: RelaySessionGeneration::new(self.generation.load(Ordering::SeqCst))
+            connection: RelayConnection::new(self.generation.load(Ordering::SeqCst))
                 .expect("transport generations are non-zero"),
         }
     }
@@ -35,11 +35,10 @@ impl LiveIdentity {
     /// Retire the current generation and return both identities.
     pub(crate) fn advance(
         &self,
-        generation: RelaySessionGeneration,
+        generation: RelayConnection,
     ) -> (RelaySessionIdentity, RelaySessionIdentity) {
         let previous = self.read();
         self.generation.store(generation.get(), Ordering::SeqCst);
         (previous, self.read())
     }
 }
-

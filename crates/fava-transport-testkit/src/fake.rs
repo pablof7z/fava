@@ -8,10 +8,9 @@ use std::time::Duration;
 
 use fava_relay::RelaySessionKey;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, LeaseRelease, OpenRelaySession, RelaySession,
-    RelaySessionFuture, RelaySessionGeneration, RelaySessionIdentity, RelaySessionLease,
-    ReleaseFuture, ReleaseOutcome, Transport, TransportError, TransportFailure,
-    TransportShutdownFuture,
+    HandoffCorrelation, HandoffOutcome, LeaseRelease, OpenRelaySession, RelayConnection,
+    RelaySession, RelaySessionFuture, RelaySessionIdentity, RelaySessionLease, ReleaseFuture,
+    ReleaseOutcome, Transport, TransportError, TransportFailure, TransportShutdownFuture,
 };
 use tokio::sync::Notify;
 
@@ -191,14 +190,14 @@ impl Transport for FakeTransport {
 }
 
 impl FakeState {
-    fn mint_generation(&self) -> Option<RelaySessionGeneration> {
+    fn mint_generation(&self) -> Option<RelayConnection> {
         let previous = self
             .generations
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
                 value.checked_add(1)
             })
             .ok()?;
-        RelaySessionGeneration::new(previous + 1)
+        RelayConnection::new(previous + 1)
     }
 
     fn reuse(self: &Arc<Self>, key: &RelaySessionKey) -> Option<RelaySessionLease> {
@@ -217,7 +216,7 @@ impl FakeState {
     fn dial(
         self: &Arc<Self>,
         request: &OpenRelaySession,
-        generation: RelaySessionGeneration,
+        generation: RelayConnection,
     ) -> RelaySessionLease {
         let counter = {
             let mut dials = self.dials.lock().expect("dial counters are not poisoned");

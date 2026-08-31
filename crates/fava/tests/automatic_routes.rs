@@ -16,9 +16,9 @@ use fava_router_testkit::DelayedRouter;
 use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession,
-    RelaySession, RelaySessionFuture, RelaySessionGeneration, RelaySessionIdentity, ReleaseFuture,
-    ReleaseOutcome, Transport, TransportError, TransportFailure, TransportShutdownFuture,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayConnection, RelaySession,
+    RelaySessionFuture, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport,
+    TransportError, TransportFailure, TransportShutdownFuture,
 };
 use fava_transport_testkit::detached_lease;
 use fava_wire::ClientMessage;
@@ -78,7 +78,7 @@ impl Transport for RecordingTransport {
                 subscriptions: std::sync::atomic::AtomicU64::new(0),
                 identity: RelaySessionIdentity {
                     key: request.key,
-                    generation: RelaySessionGeneration::new(previous + 1)
+                    connection: RelayConnection::new(previous + 1)
                         .expect("issued generation is non-zero"),
                 },
                 sent: Mutex::new(Vec::new()),
@@ -131,7 +131,8 @@ impl RelaySession for RecordingSession {
 
     fn mint_subscription_id(&self) -> fava_transport::SubscriptionId {
         fava_transport::subscription_id(
-            self.subscriptions.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            self.subscriptions
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
         )
     }
 

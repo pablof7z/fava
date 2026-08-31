@@ -5,8 +5,9 @@ use std::num::NonZeroU64;
 
 use fava_query::{ObservationId, QueryBounds, QueryBranchId};
 use fava_relay::{RelayAccess, RelaySessionKey};
-use fava_subscriptions::{ DemandId, EoseCompleteness, PlanRevision, PlanRevisionIssuer,
-    PlannedSubscription, RelayDemand, SubscriptionAttribution, SubscriptionPlan,
+use fava_subscriptions::{
+    DemandId, EoseCompleteness, PlanRevision, PlanRevisionIssuer, PlannedSubscription, RelayDemand,
+    SubscriptionAttribution, SubscriptionPlan,
 };
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;

@@ -31,14 +31,15 @@ pub use demand::{DemandId, RelayDemand};
 use fava_query::Query;
 /// Cross-crate read-side identity, re-exported from its neutral home so a
 /// planner never has to depend on the lifecycle owner that mints it.
-pub use fava_query::{ObservationId, OperationGeneration, QueryBounds, QueryBranchId};
+pub use fava_query::{ObservationId, QueryBounds, QueryBranchId, Round};
+pub use fava_transport::{SUBSCRIPTION_ID_BYTES, subscription_id};
 pub use installed::{InstalledSubscription, InstalledSubscriptions};
 use nostr::filter::Filter;
-pub use fava_transport::{SUBSCRIPTION_ID_BYTES, subscription_id};
 pub use plan::{
     AttributedSubscription, EoseCompleteness, PlanRevision, PlanRevisionExhausted,
     PlanRevisionIssuer, PlannedSubscription, ShortfallReason, SubscriptionAttribution,
-    SubscriptionPlan, SubscriptionShortfall, };
+    SubscriptionPlan, SubscriptionShortfall,
+};
 pub use planner::{SubscriptionPlanError, SubscriptionPlanner};
 
 /// Convert one public Query into the exact NIP-01 relay demand of one

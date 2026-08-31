@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 
 use crate::cancel::CancellationToken;
 use crate::channel::{Receiver, Sender};
-use crate::generation::OperationGeneration;
+use crate::generation::Round;
 use crate::name::{OperationName, TaskName};
 use crate::provider::{ProviderCompletion, panic_detail};
 use crate::task::{TaskFailure, TaskHandle};
@@ -203,7 +203,7 @@ impl Runtime {
     pub async fn call_provider<T, F>(
         &self,
         operation: OperationName,
-        generation: OperationGeneration,
+        generation: Round,
         deadline: Duration,
         call: F,
     ) -> ProviderCompletion<T>

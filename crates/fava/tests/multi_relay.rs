@@ -13,9 +13,9 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::RelaySessionKey;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySession, RelaySessionFuture, RelaySessionGeneration,
-    RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
-    TransportFailure, TransportShutdownFuture,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayConnection, RelaySession,
+    RelaySessionFuture, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport,
+    TransportError, TransportFailure, TransportShutdownFuture,
 };
 use fava_transport_testkit::{FakeRelay, FakeTransport, detached_lease};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, encode_client};
@@ -64,7 +64,7 @@ impl Transport for ScriptedTransport {
                 })
                 .map_err(|_| TransportError::GenerationExhausted)?;
             let generation =
-                RelaySessionGeneration::new(previous + 1).expect("issued generation is non-zero");
+                RelayConnection::new(previous + 1).expect("issued generation is non-zero");
             let relay = request.key.relay.clone();
             let session = Arc::new(ScriptedSession {
                 router: fava_transport::Router::default(),
@@ -72,7 +72,7 @@ impl Transport for ScriptedTransport {
                 subscriptions: std::sync::atomic::AtomicU64::new(0),
                 identity: RelaySessionIdentity {
                     key: request.key,
-                    generation,
+                    connection: generation,
                 },
                 sent: Mutex::new(Vec::new()),
             });
@@ -169,7 +169,8 @@ impl RelaySession for ScriptedSession {
 
     fn mint_subscription_id(&self) -> fava_transport::SubscriptionId {
         fava_transport::subscription_id(
-            self.subscriptions.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            self.subscriptions
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
         )
     }
 

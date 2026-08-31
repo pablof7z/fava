@@ -7,9 +7,7 @@ use std::time::Duration;
 use fava::{Fava, Query};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_query::{
-    ObservationId, QuerySnapshot, RelaySourceState, RouteOrigin,
-};
+use fava_query::{ObservationId, QuerySnapshot, RelaySourceState, RouteOrigin};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::SubscriptionPlanner;
@@ -491,9 +489,11 @@ fn established(transport: &FakeTransport, key: &RelaySessionKey) -> FakeRelay {
 }
 
 fn push(peer: &FakeRelay, message: &RelayMessage<'_>) {
-    peer.push_frame(serde_json::to_string(message)
+    peer.push_frame(
+        serde_json::to_string(message)
             .expect("message encodes")
-            .as_bytes());
+            .as_bytes(),
+    );
 }
 
 fn client_messages(peer: Option<FakeRelay>) -> Vec<ClientMessage<'static>> {

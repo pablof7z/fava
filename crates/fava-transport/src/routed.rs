@@ -13,7 +13,7 @@ use nostr::event::{Event, EventId};
 
 use crate::BoundedText;
 
-/// Why a handle's connection generation ended.
+/// Why a handle's connection ended.
 ///
 /// A publication attempt must report which of these happened rather than
 /// collapsing them into one unknown outcome (`.planning/REQUIREMENTS.md`
@@ -25,7 +25,7 @@ pub enum SessionEnded {
         /// Exact scoped reason.
         detail: BoundedText,
     },
-    /// The reconnect budget is spent; no further generation will appear.
+    /// The reconnect budget is spent; no further connection will appear.
     ReconnectExhausted {
         /// Number of attempts actually made.
         attempts: usize,
@@ -79,8 +79,8 @@ pub enum SubscriptionItem {
         /// Exact number of items dropped since the last `Lost`.
         dropped: u64,
     },
-    /// The generation this subscription was opened on ended. Nothing further
-    /// arrives; the demand must be replayed on the next generation.
+    /// The connection this subscription was opened on ended. Nothing further
+    /// arrives; the demand must be replayed on the next connection.
     Ended(SessionEnded),
 }
 
@@ -97,7 +97,7 @@ pub enum Settlement {
         /// Verbatim, bounded relay text.
         message: BoundedText,
     },
-    /// The generation the event was handed off on ended before the relay
+    /// The connection the event was handed off on ended before the relay
     /// answered. The outcome is unknown, never a rejection.
     Ended(SessionEnded),
 }
@@ -383,9 +383,11 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
                 filters: filters.into_iter().map(std::borrow::Cow::Owned).collect(),
             };
             match self.encoded(&message).await {
-                crate::HandoffOutcome::HandedOff { .. } => Ok(Box::new(
-                    RoutedSubscription::new(id, mailbox, std::sync::Arc::clone(self)),
-                )
+                crate::HandoffOutcome::HandedOff { .. } => Ok(Box::new(RoutedSubscription::new(
+                    id,
+                    mailbox,
+                    std::sync::Arc::clone(self),
+                ))
                     as Box<dyn Subscription>),
                 refused => {
                     self.router().release_subscription(&id);
@@ -399,13 +401,12 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
         Box::pin(async move {
             let id = event.id;
             let mailbox = self.router().await_acknowledgement(id);
-            match self
-                .encoded(&fava_wire::ClientMessage::event(event))
-                .await
-            {
-                crate::HandoffOutcome::HandedOff { .. } => Ok(Box::new(
-                    RoutedAcknowledgement::new(id, mailbox, std::sync::Arc::clone(self)),
-                )
+            match self.encoded(&fava_wire::ClientMessage::event(event)).await {
+                crate::HandoffOutcome::HandedOff { .. } => Ok(Box::new(RoutedAcknowledgement::new(
+                    id,
+                    mailbox,
+                    std::sync::Arc::clone(self),
+                ))
                     as Box<dyn Acknowledgement>),
                 refused => {
                     self.router().release_acknowledgement(id, &mailbox);
@@ -420,9 +421,11 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
             let id = event.id;
             let mailbox = self.router().await_acknowledgement(id);
             match self.encoded(&fava_wire::ClientMessage::auth(event)).await {
-                crate::HandoffOutcome::HandedOff { .. } => Ok(Box::new(
-                    RoutedAcknowledgement::new(id, mailbox, std::sync::Arc::clone(self)),
-                )
+                crate::HandoffOutcome::HandedOff { .. } => Ok(Box::new(RoutedAcknowledgement::new(
+                    id,
+                    mailbox,
+                    std::sync::Arc::clone(self),
+                ))
                     as Box<dyn Acknowledgement>),
                 refused => {
                     self.router().release_acknowledgement(id, &mailbox);

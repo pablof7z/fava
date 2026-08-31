@@ -1,14 +1,12 @@
 //! Provider completions arriving back at the reconciliation owner.
 //!
-//! Every completion carries the operation generation it was issued under. A
+//! Every completion carries the round it was issued under. A
 //! completion whose generation the owner has moved past is refused, and any
 //! provider resource it produced is released rather than installed.
 
 use std::sync::Arc;
 
-use fava_query::{
-    BoundedText, ObservationId, OperationGeneration, RelaySourceState, SourceCoverage,
-};
+use fava_query::{BoundedText, ObservationId, RelaySourceState, Round, SourceCoverage};
 use fava_relay::RelaySessionKey;
 use fava_transport::RelaySessionLease;
 use fava_wire::SubscriptionId;
@@ -41,7 +39,9 @@ impl Engine {
                 opened,
                 attending,
                 closed,
-            } => self.installed(&relay, generation, revision, &plan, &opened, attending, &closed),
+            } => self.installed(
+                &relay, generation, revision, &plan, &opened, attending, &closed,
+            ),
             Report::Flush { relay, generation } => self.flush(&relay, generation),
             Report::Connection {
                 relay,
@@ -74,7 +74,7 @@ impl Engine {
     fn acquired(
         &mut self,
         relay: &RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
         lease: Box<RelaySessionLease>,
     ) -> bool {
         let rearm;
@@ -122,10 +122,10 @@ impl Engine {
     fn refused(
         &mut self,
         relay: &RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
         detail: &BoundedText,
     ) -> bool {
-        let next_generation = match self.next_operation_generation() {
+        let next_generation = match self.next_round() {
             Ok(generation) => generation,
             Err(error) => {
                 let demand = self.registry.desired().remove(relay).unwrap_or_default();
@@ -167,7 +167,7 @@ impl Engine {
     fn installed(
         &mut self,
         relay: &RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
         revision: fava_subscriptions::PlanRevision,
         plan: &fava_subscriptions::SubscriptionPlan,
         opened: &[Option<fava_wire::SubscriptionId>],
@@ -223,7 +223,7 @@ impl Engine {
     fn connection(
         &mut self,
         relay: &RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
         state: fava_transport::ConnectionState,
     ) -> bool {
         let Some(slot) = self.slots.get(relay) else {
@@ -264,7 +264,7 @@ impl Engine {
     fn carried(
         &mut self,
         relay: &RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Round,
         subscription: &SubscriptionId,
         item: fava_transport::SubscriptionItem,
     ) -> bool {
@@ -298,7 +298,7 @@ impl Engine {
 
     /// A new generation is live: every request is void and the demand replays.
     fn reconnected(&mut self, relay: &RelaySessionKey) -> bool {
-        let next_generation = match self.next_operation_generation() {
+        let next_generation = match self.next_round() {
             Ok(generation) => generation,
             Err(error) => {
                 let demand = self.registry.desired().remove(relay).unwrap_or_default();
@@ -425,7 +425,11 @@ impl Engine {
                     completed_at: at,
                 });
             }
-            self.publish_for_subscription(relay, id, &RelaySourceState::StoredEventsComplete { at });
+            self.publish_for_subscription(
+                relay,
+                id,
+                &RelaySourceState::StoredEventsComplete { at },
+            );
         } else {
             // The relay ended a bounded request, not the stored window.
             // Claiming completeness would claim omitted work was completed
@@ -456,7 +460,6 @@ impl Engine {
         false
     }
 
-
     /// Withdraw every live request and release the relay's lease.
     pub(crate) fn release(&mut self, relay: &RelaySessionKey) {
         let Some(mut slot) = self.slots.remove(relay) else {
@@ -472,16 +475,12 @@ impl Engine {
                 lease,
                 generation,
                 self.providers.deadlines.close,
-        );
+            );
         }
         self.providers.diagnostics.forget_relay(relay);
     }
 
-    pub(crate) fn release_lease(
-        &self,
-        lease: Box<RelaySessionLease>,
-        generation: OperationGeneration,
-    ) {
+    pub(crate) fn release_lease(&self, lease: Box<RelaySessionLease>, generation: Round) {
         operations::release(
             &self.runtime,
             lease,

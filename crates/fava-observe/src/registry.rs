@@ -13,8 +13,8 @@ use std::num::{NonZeroU64, NonZeroUsize};
 use std::sync::Mutex;
 
 use fava_query::{
-    DesiredPlanEvidence, ObservationId, OperationGeneration, QueryBranchId, QueryShortfall,
-    RelayQueryEvidence, RelayShortfall, RelaySourceState, RouteOrigin, SourceEvent, SourceKind,
+    DesiredPlanEvidence, ObservationId, QueryBranchId, QueryShortfall, RelayQueryEvidence,
+    RelayShortfall, RelaySourceState, Round, RouteOrigin, SourceEvent, SourceKind,
     SourceRetraction, SourceRevision, SourceSnapshot, SourceStatus,
 };
 use fava_relay::RelaySessionKey;
@@ -351,7 +351,7 @@ impl Registry {
         &self,
         id: ObservationId,
         session: &RelaySessionKey,
-        generation: Option<OperationGeneration>,
+        generation: Option<Round>,
         next: RelaySourceState,
     ) {
         self.update(id, |installed| {

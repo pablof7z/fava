@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use fava_transport::{
     BoundedText, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
-    RelaySession, RelaySessionGeneration, RelaySessionIdentity, ReleaseFuture,
-    ReleaseOutcome, TransportAmbiguity, TransportBounds, TransportDeadlines, TransportFailure,
+    RelayConnection, RelaySession, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome,
+    TransportAmbiguity, TransportBounds, TransportDeadlines, TransportFailure,
 };
 
 use crate::stream::LiveIdentity;
@@ -41,7 +41,7 @@ impl FakeSession {
     pub(crate) fn new(
         request: &OpenRelaySession,
         dials: Arc<AtomicUsize>,
-        generation: RelaySessionGeneration,
+        generation: RelayConnection,
         generations: Arc<AtomicU64>,
         subscriptions: Arc<AtomicU64>,
     ) -> Self {
@@ -99,7 +99,7 @@ impl FakeSession {
         drop(state);
 
         self.router
-            .end_generation(&fava_transport::SessionEnded::Disconnected {
+            .end_connection(&fava_transport::SessionEnded::Disconnected {
                 detail: BoundedText::new(detail),
             });
         self.router
@@ -126,12 +126,12 @@ impl FakeSession {
                 value.checked_add(1)
             })
             .ok()
-            .and_then(|previous| RelaySessionGeneration::new(previous + 1));
+            .and_then(|previous| RelayConnection::new(previous + 1));
         let Some(next) = next else {
             state.closed = true;
             drop(state);
             self.router
-                .end_generation(&fava_transport::SessionEnded::ReconnectExhausted {
+                .end_connection(&fava_transport::SessionEnded::ReconnectExhausted {
                     attempts: 0,
                     detail: BoundedText::new("generations exhausted"),
                 });
@@ -146,7 +146,7 @@ impl FakeSession {
         self.identity.generation.store(next.get(), Ordering::SeqCst);
         self.dials.fetch_add(1, Ordering::SeqCst);
         self.router
-            .end_generation(&fava_transport::SessionEnded::Disconnected {
+            .end_connection(&fava_transport::SessionEnded::Disconnected {
                 detail: BoundedText::new("session reconnected"),
             });
         self.router

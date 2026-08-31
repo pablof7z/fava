@@ -11,13 +11,13 @@ mod stream;
 use std::num::NonZeroUsize;
 
 pub use fake::{FakeRelay, FakeTransport, detached_lease};
-use fava_wire::SubscriptionId;
-use nostr::event::Kind;
-use nostr::filter::Filter;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, SubscriptionItem, Transport,
     TransportFailure,
 };
+use fava_wire::SubscriptionId;
+use nostr::event::Kind;
+use nostr::filter::Filter;
 
 /// Require that a relay message reaches the handle that owns its wire key, and
 /// no other.
@@ -46,10 +46,12 @@ where
     let mut owner = fava_transport::RelaySessionExt::subscribe(&session, vec![Filter::new()])
         .await
         .map_err(|refused| format!("subscription did not open: {refused:?}"))?;
-    let mut bystander =
-        fava_transport::RelaySessionExt::subscribe(&session, vec![Filter::new().kind(Kind::from_u16(1))])
-            .await
-            .map_err(|refused| format!("second subscription did not open: {refused:?}"))?;
+    let mut bystander = fava_transport::RelaySessionExt::subscribe(
+        &session,
+        vec![Filter::new().kind(Kind::from_u16(1))],
+    )
+    .await
+    .map_err(|refused| format!("second subscription did not open: {refused:?}"))?;
     arrange(owner.id());
 
     match owner.next().await {
@@ -91,14 +93,11 @@ where
             .map_err(|refused| format!("subscription did not open: {refused:?}"))?;
     arrange();
 
-    match tokio::time::timeout(
-        std::time::Duration::from_millis(50),
-        subscription.next(),
-    )
-    .await
-    {
+    match tokio::time::timeout(std::time::Duration::from_millis(50), subscription.next()).await {
         Err(_) => Ok(()),
-        Ok(item) => Err(format!("an unclaimed message reached a subscription: {item:?}")),
+        Ok(item) => Err(format!(
+            "an unclaimed message reached a subscription: {item:?}"
+        )),
     }
 }
 

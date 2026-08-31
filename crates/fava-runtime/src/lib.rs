@@ -27,7 +27,7 @@ mod task;
 
 pub use cancel::CancellationToken;
 pub use channel::{Receiver, SendRefusal, SendRefused, Sender};
-pub use generation::OperationGeneration;
+pub use generation::Round;
 pub use name::{OperationName, TaskName};
 pub use provider::ProviderCompletion;
 pub use runtime::{Runtime, RuntimeConfig, RuntimeError};

@@ -6,10 +6,10 @@ use std::num::{NonZeroU64, NonZeroUsize};
 
 use fava_diagnostics::{
     BoundKind, BoundedText, Diagnostics, LimitDiagnostic, LimitScope, LogicalDemandDiagnostic,
-    ObservationId, ObservationWireBinding, OperationGeneration, QueryBranchId, QueryDiagnostic,
-    RelayDiagnostic, RelaySessionState, RelaySourceState, WireSubscriptionDiagnostic,
+    ObservationId, ObservationWireBinding, QueryBranchId, QueryDiagnostic, RelayDiagnostic,
+    RelaySessionState, RelaySourceState, Round, WireSubscriptionDiagnostic,
 };
-use fava_query::OperationGenerationIssuer;
+use fava_query::RoundIssuer;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_wire::SubscriptionId;
 use nostr::types::{RelayUrl, Timestamp};
@@ -33,8 +33,8 @@ fn shared(value: usize) -> NonZeroUsize {
     NonZeroUsize::new(value).expect("non-zero holder count")
 }
 
-fn generation(sequence: u64) -> OperationGeneration {
-    let mut generations = OperationGenerationIssuer::new().expect("generation authority");
+fn generation(sequence: u64) -> Round {
+    let mut generations = RoundIssuer::new().expect("generation authority");
     let mut current = generations.allocate().expect("first generation");
     for _ in 1..sequence.max(1) {
         current = generations.allocate().expect("requested generation");
@@ -266,10 +266,7 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
         .iter()
         .find(|fact| fact.session == held)
         .expect("republished session is retained once");
-    assert_eq!(
-        current.generation.map(OperationGeneration::sequence),
-        NonZeroU64::new(9)
-    );
+    assert_eq!(current.generation.map(Round::sequence), NonZeroU64::new(9));
     assert_eq!(current.state, RelaySessionState::Closed);
 }
 

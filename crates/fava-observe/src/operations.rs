@@ -1,4 +1,4 @@
-//! Provider calls issued under one owner operation generation.
+//! Provider calls issued under one owner round.
 //!
 //! Nothing here runs on the reconciliation owner's task. Every call is bound to
 //! the slot's cancellation token and reports its completion back carrying the
@@ -10,16 +10,11 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava_query::{BoundedText, OperationGeneration};
+use fava_query::{BoundedText, Round};
 use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, OperationName, ProviderCompletion, Runtime, TaskName};
-use fava_subscriptions::{
-    DeclaredLimit, PlanRevision, RelayReadConstraints, SubscriptionPlan,
-};
-use fava_transport::{
-    OpenRelaySession, RelaySession, RelaySessionLease,
-    Transport,
-};
+use fava_subscriptions::{DeclaredLimit, PlanRevision, RelayReadConstraints, SubscriptionPlan};
+use fava_transport::{OpenRelaySession, RelaySession, RelaySessionLease, Transport};
 use fava_wire::SubscriptionId;
 
 use crate::engine::{Report, Reports};
@@ -39,7 +34,7 @@ pub(crate) fn acquire(
     transport: &Arc<dyn Transport>,
     reports: &Reports,
     request: OpenRelaySession,
-    generation: OperationGeneration,
+    generation: Round,
     cancel: CancellationToken,
 ) {
     let transport = Arc::clone(transport);
@@ -86,7 +81,7 @@ pub(crate) fn arm_admission(
     runtime: &Runtime,
     reports: &Reports,
     relay: RelaySessionKey,
-    generation: OperationGeneration,
+    generation: Round,
     window: Duration,
 ) {
     let reports = reports.clone();
@@ -100,8 +95,8 @@ pub(crate) fn arm_admission(
 pub(crate) struct Installing {
     /// Relay session the plan applies to.
     pub(crate) relay: RelaySessionKey,
-    /// Owner operation generation the frames are issued under.
-    pub(crate) generation: OperationGeneration,
+    /// Owner round the frames are issued under.
+    pub(crate) generation: Round,
     /// Desired-plan revision being installed.
     pub(crate) revision: PlanRevision,
 }
@@ -135,16 +130,16 @@ pub(crate) fn install_plan(
         let mut attending: Vec<(SubscriptionId, CancellationToken)> = Vec::new();
         for planned in &plan.open {
             let outcome = open_subscription(
-                    &owner,
-                    &reports,
-                    &relay,
-                    &session,
-                    planned.filters.clone(),
-                    generation,
-                    write_deadline,
-                    &cancel,
-                )
-                .await;
+                &owner,
+                &reports,
+                &relay,
+                &session,
+                planned.filters.clone(),
+                generation,
+                write_deadline,
+                &cancel,
+            )
+            .await;
             if let Some((id, token)) = outcome {
                 opened.push(Some(id.clone()));
                 attending.push((id, token));
@@ -174,7 +169,7 @@ pub(crate) fn install_plan(
 pub(crate) fn release(
     runtime: &Runtime,
     lease: Box<RelaySessionLease>,
-    generation: OperationGeneration,
+    generation: Round,
     close_deadline: Duration,
 ) {
     let owner = runtime.clone();
@@ -198,7 +193,7 @@ pub(crate) fn listen(
     runtime: &Runtime,
     reports: &Reports,
     relay: RelaySessionKey,
-    generation: OperationGeneration,
+    generation: Round,
     session: &Arc<dyn RelaySession>,
     cancel: CancellationToken,
 ) {
@@ -229,7 +224,7 @@ pub(crate) fn attend(
     runtime: &Runtime,
     reports: &Reports,
     relay: RelaySessionKey,
-    generation: OperationGeneration,
+    generation: Round,
     mut subscription: Box<dyn fava_transport::Subscription>,
     cancel: CancellationToken,
 ) {
@@ -267,7 +262,7 @@ async fn open_subscription(
     relay: &RelaySessionKey,
     session: &Arc<dyn RelaySession>,
     filters: Vec<nostr::filter::Filter>,
-    generation: OperationGeneration,
+    generation: Round,
     deadline: Duration,
     cancel: &CancellationToken,
 ) -> Option<(SubscriptionId, CancellationToken)> {
@@ -277,7 +272,10 @@ async fn open_subscription(
             fava_transport::RelaySessionExt::subscribe(&opening, filters).await
         })
         .await;
-    let ProviderCompletion::Completed { value: Ok(handle), .. } = outcome else {
+    let ProviderCompletion::Completed {
+        value: Ok(handle), ..
+    } = outcome
+    else {
         return None;
     };
     let id = handle.id().clone();

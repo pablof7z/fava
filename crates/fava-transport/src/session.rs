@@ -1,11 +1,11 @@
-//! One live connection generation and its per-consumer inbound streams.
+//! One live connection to a relay, and what it delivers.
 
 use fava_relay::RelaySessionKey;
 use fava_wire::{ClientMessage, SubscriptionId, encode_client};
 use nostr::event::Event;
 use nostr::filter::Filter;
 
-use crate::{HandoffFuture, HandoffOutcome, ReqFuture, ReleaseFuture, TransportFailure};
+use crate::{HandoffFuture, HandoffOutcome, ReleaseFuture, ReqFuture, TransportFailure};
 
 /// Exact width, in bytes, of every wire subscription identifier Fava mints.
 ///
@@ -35,41 +35,41 @@ pub fn subscription_id(counter: u64) -> SubscriptionId {
     SubscriptionId::new(id)
 }
 
-/// Exact authority of one live connection generation.
+/// Exact authority of one live connection to a relay.
 ///
 /// Authority: ARCH:1567-1571 (`fn identity(&self) -> RelaySessionIdentity`),
 /// ARCH:1610 "Every inbound frame and handoff completion carries exact session
-/// generation and relay-access identity."
+/// connection and relay-access identity."
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct RelaySessionIdentity {
     /// Relay URL and relay-access authority.
     pub key: RelaySessionKey,
-    /// Transport-owned connection generation. Advances on every reconnect.
-    pub generation: RelaySessionGeneration,
+    /// Which physical connection this is. Advances on every reconnect.
+    pub connection: RelayConnection,
 }
 
-/// Transport-owned identity of one physical connection generation.
+/// Transport-owned identity of one physical connection to a relay.
 ///
 /// A transport implementation mints these values. Callers can inspect them,
-/// but [`crate::OpenRelaySession`] has no generation input and therefore
+/// but [`crate::OpenRelaySession`] names no connection and therefore
 /// cannot select the identity a live session will wear.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct RelaySessionGeneration(u64);
+pub struct RelayConnection(u64);
 
-impl RelaySessionGeneration {
-    /// Construct a non-zero generation inside a transport implementation.
+impl RelayConnection {
+    /// Construct a non-zero connection identity inside a transport implementation.
     #[must_use]
     pub const fn new(value: u64) -> Option<Self> {
         if value == 0 { None } else { Some(Self(value)) }
     }
 
-    /// Raw generation value for diagnostics and provider storage.
+    /// Raw value for diagnostics and provider storage.
     #[must_use]
     pub const fn get(self) -> u64 {
         self.0
     }
 
-    /// Return the next generation, or `None` instead of reusing the maximum.
+    /// Return the next connection, or `None` instead of reusing the maximum.
     #[must_use]
     pub const fn checked_next(self) -> Option<Self> {
         match self.0.checked_add(1) {
@@ -103,7 +103,7 @@ impl HandoffCorrelation {
 ///
 /// Authority: ARCH:1569-1581.
 pub trait RelaySession: Send + Sync {
-    /// Current identity. The generation changes under the holder on reconnect.
+    /// Current identity. The connection changes under the holder on reconnect.
     fn identity(&self) -> RelaySessionIdentity;
 
     /// Hand one complete, already-encoded frame to the relay.
@@ -192,7 +192,7 @@ pub trait RelaySession: Send + Sync {
         })
     }
 
-    /// Close this session's current generation deterministically, regardless of
+    /// Close this session's current connection deterministically, regardless of
     /// remaining leases. Callers hold leases; this is the transport's own
     /// escape hatch and is idempotent.
     fn close(&self) -> ReleaseFuture<'_>;
@@ -200,11 +200,11 @@ pub trait RelaySession: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::RelaySessionGeneration;
+    use super::RelayConnection;
 
     #[test]
-    fn maximum_generation_has_no_successor() {
-        let maximum = RelaySessionGeneration::new(u64::MAX).expect("non-zero");
+    fn the_maximum_connection_has_no_successor() {
+        let maximum = RelayConnection::new(u64::MAX).expect("non-zero");
         assert_eq!(maximum.checked_next(), None);
         assert_eq!(maximum.get(), u64::MAX);
     }

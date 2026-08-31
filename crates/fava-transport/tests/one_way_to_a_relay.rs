@@ -72,7 +72,10 @@ fn no_crate_outside_the_transport_builds_an_envelope_or_reads_a_relay() {
             .expect("every source sits under the workspace root")
             .to_string_lossy()
             .replace('\\', "/");
-        if PERMITTED.iter().any(|allowed| relative.starts_with(allowed)) {
+        if PERMITTED
+            .iter()
+            .any(|allowed| relative.starts_with(allowed))
+        {
             continue;
         }
         let source = fs::read_to_string(&path).expect("source is readable");

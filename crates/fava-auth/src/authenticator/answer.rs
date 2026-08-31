@@ -53,7 +53,7 @@ impl Authenticator {
             let mut guard = self.lock();
             let demand = guard.deferred.remove(&id).ok_or(AnswerError::Unknown)?;
             let current = guard.entry(&demand.session.key).generation();
-            if current != Some(demand.session.generation) {
+            if current != Some(demand.session.connection) {
                 drop(guard);
                 self.signal();
                 return Ok(AnswerOutcome::NoLongerApplicable);
@@ -90,7 +90,7 @@ impl Authenticator {
     async fn live_session(&self, demand: &AuthenticationDemand) -> Option<Arc<dyn RelaySession>> {
         let request = super::session_watch::open_request(&demand.session.key);
         let lease = self.inner().transport.acquire_session(request).await.ok()?;
-        if lease.acquired_identity().generation != demand.session.generation {
+        if lease.acquired_identity().connection != demand.session.connection {
             let _ = lease.release().await;
             return None;
         }
@@ -188,10 +188,10 @@ pub(super) async fn authenticate(
     let owner = authenticator.clone();
     let identity = identity.clone();
     let token = authenticator.cancellation();
-    let _ = authenticator
-        .inner()
-        .runtime
-        .spawn_cancellable(crate::authenticator::VERDICT_TASK, token, async move {
+    let _ = authenticator.inner().runtime.spawn_cancellable(
+        crate::authenticator::VERDICT_TASK,
+        token,
+        async move {
             let state = match acknowledged.settled().await {
                 fava_transport::Settlement::Accepted { .. } => AuthenticationState::Accepted,
                 fava_transport::Settlement::Rejected { message } => {
@@ -209,5 +209,6 @@ pub(super) async fn authenticate(
                 fava_transport::Settlement::Ended(_) => return,
             };
             owner.record(&identity, state);
-        });
+        },
+    );
 }

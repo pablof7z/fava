@@ -6,14 +6,14 @@
 
 ## Decision
 
-`OperationGeneration` and `PlanRevision` are opaque identities containing an
+`Round` and `PlanRevision` are opaque identities containing an
 authority namespace and a non-zero sequence. The observation engine owns one
 non-cloneable issuer for each identity family. Providers and subscription
 planners receive identities to echo; they cannot construct, advance, default,
 wrap, saturate, or reuse an identity supplied by the owner.
 
 Creating an issuer and advancing its sequence are checked operations.
-Exhaustion returns `OperationGenerationExhausted` or `PlanRevisionExhausted`.
+Exhaustion returns `RoundsExhausted` or `PlanRevisionExhausted`.
 Before live relay work exists, query evidence represents the absence of an
 operation generation as `None`; it never fabricates generation zero.
 

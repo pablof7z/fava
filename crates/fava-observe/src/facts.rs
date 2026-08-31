@@ -3,9 +3,7 @@
 
 use std::time::Duration;
 
-use fava_query::{
-    BoundedText, OperationGeneration, RelayDeadline, RelayShortfall, RelaySourceState,
-};
+use fava_query::{BoundedText, RelayDeadline, RelayShortfall, RelaySourceState, Round};
 use fava_relay::RelaySessionKey;
 use fava_subscriptions::{RelayDemand, SubscriptionPlan};
 use fava_transport::{TransportBounds, TransportDeadlines};
@@ -20,7 +18,7 @@ impl Engine {
         &self,
         relay: &RelaySessionKey,
         demand: &[RelayDemand],
-        generation: OperationGeneration,
+        generation: Round,
         state: &RelaySourceState,
     ) {
         for item in demand {

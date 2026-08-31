@@ -5,7 +5,7 @@
 
 ## Defect
 
-`RelaySessionIdentity` reused the query-owned `OperationGeneration`. Both
+`RelaySessionIdentity` reused the query-owned `Round`. Both
 standard and fake transports also restarted each newly registered session at
 generation 1 and advanced reconnects with wrapping atomics. Releasing the last
 lease and reacquiring the same relay-access key could therefore recreate an
@@ -17,7 +17,7 @@ sessions and reconnects of a replaceable transport.
 
 ## Decision
 
-`RelaySessionGeneration` is the transport-owned physical generation. Each
+`RelayConnection` identifies one physical connection to a relay. Each
 transport instance mints one monotonic sequence across initial connections,
 reacquisitions, and reconnects. Registry removal does not reset it.
 `OpenRelaySession` remains generation-free.

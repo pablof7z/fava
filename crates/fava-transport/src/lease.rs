@@ -54,7 +54,7 @@ impl RelaySessionLease {
     }
 
     /// Identity at the moment of acquisition. Use `session().identity()` for
-    /// the current generation.
+    /// the current connection.
     #[must_use]
     pub fn acquired_identity(&self) -> &RelaySessionIdentity {
         &self.identity

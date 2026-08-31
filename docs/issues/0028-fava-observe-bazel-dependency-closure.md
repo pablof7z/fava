@@ -8,7 +8,7 @@ dependency checking therefore stops composition targets at `fava-observe`
 before their tests can execute.
 
 Declaring those direct edges exposes one prerequisite gap: `fava-runtime`
-imports the neutral `OperationGeneration` owner from `fava-query`, while its
+imports the neutral `Round` owner from `fava-query`, while its
 Bazel library and source-based unit-test targets declare no corresponding
 first-party edge.
 

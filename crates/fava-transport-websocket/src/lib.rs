@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use fava_relay::RelaySessionKey;
 use fava_transport::{
-    LeaseRelease, OpenRelaySession, RelaySession, RelaySessionFuture, RelaySessionGeneration,
+    LeaseRelease, OpenRelaySession, RelayConnection, RelaySession, RelaySessionFuture,
     RelaySessionIdentity, RelaySessionLease, ReleaseFuture, ReleaseOutcome, Transport,
     TransportError, TransportShutdownFuture,
 };
@@ -190,13 +190,13 @@ impl Transport for WebSocketTransport {
     }
 }
 
-pub(crate) fn mint_generation(counter: &AtomicU64) -> Option<RelaySessionGeneration> {
+pub(crate) fn mint_generation(counter: &AtomicU64) -> Option<RelayConnection> {
     let previous = counter
         .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
             value.checked_add(1)
         })
         .ok()?;
-    RelaySessionGeneration::new(previous + 1)
+    RelayConnection::new(previous + 1)
 }
 
 impl Registry {
@@ -244,14 +244,14 @@ impl LeaseRelease for Registry {
 #[cfg(test)]
 mod tests {
     use super::mint_generation;
-    use fava_transport::RelaySessionGeneration;
+    use fava_transport::RelayConnection;
     use std::sync::atomic::AtomicU64;
 
     #[test]
     fn generation_exhaustion_never_wraps_or_reuses() {
         let counter = AtomicU64::new(u64::MAX - 1);
         assert_eq!(
-            mint_generation(&counter).map(RelaySessionGeneration::get),
+            mint_generation(&counter).map(RelayConnection::get),
             Some(u64::MAX)
         );
         assert_eq!(mint_generation(&counter), None);

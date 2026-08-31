@@ -42,7 +42,7 @@ impl ObservationId {
 /// minting per relay would give the same query N owners, and grouped relay
 /// demand could then never be attributed back to one observation, so a
 /// grouped EOSE could not settle it. Reconnecting is a new *operation
-/// generation* ([`OperationGeneration`]), not a new observation.
+/// round* ([`Round`]), not a new observation.
 ///
 /// The allocator therefore belongs to whatever owns observation lifecycle
 /// (`fava-observe`), and lives here only because [`ObservationId`] does.
@@ -110,8 +110,8 @@ pub struct QueryBounds {
 
 /// Generation of one owner-authorized provider operation.
 ///
-/// Any completion carrying a generation older than the owner's current
-/// generation for that operation slot is stale and MUST NOT mutate state.
+/// Any completion carrying a round older than the owner's current
+/// round for that relay slot is stale and MUST NOT mutate state.
 ///
 /// Authority: `GOALS:426` (QUERY-010) "Reopening dropped demand MUST use fresh
 /// request identity so a late EOSE or event from the old request cannot settle
@@ -120,20 +120,20 @@ pub struct QueryBounds {
 /// The identity cannot be directly minted or advanced by a consumer:
 ///
 /// ```compile_fail
-/// let _ = fava_query::OperationGeneration::default();
+/// let _ = fava_query::Round::default();
 /// ```
 ///
 /// ```compile_fail
-/// let _ = fava_query::OperationGeneration::new(1);
+/// let _ = fava_query::Round::new(1);
 /// ```
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct OperationGeneration {
+pub struct Round {
     authority: NonZeroU64,
     sequence: NonZeroU64,
 }
 
-impl OperationGeneration {
-    /// Opaque identity of the authority that minted this generation.
+impl Round {
+    /// Opaque identity of the authority that minted this round.
     #[must_use]
     pub const fn authority(self) -> NonZeroU64 {
         self.authority
@@ -146,7 +146,7 @@ impl OperationGeneration {
     }
 }
 
-impl fmt::Display for OperationGeneration {
+impl fmt::Display for Round {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{}-{}", self.authority, self.sequence)
     }
@@ -154,24 +154,24 @@ impl fmt::Display for OperationGeneration {
 
 static NEXT_OPERATION_AUTHORITY: AtomicU64 = AtomicU64::new(0);
 
-/// The sole minting capability for one operation-generation authority.
+/// The sole minting capability for one round authority.
 ///
 /// The capability is intentionally not cloneable. A component may create an
-/// independent authority, but it cannot forge or advance a generation issued
+/// independent authority, but it cannot forge or advance a round issued
 /// by another authority.
 #[derive(Debug)]
-pub struct OperationGenerationIssuer {
+pub struct RoundIssuer {
     authority: NonZeroU64,
     next: Option<NonZeroU64>,
 }
 
-impl OperationGenerationIssuer {
-    /// Create one independent generation authority.
+impl RoundIssuer {
+    /// Create one independent round authority.
     ///
     /// # Errors
     ///
     /// Returns typed exhaustion rather than reusing an authority namespace.
-    pub fn new() -> Result<Self, OperationGenerationExhausted> {
+    pub fn new() -> Result<Self, RoundsExhausted> {
         let authority = NEXT_OPERATION_AUTHORITY
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
                 current.checked_add(1)
@@ -179,60 +179,57 @@ impl OperationGenerationIssuer {
             .ok()
             .and_then(|previous| previous.checked_add(1))
             .and_then(NonZeroU64::new)
-            .ok_or(OperationGenerationExhausted::Authorities)?;
+            .ok_or(RoundsExhausted::Authorities)?;
         Ok(Self {
             authority,
             next: NonZeroU64::new(1),
         })
     }
 
-    /// Mint the next generation under this authority.
+    /// Mint the next round under this authority.
     ///
     /// # Errors
     ///
     /// Returns typed exhaustion after the maximum sequence has been issued
     /// once. It never wraps, saturates, or returns the same identity twice.
-    pub fn allocate(&mut self) -> Result<OperationGeneration, OperationGenerationExhausted> {
-        let sequence = self.next.ok_or(OperationGenerationExhausted::Sequence)?;
+    pub fn allocate(&mut self) -> Result<Round, RoundsExhausted> {
+        let sequence = self.next.ok_or(RoundsExhausted::Sequence)?;
         self.next = sequence.get().checked_add(1).and_then(NonZeroU64::new);
-        Ok(OperationGeneration {
+        Ok(Round {
             authority: self.authority,
             sequence,
         })
     }
 }
 
-/// Exact operation-generation allocation refusal.
+/// Exact round allocation refusal.
 #[derive(Clone, Copy, Debug, Error, Eq, PartialEq)]
-pub enum OperationGenerationExhausted {
+pub enum RoundsExhausted {
     /// No fresh authority namespace remains in this process.
-    #[error("operation-generation authority space is exhausted")]
+    #[error("round authority space is exhausted")]
     Authorities,
     /// This authority issued its final sequence and cannot issue another.
-    #[error("operation-generation sequence is exhausted")]
+    #[error("round sequence is exhausted")]
     Sequence,
 }
 
 #[cfg(test)]
-mod operation_generation_tests {
+mod round_tests {
     use super::*;
 
     #[test]
     fn separate_authorities_never_mint_the_same_generation() {
-        let mut first = OperationGenerationIssuer::new().expect("first authority");
-        let mut second = OperationGenerationIssuer::new().expect("second authority");
+        let mut first = RoundIssuer::new().expect("first authority");
+        let mut second = RoundIssuer::new().expect("second authority");
         assert_ne!(first.allocate().unwrap(), second.allocate().unwrap());
     }
 
     #[test]
     fn final_sequence_is_issued_once_then_refused() {
-        let mut generations = OperationGenerationIssuer::new().expect("authority");
+        let mut generations = RoundIssuer::new().expect("authority");
         generations.next = NonZeroU64::new(u64::MAX);
         let last = generations.allocate().expect("maximum issues once");
         assert_eq!(last.sequence().get(), u64::MAX);
-        assert_eq!(
-            generations.allocate(),
-            Err(OperationGenerationExhausted::Sequence)
-        );
+        assert_eq!(generations.allocate(), Err(RoundsExhausted::Sequence));
     }
 }

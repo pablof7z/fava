@@ -194,7 +194,10 @@ impl Router {
     ///
     /// If a prior holder of this session's router lock panicked.
     pub fn release_acknowledgement(&self, event: EventId, mailbox: &Arc<Mailbox<Settlement>>) {
-        let mut held = self.acknowledgements.lock().expect("router is not poisoned");
+        let mut held = self
+            .acknowledgements
+            .lock()
+            .expect("router is not poisoned");
         if let Some(waiting) = held.get_mut(&event) {
             waiting.retain(|existing| !Arc::ptr_eq(existing, mailbox));
             if waiting.is_empty() {
@@ -276,7 +279,10 @@ impl Router {
                 mailbox.offer(subscription_item(message));
             }
             Correlation::Acknowledgement(event) => {
-                let held = self.acknowledgements.lock().expect("router is not poisoned");
+                let held = self
+                    .acknowledgements
+                    .lock()
+                    .expect("router is not poisoned");
                 let Some(waiting) = held.get(&event) else {
                     drop(held);
                     self.unrouted.unclaimed.fetch_add(1, Ordering::SeqCst);
@@ -329,13 +335,10 @@ impl Router {
     /// # Panics
     ///
     /// If a prior holder of this session's router lock panicked.
-    pub fn end_generation(&self, ended: &SessionEnded) {
-        for (_, mailbox) in std::mem::take(
-            &mut *self
-                .subscriptions
-                .lock()
-                .expect("router is not poisoned"),
-        ) {
+    pub fn end_connection(&self, ended: &SessionEnded) {
+        for (_, mailbox) in
+            std::mem::take(&mut *self.subscriptions.lock().expect("router is not poisoned"))
+        {
             mailbox.offer(SubscriptionItem::Ended(ended.clone()));
             mailbox.close();
         }
@@ -360,7 +363,7 @@ impl Router {
     ///
     /// If a prior holder of this session's router lock panicked.
     pub fn close(&self) {
-        self.end_generation(&SessionEnded::Disconnected {
+        self.end_connection(&SessionEnded::Disconnected {
             detail: BoundedText::new("session closed"),
         });
         for mailbox in self

@@ -13,11 +13,11 @@ pub enum TransportError {
     /// A previously open session disconnected.
     #[error("relay session disconnected: {0:?}")]
     Disconnected(TransportFailure),
-    /// The session generation is already closed.
-    #[error("relay session generation {} is closed", .0.generation.get())]
+    /// The connection is already closed.
+    #[error("relay connection {} is closed", .0.connection.get())]
     Closed(RelaySessionIdentity),
-    /// The transport cannot mint another unique physical generation.
-    #[error("relay session generation space is exhausted")]
+    /// The transport cannot mint another unique connection.
+    #[error("relay connection space is exhausted")]
     GenerationExhausted,
     /// An inbound frame violated a declared bound.
     #[error("inbound frame of {bytes} bytes exceeds the declared bound {maximum}")]

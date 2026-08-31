@@ -8,8 +8,7 @@ use std::num::NonZeroUsize;
 use fava_subscriptions::{
     AttributedSubscription, DeclaredLimit, EoseCompleteness, InstalledSubscription,
     InstalledSubscriptions, PlanConformanceError, PlannedSubscription, RelayReadConstraints,
-    SubscriptionAttribution, SubscriptionPlan,
-    filter_covers, validate_plan,
+    SubscriptionAttribution, SubscriptionPlan, filter_covers, validate_plan,
 };
 use fava_wire::SubscriptionId;
 use nostr::event::{EventId, Kind};
@@ -130,16 +129,14 @@ fn opening_a_second_subscription_for_running_filters_is_refused() {
         }],
         retain: vec![live.clone()],
         close: Vec::new(),
-        attribution: SubscriptionAttribution::from_entries([
-            (
-                live.clone(),
-                AttributedSubscription {
-                    filters: vec![filter.clone()],
-                    serves: [demand_id(1)].into_iter().collect(),
-                    completeness: EoseCompleteness::Proven,
-                },
-            ),
-        ]),
+        attribution: SubscriptionAttribution::from_entries([(
+            live.clone(),
+            AttributedSubscription {
+                filters: vec![filter.clone()],
+                serves: [demand_id(1)].into_iter().collect(),
+                completeness: EoseCompleteness::Proven,
+            },
+        )]),
         shortfalls: Vec::new(),
     };
 
@@ -241,16 +238,14 @@ fn opening_past_the_residual_budget_is_refused() {
         }],
         retain: vec![live.clone()],
         close: Vec::new(),
-        attribution: SubscriptionAttribution::from_entries([
-            (
-                live,
-                AttributedSubscription {
-                    filters: vec![alpha.clone()],
-                    serves: [demand_id(1)].into_iter().collect(),
-                    completeness: EoseCompleteness::Proven,
-                },
-            ),
-        ]),
+        attribution: SubscriptionAttribution::from_entries([(
+            live,
+            AttributedSubscription {
+                filters: vec![alpha.clone()],
+                serves: [demand_id(1)].into_iter().collect(),
+                completeness: EoseCompleteness::Proven,
+            },
+        )]),
         shortfalls: Vec::new(),
     };
 

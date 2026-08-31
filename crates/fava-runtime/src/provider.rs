@@ -6,7 +6,7 @@
 use std::any::Any;
 use std::time::Duration;
 
-use crate::generation::OperationGeneration;
+use crate::generation::Round;
 use crate::name::OperationName;
 
 /// Longest retained panic payload, in bytes.
@@ -24,7 +24,7 @@ pub enum ProviderCompletion<T> {
         /// Operation slot.
         operation: OperationName,
         /// Generation this completion belongs to.
-        generation: OperationGeneration,
+        generation: Round,
         /// What the provider returned.
         value: T,
     },
@@ -34,7 +34,7 @@ pub enum ProviderCompletion<T> {
         /// Operation slot.
         operation: OperationName,
         /// Generation this completion belongs to.
-        generation: OperationGeneration,
+        generation: Round,
         /// The deadline that expired.
         after: Duration,
     },
@@ -43,7 +43,7 @@ pub enum ProviderCompletion<T> {
         /// Operation slot.
         operation: OperationName,
         /// Generation this completion belongs to.
-        generation: OperationGeneration,
+        generation: Round,
         /// Bounded panic payload.
         detail: String,
     },
@@ -52,14 +52,14 @@ pub enum ProviderCompletion<T> {
         /// Operation slot.
         operation: OperationName,
         /// Generation this completion belongs to.
-        generation: OperationGeneration,
+        generation: Round,
     },
     /// The runtime is shutting down and refused the call.
     Refused {
         /// Operation slot.
         operation: OperationName,
         /// Generation this completion belongs to.
-        generation: OperationGeneration,
+        generation: Round,
     },
 }
 
@@ -67,7 +67,7 @@ impl<T> ProviderCompletion<T> {
     /// Generation this completion belongs to. An owner MUST compare this
     /// against its current generation and discard stale completions.
     #[must_use]
-    pub fn generation(&self) -> OperationGeneration {
+    pub fn generation(&self) -> Round {
         match self {
             Self::Completed { generation, .. }
             | Self::TimedOut { generation, .. }

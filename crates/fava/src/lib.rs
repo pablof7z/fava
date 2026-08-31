@@ -30,9 +30,9 @@ pub use builder::{BuildError, FavaBuilder};
 use fava_diagnostics::Diagnostics;
 pub use fava_diagnostics::{
     BoundKind, DiagnosticsSnapshot, DroppedFacts, LimitDiagnostic, LimitScope,
-    LogicalDemandDiagnostic, ObservationId, ObservationWireBinding, OperationGeneration,
-    ProviderDiagnostic, ProviderKind, ProviderOperation, ProviderOperationState, QueryDiagnostic,
-    RelayDiagnostic, RelaySessionState, WireSubscriptionDiagnostic, WriteDiagnostic, WriteStall,
+    LogicalDemandDiagnostic, ObservationId, ObservationWireBinding, ProviderDiagnostic,
+    ProviderKind, ProviderOperation, ProviderOperationState, QueryDiagnostic, RelayDiagnostic,
+    RelaySessionState, Round, WireSubscriptionDiagnostic, WriteDiagnostic, WriteStall,
 };
 use fava_observe::Observer;
 pub use fava_observe::{Observation, ObservationClosed, ObserveError};
