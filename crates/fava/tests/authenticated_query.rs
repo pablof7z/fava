@@ -354,3 +354,98 @@ async fn an_observation_reports_the_relays_demand_from_the_owners_conclusion() {
         "the observation reports what the authentication owner concluded, got {state:?}"
     );
 }
+
+/// OWN-07's `auth_denied_for_one_access_context_leaves_another_running`.
+///
+/// A relay is one host and several session authorities. Denying one account
+/// must not disturb another account's work, nor public-access work, on that
+/// same host: they are different connections with different identities.
+#[tokio::test(flavor = "current_thread")]
+async fn auth_denied_for_one_access_context_leaves_another_running() {
+    let rig = Rig::build(Some(Always(AuthenticationDecision::Decline)), true);
+
+    let denied = rig
+        .fava
+        .observe(rig.query())
+        .await
+        .expect("the authenticated query opens");
+    let public_query = Query::events()
+        .only_from_relays([rig.relay.clone()])
+        .expect("relay selection");
+    let public = rig
+        .fava
+        .observe(public_query)
+        .await
+        .expect("the public query opens");
+    settle().await;
+
+    let public_key = RelaySessionKey {
+        relay: rig.relay.clone(),
+        access: RelayAccess::Public,
+    };
+    let denied_peer = rig.peer().expect("the authenticated session");
+    let public_peer = rig
+        .transport
+        .relay(&public_key)
+        .expect("the public session");
+
+    denied_peer.push_frame(&challenge_frame("nonce-one"));
+    settle().await;
+
+    assert_eq!(
+        rig.fava
+            .authentication()
+            .expect("a policy was selected")
+            .state(&rig.key),
+        Some(AuthenticationState::Declined),
+        "the authenticated context was denied"
+    );
+    assert!(
+        rig.fava
+            .authentication()
+            .expect("a policy was selected")
+            .state(&public_key)
+            .is_none(),
+        "public access is never authenticated, so it has no verdict"
+    );
+    assert!(
+        public.current().evidence.relay(&public_key).is_some(),
+        "the public observation still carries evidence for its own session"
+    );
+    assert!(
+        denied.current().evidence.relay(&rig.key).is_some(),
+        "the denied observation stays open and reports its own relay"
+    );
+
+    // The public session keeps serving: its own subscription still completes.
+    let public_subscription = requests_of(&public_peer)
+        .first()
+        .cloned()
+        .expect("the public query sent a REQ");
+    public_peer.push_frame(json!(["EOSE", public_subscription]).to_string().as_bytes());
+    settle().await;
+
+    let snapshot = public.current();
+    assert!(
+        snapshot
+            .evidence
+            .relay(&public_key)
+            .is_some_and(fava_query::RelayQueryEvidence::stored_events_complete),
+        "public work on the same host completes while another account is denied"
+    );
+}
+
+/// Every wire subscription identifier the relay was sent.
+fn requests_of(peer: &FakeRelay) -> Vec<String> {
+    peer.delivered_frames()
+        .into_iter()
+        .filter_map(|frame| serde_json::from_slice::<Value>(&frame).ok())
+        .filter(|message| message.get(0).and_then(Value::as_str) == Some("REQ"))
+        .filter_map(|message| {
+            message
+                .get(1)
+                .and_then(Value::as_str)
+                .map(std::borrow::ToOwned::to_owned)
+        })
+        .collect()
+}
