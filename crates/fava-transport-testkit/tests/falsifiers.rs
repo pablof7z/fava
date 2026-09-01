@@ -132,29 +132,28 @@ async fn exhausted_reconnect_generation_is_terminal_without_a_dial() {
         .await
         .expect("session opens");
     let session = std::sync::Arc::clone(lease.session());
-    let connection = fava_transport::RelaySessionExt::connection(&session);
+    let mut connection = fava_transport::RelaySessionExt::connection(&session);
     let dials = transport.dials(&key());
 
     transport.exhaust_generations();
     transport.relay(&key()).expect("peer").reconnect();
 
-    let mut seen = Vec::new();
-    for _ in 0..8 {
-        while let Some(state) = connection.take() {
-            seen.push(state);
-        }
-        if seen
-            .iter()
-            .any(|state| matches!(state, fava_transport::ConnectionState::Unreachable { .. }))
-        {
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
+    let down = connection
+        .wait_for(|state| {
+            matches!(
+                state.connectivity,
+                fava_transport::Connectivity::Disconnected { .. }
+            )
+        })
+        .await;
     assert!(
-        seen.iter()
-            .any(|state| matches!(state, fava_transport::ConnectionState::Unreachable { .. })),
-        "an exhausted reconnect budget is reported, not retried: {seen:?}"
+        down.is_ok(),
+        "an exhausted reconnect budget is reported, not retried"
+    );
+    drop(down);
+    assert!(
+        connection.changed().await.is_err(),
+        "and it says it will never return rather than leaving a reader waiting"
     );
     assert_eq!(transport.dials(&key()), dials, "no dial was attempted");
 }

@@ -350,7 +350,7 @@ pub trait RelaySessionExt {
     ///
     /// This is a fact about the session, not a footnote on some other stream:
     /// a lease holder that owns no wire key still needs it.
-    fn connection(&self) -> std::sync::Arc<crate::Mailbox<ConnectionState>>;
+    fn connection(&self) -> tokio::sync::watch::Receiver<crate::Connection>;
 
     /// Read the relay's authentication challenges.
     ///
@@ -439,7 +439,7 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
         self.router().read_challenges(self.inbound_capacity())
     }
 
-    fn connection(&self) -> std::sync::Arc<crate::Mailbox<ConnectionState>> {
-        self.router().read_connection(self.inbound_capacity())
+    fn connection(&self) -> tokio::sync::watch::Receiver<crate::Connection> {
+        self.router().connection()
     }
 }

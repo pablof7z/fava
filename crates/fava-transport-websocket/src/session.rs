@@ -38,8 +38,13 @@ impl SessionShared {
         generations: Arc<AtomicU64>,
         subscriptions: Arc<AtomicU64>,
     ) -> Self {
+        let identity = LiveIdentity::new(request.key.clone(), generation);
+        let opening = fava_transport::Connection {
+            connectivity: fava_transport::Connectivity::Connected,
+            ..fava_transport::Connection::opening(identity.read())
+        };
         Self {
-            identity: Arc::new(LiveIdentity::new(request.key.clone(), generation)),
+            identity: Arc::new(identity),
             bounds: request.bounds,
             deadlines: request.deadlines,
             reconnect_attempts: request.reconnect_attempts,
@@ -49,7 +54,7 @@ impl SessionShared {
             entropy,
             generations,
             subscriptions,
-            router: fava_transport::Router::default(),
+            router: fava_transport::Router::new(opening),
         }
     }
 }

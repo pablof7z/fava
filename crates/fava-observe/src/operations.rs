@@ -198,23 +198,34 @@ pub(crate) fn listen(
     cancel: CancellationToken,
 ) {
     let reports = reports.clone();
-    let connection = fava_transport::RelaySessionExt::connection(session);
+    let mut connection = fava_transport::RelaySessionExt::connection(session);
     let _ = runtime.spawn_cancellable(LISTEN_TASK, cancel, async move {
+        let mut seen = connection.borrow_and_update().identity.clone();
         loop {
-            let changed = connection.notified();
-            while let Some(state) = connection.take() {
+            let state = connection.borrow_and_update().clone();
+            if state.identity != seen {
+                seen = state.identity.clone();
                 reports
-                    .send(Report::Connection {
+                    .send(Report::ConnectionReplaced {
                         relay: relay.clone(),
                         generation,
-                        state: Box::new(state),
                     })
                     .await;
             }
-            if connection.is_closed() {
+            reports
+                .send(Report::Connection {
+                    relay: relay.clone(),
+                    generation,
+                    state: Box::new(state),
+                })
+                .await;
+            // The sender is dropped when the connection will never reach
+            // another state, which is how an exhausted budget is told apart
+            // from a drop that may still reconnect.
+            if connection.changed().await.is_err() {
+                reports.send(Report::ConnectionEnded).await;
                 return;
             }
-            changed.await;
         }
     });
 }

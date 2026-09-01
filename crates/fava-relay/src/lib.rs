@@ -84,10 +84,18 @@ pub enum Authority {
 ///
 /// Independent of [`Authentication`]: a connection can be authenticated and
 /// then drop, and it can be connected without the relay ever asking who it is.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Connectivity {
-    /// No socket, and none being opened.
-    Disconnected,
+    /// No socket, and none being opened. Carries why the last one ended, so a
+    /// holder that owns no subscription still learns the reason.
+    Disconnected {
+        /// Exact scoped reason, or empty before a socket ever existed.
+        detail: BoundedText,
+        /// Attempts spent, once no further connection will appear. `None`
+        /// while a reconnect may still follow. A budget can be exhausted
+        /// having spent none, so the count cannot double as the verdict.
+        spent: Option<usize>,
+    },
     /// A socket is being opened.
     Connecting,
     /// A socket is live.
@@ -340,7 +348,10 @@ mod connection_tests {
     #[test]
     fn connectivity_is_three_states_and_says_nothing_about_authentication() {
         for state in [
-            Connectivity::Disconnected,
+            Connectivity::Disconnected {
+                detail: BoundedText::new("socket closed"),
+                spent: None,
+            },
             Connectivity::Connecting,
             Connectivity::Connected,
         ] {

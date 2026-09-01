@@ -57,7 +57,13 @@ impl FakeSession {
             dials,
             generations,
             subscriptions,
-            router: fava_transport::Router::default(),
+            router: fava_transport::Router::new(fava_transport::Connection {
+                connectivity: fava_transport::Connectivity::Connected,
+                ..fava_transport::Connection::opening(RelaySessionIdentity {
+                    key: request.key.clone(),
+                    connection: generation,
+                })
+            }),
             inner: Mutex::new(SessionState::default()),
         }
     }
@@ -98,21 +104,17 @@ impl FakeSession {
         }
         drop(state);
 
-        self.router
-            .end_connection(&fava_transport::SessionEnded::Disconnected {
-                detail: BoundedText::new(detail),
-            });
-        self.router
-            .connection_changed(&fava_transport::ConnectionState::Disconnected {
-                detail: BoundedText::new(detail),
-            });
-        if let Some(refusal) = refusal {
-            self.router
-                .connection_changed(&fava_transport::ConnectionState::Unreachable {
-                    attempts: self.reconnect_attempts,
-                    detail: BoundedText::new(refusal),
-                });
-        }
+        // A refused reconnect is final and says how many attempts it spent;
+        // an ordinary drop may still come back and has none to report.
+        let (final_detail, attempts) = refusal.as_ref().map_or((detail, None), |refusal| {
+            (refusal.as_str(), Some(self.reconnect_attempts))
+        });
+        self.router.moved(|connection| {
+            connection.connectivity = fava_transport::Connectivity::Disconnected {
+                detail: BoundedText::new(final_detail),
+                spent: attempts,
+            };
+        });
     }
 
     pub(crate) fn reconnect(&self) {
@@ -130,29 +132,26 @@ impl FakeSession {
         let Some(next) = next else {
             state.closed = true;
             drop(state);
-            self.router
-                .end_connection(&fava_transport::SessionEnded::ReconnectExhausted {
-                    attempts: 0,
+            self.router.moved(|connection| {
+                connection.connectivity = fava_transport::Connectivity::Disconnected {
                     detail: BoundedText::new("generations exhausted"),
-                });
-            self.router
-                .connection_changed(&fava_transport::ConnectionState::Unreachable {
-                    attempts: 0,
-                    detail: BoundedText::new("generations exhausted"),
-                });
+                    spent: Some(0),
+                };
+            });
             return;
         };
         drop(state);
         self.identity.generation.store(next.get(), Ordering::SeqCst);
         self.dials.fetch_add(1, Ordering::SeqCst);
-        self.router
-            .end_connection(&fava_transport::SessionEnded::Disconnected {
-                detail: BoundedText::new("session reconnected"),
-            });
-        self.router
-            .connection_changed(&fava_transport::ConnectionState::Reconnected {
-                identity: self.identity.read(),
-            });
+        // A replacement has proved nothing to the relay.
+        let identity = self.identity.read();
+        self.router.moved(|connection| {
+            *connection = fava_transport::Connection {
+                identity,
+                connectivity: fava_transport::Connectivity::Connected,
+                authentication: fava_transport::Authentication::None,
+            };
+        });
     }
 
     pub(crate) fn push_frame(&self, frame: &[u8]) {

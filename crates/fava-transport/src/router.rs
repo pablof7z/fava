@@ -9,12 +9,14 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use tokio::sync::watch;
+
 use fava_wire::{RelayMessage, SubscriptionId};
 
 use crate::BoundedText;
-use crate::routed::{
-    ConnectionState, Correlation, SessionEnded, Settlement, SubscriptionItem, correlation,
-};
+use crate::routed::{Correlation, SessionEnded, Settlement, SubscriptionItem, correlation};
+use crate::session::Connection;
+use fava_relay::Connectivity;
 use nostr::event::EventId;
 use tokio::sync::Notify;
 
@@ -116,7 +118,6 @@ pub struct Unrouted {
 }
 
 /// Every live handle on one session, keyed by the wire key it owns.
-#[derive(Default)]
 pub struct Router {
     subscriptions: Mutex<BTreeMap<SubscriptionId, Arc<Mailbox<SubscriptionItem>>>>,
     /// An acknowledgement fans out: two callers publishing one event both want
@@ -129,15 +130,30 @@ pub struct Router {
     /// bound applied here would silently defeat that. The frame it arrived in
     /// is already bounded by `max_frame_bytes`, so this cannot grow unbounded.
     challenges: Mutex<Vec<Arc<Mailbox<String>>>>,
-    /// Readers of connection resets. A lease holder that owns no wire key still
-    /// needs to know its connection was replaced, so this is not attached to
-    /// any handle.
-    connection: Mutex<Vec<Arc<Mailbox<ConnectionState>>>>,
+    /// Where this connection has got to.
+    ///
+    /// A current value rather than a queue of past ones: a reader arriving
+    /// late wants the state as it is, and a reader falling behind wants the
+    /// newest rather than the oldest. Dropping this sender is how a connection
+    /// says it will never reach anything again.
+    connection: watch::Sender<Connection>,
     /// Traffic that reached no handle.
     pub unrouted: Unrouted,
 }
 
 impl Router {
+    /// A router for one connection, in the state it starts in.
+    #[must_use]
+    pub fn new(connection: Connection) -> Self {
+        Self {
+            subscriptions: Mutex::default(),
+            acknowledgements: Mutex::default(),
+            challenges: Mutex::default(),
+            connection: watch::Sender::new(connection),
+            unrouted: Unrouted::default(),
+        }
+    }
+
     /// See the type's documentation.
     ///
     /// # Panics
@@ -211,38 +227,51 @@ impl Router {
     /// # Panics
     ///
     /// If a prior holder of this session's router lock panicked.
-    /// Read this session's connection resets.
+    /// Watch where this connection has got to.
     ///
-    /// Every reader is told which connection is now current. Readers survive a
-    /// reset, because the fact they are waiting for is the reset itself.
-    ///
-    /// # Panics
-    ///
-    /// If a prior holder of this session's router lock panicked.
-    pub fn read_connection(&self, capacity: usize) -> Arc<Mailbox<ConnectionState>> {
-        let mailbox = Arc::new(Mailbox::new(capacity));
-        self.connection
-            .lock()
-            .expect("router is not poisoned")
-            .push(Arc::clone(&mailbox));
-        mailbox
+    /// The receiver holds the current value, so a reader that arrives after a
+    /// change still sees it.
+    #[must_use]
+    pub fn connection(&self) -> watch::Receiver<Connection> {
+        self.connection.subscribe()
     }
 
-    /// Tell every reset reader which connection is now current.
+    /// Move this connection to a new state.
     ///
-    /// # Panics
-    ///
-    /// If a prior holder of this session's router lock panicked.
-    pub fn connection_changed(&self, state: &ConnectionState) {
-        let readers: Vec<_> = self
-            .connection
-            .lock()
-            .expect("router is not poisoned")
-            .iter()
-            .map(Arc::clone)
-            .collect();
-        for mailbox in readers {
-            mailbox.offer(state.clone());
+    /// One write per transition, and the handles follow from it. Every wire
+    /// key names state the connection carried, so a connection that drops or
+    /// is replaced ends them rather than leaving them waiting on a relay that
+    /// has forgotten them. The caller says where the connection got to; what
+    /// that means for the handles is not a second decision.
+    pub fn moved(&self, next: impl FnOnce(&mut Connection)) {
+        let ended = {
+            let mut ended = None;
+            self.connection.send_modify(|connection| {
+                let was = connection.identity.clone();
+                let live = matches!(connection.connectivity, Connectivity::Connected);
+                next(connection);
+                ended = match &connection.connectivity {
+                    Connectivity::Disconnected {
+                        detail,
+                        spent: Some(attempts),
+                    } => Some(SessionEnded::ReconnectExhausted {
+                        attempts: *attempts,
+                        detail: detail.clone(),
+                    }),
+                    Connectivity::Disconnected { detail, .. } => Some(SessionEnded::Disconnected {
+                        detail: detail.clone(),
+                    }),
+                    // A replacement carries none of what the previous one held.
+                    _ if connection.identity != was && live => Some(SessionEnded::Disconnected {
+                        detail: BoundedText::new("session reconnected"),
+                    }),
+                    _ => None,
+                };
+            });
+            ended
+        };
+        if let Some(ended) = ended {
+            self.end_connection(&ended);
         }
     }
 
@@ -368,14 +397,6 @@ impl Router {
         });
         for mailbox in self
             .challenges
-            .lock()
-            .expect("router is not poisoned")
-            .drain(..)
-        {
-            mailbox.close();
-        }
-        for mailbox in self
-            .connection
             .lock()
             .expect("router is not poisoned")
             .drain(..)

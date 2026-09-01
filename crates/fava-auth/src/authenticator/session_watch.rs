@@ -122,7 +122,7 @@ impl Authenticator {
         // the two facts it actually needs: the relay's challenges, and whether
         // its connection was replaced.
         let challenges = fava_transport::RelaySessionExt::challenges(&session);
-        let connection = fava_transport::RelaySessionExt::connection(&session);
+        let mut connection = fava_transport::RelaySessionExt::connection(&session);
 
         {
             let mut guard = self.lock();
@@ -148,9 +148,9 @@ impl Authenticator {
                 // has not finished acquiring yet leaves the watch briefly
                 // alone, and one sample can land in that window.
                 let mut alone_for = 0_u32;
+                let mut seen = connection.borrow_and_update().identity.clone();
                 loop {
                     let asked = challenges.notified();
-                    let changed = connection.notified();
                     if release_when_alone {
                         match transport.holders(&watched).map(NonZeroUsize::get) {
                             Some(holders) if holders > 1 => alone_for = 0,
@@ -167,17 +167,23 @@ impl Authenticator {
                     while let Some(text) = challenges.take() {
                         owner.challenged(&session, &text).await;
                     }
-                    while let Some(state) = connection.take() {
-                        if let fava_transport::ConnectionState::Reconnected { identity } = state {
-                            owner.connection_reset(&identity);
+                    {
+                        let current = connection.borrow_and_update().identity.clone();
+                        if current != seen {
+                            owner.connection_reset(&current);
+                            seen = current;
                         }
                     }
-                    if challenges.is_closed() && connection.is_closed() {
+                    if challenges.is_closed() {
                         break;
                     }
                     tokio::select! {
                         () = asked => {}
-                        () = changed => {}
+                        changed = connection.changed() => {
+                            if changed.is_err() {
+                                break;
+                            }
+                        }
                         () = tokio::time::sleep(LAST_HOLDER_CHECK) => {}
                     }
                 }

@@ -56,19 +56,12 @@ pub(crate) async fn drive(
         let (sink, source) = socket.split();
         let reason = pump(&shared, &mut outbound, sink, source).await;
         drain_unsent(&mut outbound, &shared, &reason);
-        // Every wire key names state this connection carried. It did not
-        // survive, so every handle ends rather than waiting on a relay that
-        // has forgotten it.
-        shared
-            .router
-            .end_connection(&fava_transport::SessionEnded::Disconnected {
+        shared.router.moved(|connection| {
+            connection.connectivity = fava_transport::Connectivity::Disconnected {
                 detail: BoundedText::new(format!("{reason:?}")),
-            });
-        shared
-            .router
-            .connection_changed(&fava_transport::ConnectionState::Disconnected {
-                detail: BoundedText::new(format!("{reason:?}")),
-            });
+                spent: None,
+            };
+        });
         if shared.closed.load(Ordering::SeqCst) {
             break;
         }
@@ -77,26 +70,27 @@ pub(crate) async fn drive(
                 socket = next;
                 backoff.reset();
                 let (_previous, identity) = shared.identity.advance(generation);
-                shared
-                    .router
-                    .connection_changed(&fava_transport::ConnectionState::Reconnected {
+                // A replacement has proved nothing to the relay, whatever the
+                // one it replaces had proved.
+                shared.router.moved(|connection| {
+                    *connection = fava_transport::Connection {
                         identity: identity.clone(),
-                    });
+                        connectivity: fava_transport::Connectivity::Connected,
+                        authentication: fava_transport::Authentication::None,
+                    };
+                });
             }
             Err((attempts, final_reason)) => {
                 shared.closed.store(true, Ordering::SeqCst);
-                shared
-                    .router
-                    .end_connection(&fava_transport::SessionEnded::ReconnectExhausted {
-                        attempts,
+                // The budget is spent. Disconnected, and staying there: the
+                // router's close drops the sender, so a waiter is told the
+                // connection will never reach anything rather than waiting.
+                shared.router.moved(|connection| {
+                    connection.connectivity = fava_transport::Connectivity::Disconnected {
                         detail: BoundedText::new(format!("{final_reason:?}")),
-                    });
-                shared
-                    .router
-                    .connection_changed(&fava_transport::ConnectionState::Unreachable {
-                        attempts,
-                        detail: BoundedText::new(format!("{final_reason:?}")),
-                    });
+                        spent: Some(attempts),
+                    };
+                });
                 break;
             }
         }

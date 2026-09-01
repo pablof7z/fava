@@ -62,18 +62,14 @@ fn request(key: RelaySessionKey) -> OpenRelaySession {
 
 /// Drain a session's connection stream until one state matches.
 async fn until(
-    connection: &std::sync::Arc<fava_transport::Mailbox<fava_transport::ConnectionState>>,
-    mut matches: impl FnMut(&fava_transport::ConnectionState) -> bool,
-) -> fava_transport::ConnectionState {
-    loop {
-        let changed = connection.notified();
-        while let Some(state) = connection.take() {
-            if matches(&state) {
-                return state;
-            }
-        }
-        changed.await;
-    }
+    connection: &mut tokio::sync::watch::Receiver<fava_transport::Connection>,
+    mut matches: impl FnMut(&fava_transport::Connection) -> bool,
+) -> fava_transport::Connection {
+    connection
+        .wait_for(|state| matches(state))
+        .await
+        .expect("the connection still reports its state")
+        .clone()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -279,15 +275,18 @@ async fn a_remote_close_reaches_every_consumer_as_an_attributed_disconnect() {
         .await
         .expect("session opens");
     let session = std::sync::Arc::clone(lease.session());
-    let connection = fava_transport::RelaySessionExt::connection(&session);
+    let mut connection = fava_transport::RelaySessionExt::connection(&session);
 
-    let state = until(&connection, |state| {
-        matches!(state, fava_transport::ConnectionState::Disconnected { .. })
+    let state = until(&mut connection, |state| {
+        matches!(
+            state.connectivity,
+            fava_transport::Connectivity::Disconnected { .. }
+        )
     })
     .await;
     assert!(matches!(
-        state,
-        fava_transport::ConnectionState::Disconnected { .. }
+        state.connectivity,
+        fava_transport::Connectivity::Disconnected { .. }
     ));
     server.await.expect("server joins");
 }
@@ -400,15 +399,14 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
         .expect("session opens");
     let before = lease.session().identity();
     let session = std::sync::Arc::clone(lease.session());
-    let connection = fava_transport::RelaySessionExt::connection(&session);
+    let mut connection = fava_transport::RelaySessionExt::connection(&session);
 
-    let state = until(&connection, |state| {
-        matches!(state, fava_transport::ConnectionState::Reconnected { .. })
+    let state = until(&mut connection, |state| {
+        matches!(state.connectivity, fava_transport::Connectivity::Connected)
+            && state.identity != before
     })
     .await;
-    let fava_transport::ConnectionState::Reconnected { identity } = state else {
-        unreachable!("the predicate matched a reconnect")
-    };
+    let identity = state.identity;
 
     assert_eq!(
         identity.connection,
@@ -441,15 +439,22 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
         .await
         .expect("session opens");
     let session = std::sync::Arc::clone(lease.session());
-    let connection = fava_transport::RelaySessionExt::connection(&session);
+    let mut connection = fava_transport::RelaySessionExt::connection(&session);
     server.await.expect("server joins");
 
-    let state = until(&connection, |state| {
-        matches!(state, fava_transport::ConnectionState::Unreachable { .. })
+    let state = until(&mut connection, |state| {
+        matches!(
+            state.connectivity,
+            fava_transport::Connectivity::Disconnected { .. }
+        )
     })
     .await;
-    let fava_transport::ConnectionState::Unreachable { attempts, .. } = state else {
-        unreachable!("the predicate matched an exhausted budget")
-    };
-    assert_eq!(attempts, 2);
+    assert!(matches!(
+        state.connectivity,
+        fava_transport::Connectivity::Disconnected { .. }
+    ));
+    assert!(
+        connection.changed().await.is_err(),
+        "an exhausted budget ends the connection rather than leaving a reader waiting"
+    );
 }

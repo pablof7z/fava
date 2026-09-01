@@ -74,7 +74,13 @@ impl Transport for RecordingTransport {
                 })
                 .map_err(|_| TransportError::GenerationExhausted)?;
             let session = Arc::new(RecordingSession {
-                router: fava_transport::Router::default(),
+                router: fava_transport::Router::new(fava_transport::Connection {
+                    connectivity: fava_transport::Connectivity::Connected,
+                    ..fava_transport::Connection::opening(fava_transport::RelaySessionIdentity {
+                        key: request.key.clone(),
+                        connection: RelayConnection::new(previous + 1).expect("non-zero"),
+                    })
+                }),
                 subscriptions: std::sync::atomic::AtomicU64::new(0),
                 identity: RelaySessionIdentity {
                     key: request.key,

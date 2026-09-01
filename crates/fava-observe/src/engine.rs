@@ -107,8 +107,16 @@ pub(crate) enum Report {
     Connection {
         relay: RelaySessionKey,
         generation: Round,
-        state: Box<fava_transport::ConnectionState>,
+        state: Box<fava_transport::Connection>,
     },
+    /// The connection carrying this relay's work was replaced.
+    ConnectionReplaced {
+        relay: RelaySessionKey,
+        generation: Round,
+    },
+    /// The connection will never reach another state. The state it last
+    /// reached already said why; this only ends the waiting.
+    ConnectionEnded,
     /// One installed subscription carried something of its own.
     Carried {
         relay: RelaySessionKey,

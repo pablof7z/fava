@@ -156,7 +156,10 @@ fn a_dropped_connection_serves_no_work_it_previously_could() {
     );
 
     let dropped = fava_transport::Connection {
-        connectivity: fava_relay::Connectivity::Disconnected,
+        connectivity: fava_relay::Connectivity::Disconnected {
+            detail: fava_relay::BoundedText::new("socket closed"),
+            spent: None,
+        },
         ..live
     };
     assert!(

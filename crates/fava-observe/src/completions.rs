@@ -48,6 +48,10 @@ impl Engine {
                 generation,
                 state,
             } => self.connection(&relay, generation, *state),
+            Report::ConnectionReplaced { relay, generation } => {
+                self.connection_replaced(&relay, generation)
+            }
+            Report::ConnectionEnded => false,
             Report::Carried {
                 relay,
                 generation,
@@ -227,7 +231,7 @@ impl Engine {
         &mut self,
         relay: &RelaySessionKey,
         generation: Round,
-        state: fava_transport::ConnectionState,
+        state: fava_transport::Connection,
     ) -> bool {
         let Some(slot) = self.slots.get(relay) else {
             return false;
@@ -235,34 +239,53 @@ impl Engine {
         if slot.generation != generation {
             return false;
         }
-        match state {
-            fava_transport::ConnectionState::Disconnected { detail } => {
-                if let Some(slot) = self.slots.get_mut(relay) {
-                    slot.state = fava_diagnostics::RelaySessionState::Reconnecting {
-                        detail: detail.clone(),
-                    };
-                }
-                self.publish_state_for_relay(relay, &RelaySourceState::Disconnected { detail });
-                self.publish_authentication(relay);
-                self.publish_relay_diagnostic(relay);
-                false
-            }
-            fava_transport::ConnectionState::Reconnected { .. } => self.reconnected(relay),
-            fava_transport::ConnectionState::Unreachable { attempts, detail } => {
-                if let Some(slot) = self.slots.get_mut(relay) {
-                    slot.state = fava_diagnostics::RelaySessionState::Unreachable {
-                        detail: detail.clone(),
-                    };
-                }
-                self.publish_state_for_relay(
+        let fava_relay::Connectivity::Disconnected { detail, spent } = state.connectivity else {
+            return false;
+        };
+        // A connection that may still return is reconnecting; one that has
+        // spent its budget is unreachable, and says what it spent.
+        let state = match spent {
+            None => {
+                self.slot_state(
                     relay,
-                    &RelaySourceState::Unreachable { attempts, detail },
+                    fava_diagnostics::RelaySessionState::Reconnecting {
+                        detail: detail.clone(),
+                    },
                 );
-                self.publish_authentication(relay);
-                self.publish_relay_diagnostic(relay);
-                false
+                RelaySourceState::Disconnected { detail }
             }
+            Some(attempts) => {
+                self.slot_state(
+                    relay,
+                    fava_diagnostics::RelaySessionState::Unreachable {
+                        detail: detail.clone(),
+                    },
+                );
+                RelaySourceState::Unreachable { attempts, detail }
+            }
+        };
+        self.publish_state_for_relay(relay, &state);
+        self.publish_authentication(relay);
+        self.publish_relay_diagnostic(relay);
+        false
+    }
+
+    /// Record how this relay's session now stands, if it is still tracked.
+    fn slot_state(&mut self, relay: &RelaySessionKey, state: fava_diagnostics::RelaySessionState) {
+        if let Some(slot) = self.slots.get_mut(relay) {
+            slot.state = state;
         }
+    }
+
+    /// The connection carrying this relay's work was replaced.
+    fn connection_replaced(&mut self, relay: &RelaySessionKey, generation: Round) -> bool {
+        let Some(slot) = self.slots.get(relay) else {
+            return false;
+        };
+        if slot.generation != generation {
+            return false;
+        }
+        self.reconnected(relay)
     }
 
     /// One installed subscription carried something of its own.

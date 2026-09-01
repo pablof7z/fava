@@ -1,8 +1,8 @@
 ## 1. The two states
 
 - [x] 1.1 Add `Connectivity`, `Authentication` and `Authority` to `fava-relay`, where work that never depends on the transport can still state what it needs, and the connection value holding both states alongside its identity to `fava-transport`; verify each state is constructible, a test names every one, and a test proves the matching rule for every pair
-- [ ] 1.2 Publish them on a `watch` channel per connection, replacing `Router::read_connection` and `connection_changed`; verify a component that begins watching an already-authenticated connection reads that state without waiting for a change
-- [ ] 1.3 Make the driver's transitions one write each, replacing the paired `end_connection` plus `connection_changed` calls and the duplicated failure formatting in both the websocket driver and the testkit session; verify the reconnect and exhaustion tests pass unchanged
+- [x] 1.2 Publish them on a `watch` channel per connection, replacing `Router::read_connection` and `connection_changed`; verify a component that begins watching an already-authenticated connection reads that state without waiting for a change
+- [x] 1.3 Make the driver's transitions one write each, replacing the paired `end_connection` plus `connection_changed` calls and the duplicated failure formatting in both the websocket driver and the testkit session; verify the reconnect and exhaustion tests pass unchanged
 - [ ] 1.4 Reset authentication when a connection is replaced, so nothing proved on the previous one carries over; verify a test authenticates, forces a reconnect, and reads no authentication on the replacement
 
 ## 2. The demand is a state

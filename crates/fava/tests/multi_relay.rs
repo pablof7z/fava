@@ -67,7 +67,13 @@ impl Transport for ScriptedTransport {
                 RelayConnection::new(previous + 1).expect("issued generation is non-zero");
             let relay = request.key.relay.clone();
             let session = Arc::new(ScriptedSession {
-                router: fava_transport::Router::default(),
+                router: fava_transport::Router::new(fava_transport::Connection {
+                    connectivity: fava_transport::Connectivity::Connected,
+                    ..fava_transport::Connection::opening(fava_transport::RelaySessionIdentity {
+                        key: request.key.clone(),
+                        connection: generation,
+                    })
+                }),
                 closed: AtomicBool::new(false),
                 subscriptions: std::sync::atomic::AtomicU64::new(0),
                 identity: RelaySessionIdentity {

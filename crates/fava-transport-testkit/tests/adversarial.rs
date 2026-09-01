@@ -87,18 +87,14 @@ async fn pending_establishment_that_completes_is_not_a_refusal() {
 /// Drain a session's connection stream until one state matches, yielding between
 /// polls so the fake's own tasks can run.
 async fn until(
-    connection: &std::sync::Arc<fava_transport::Mailbox<fava_transport::ConnectionState>>,
-    mut matches: impl FnMut(&fava_transport::ConnectionState) -> bool,
-) -> fava_transport::ConnectionState {
-    for _ in 0..64 {
-        while let Some(state) = connection.take() {
-            if matches(&state) {
-                return state;
-            }
-        }
-        tokio::task::yield_now().await;
-    }
-    panic!("the expected connection state never arrived");
+    connection: &mut tokio::sync::watch::Receiver<fava_transport::Connection>,
+    mut matches: impl FnMut(&fava_transport::Connection) -> bool,
+) -> fava_transport::Connection {
+    connection
+        .wait_for(|state| matches(state))
+        .await
+        .expect("the connection still reports its state")
+        .clone()
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -109,18 +105,21 @@ async fn mid_operation_failure_reaches_every_reader_as_an_attributed_disconnect(
         .await
         .expect("acquires");
     let session = std::sync::Arc::clone(lease.session());
-    let connection = fava_transport::RelaySessionExt::connection(&session);
+    let mut connection = fava_transport::RelaySessionExt::connection(&session);
 
     transport
         .relay(&key())
         .expect("relay is registered")
         .fail_now("relay closed the connection");
 
-    let state = until(&connection, |state| {
-        matches!(state, fava_transport::ConnectionState::Disconnected { .. })
+    let state = until(&mut connection, |state| {
+        matches!(
+            state.connectivity,
+            fava_transport::Connectivity::Disconnected { .. }
+        )
     })
     .await;
-    let fava_transport::ConnectionState::Disconnected { detail } = state else {
+    let fava_transport::Connectivity::Disconnected { detail, .. } = state.connectivity else {
         unreachable!("the predicate matched a disconnect")
     };
     assert_eq!(detail.as_str(), "relay closed the connection");
@@ -190,20 +189,19 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
         .expect("acquires");
     let before = lease.session().identity();
     let session = std::sync::Arc::clone(lease.session());
-    let connection = fava_transport::RelaySessionExt::connection(&session);
+    let mut connection = fava_transport::RelaySessionExt::connection(&session);
 
     transport
         .relay(&key())
         .expect("relay is registered")
         .reconnect();
 
-    let state = until(&connection, |state| {
-        matches!(state, fava_transport::ConnectionState::Reconnected { .. })
+    let state = until(&mut connection, |state| {
+        matches!(state.connectivity, fava_transport::Connectivity::Connected)
+            && state.identity != before
     })
     .await;
-    let fava_transport::ConnectionState::Reconnected { identity } = state else {
-        unreachable!("the predicate matched a reconnect")
-    };
+    let identity = state.identity;
 
     assert_eq!(identity.key, before.key);
     assert_eq!(
@@ -250,21 +248,30 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
         .await
         .expect("acquires");
     let session = std::sync::Arc::clone(lease.session());
-    let connection = fava_transport::RelaySessionExt::connection(&session);
-
+    let mut connection = fava_transport::RelaySessionExt::connection(&session);
     let relay = transport.relay(&key()).expect("relay is registered");
     relay.refuse_reconnects("relay refuses");
 
     relay.fail_now("relay dropped us");
 
-    let state = until(&connection, |state| {
-        matches!(state, fava_transport::ConnectionState::Unreachable { .. })
+    let state = until(&mut connection, |state| {
+        matches!(
+            state.connectivity,
+            fava_transport::Connectivity::Disconnected { spent: Some(_), .. }
+        )
     })
     .await;
-    let fava_transport::ConnectionState::Unreachable { attempts, .. } = state else {
-        unreachable!("the predicate matched an exhausted budget")
+    let fava_transport::Connectivity::Disconnected {
+        spent: Some(attempts),
+        ..
+    } = state.connectivity
+    else {
+        unreachable!("the predicate matched a spent budget")
     };
-    assert_eq!(attempts, 2);
+    assert_eq!(
+        attempts, 2,
+        "an exhausted reconnect budget says how many attempts it spent"
+    );
 }
 
 // -------------------------------------------------- 5. slow peer backpressure
