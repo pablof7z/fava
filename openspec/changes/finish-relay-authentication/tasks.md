@@ -16,11 +16,11 @@
 
 ## 3. Stage 3 — remove the duplicate handshake
 
-- [ ] 3.1 (open, and now the only evidence gap) Establish a real-relay NIP-42 proof owned by `fava-auth`, asserting the relay's `AUTH` challenge and Fava's kind-22242 response as wire frames against a relay that demands authentication; verify the proof passes against a real relay and names which relay it ran against, since no such harness exists anywhere in the repository today
+- [x] 3.1 Establish a real-relay NIP-42 proof owned by `fava-auth`, asserting the relay's `AUTH` challenge and Fava's kind-22242 response as wire frames against a relay that demands authentication; verify the proof passes against a real relay and names which relay it ran against, since no such harness exists anywhere in the repository today
 - [x] 3.2 Delete `Nip42Publisher` and its `build_auth_event` from `fava-publisher-nip01`, and the crate doc line claiming a NIP-42 variant; verify `cargo build --workspace --all-targets --locked` succeeds and a grep for both names is empty
 - [x] 3.3 Confirm `Nip01Publisher` still reports `PublishOutcome::AuthenticationRequired` when a relay answers an ordinary `OK` with `auth-required:`; verify the existing publisher test passes unchanged
 - [x] 3.4 Hold a publication attempt whose session has a deferred demand instead of recording `AuthenticationDenied` at `crates/fava-publication/src/delivery.rs:196`, waking it on the answer through the path a parked write already uses; verify a test asserts the receipt stays open while the demand is outstanding and completes after approval, alongside the existing WRITE-008 parked-write proof
-- [ ] 3.5 (blocked on 3.1) Prove an authenticated publication completes end to end through one assembled `Fava` against a relay that demands `AUTH` for writes; verify through the public API
+- [x] 3.5 Prove an authenticated publication completes end to end through one assembled `Fava` against a relay that demands `AUTH` for writes; verify through the public API
 
 ## 4. Retire the superseded change
 

@@ -19,9 +19,12 @@ tokio.workspace = true
 fava-signer.workspace = true
 fava-signer-local.workspace = true
 fava-transport-testkit.workspace = true
+fava-transport-websocket.workspace = true
+futures-util.workspace = true
 serde_json.workspace = true
 nostr = { workspace = true, features = ["os-rng"] }
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+tokio-tungstenite.workspace = true
 
 [lints]
 workspace = true

@@ -345,12 +345,15 @@ dependencies = [
  "fava-signer-local",
  "fava-transport",
  "fava-transport-testkit",
+ "fava-transport-websocket",
  "fava-wire",
  "fava-write",
+ "futures-util",
  "nostr",
  "serde_json",
  "thiserror",
  "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]
