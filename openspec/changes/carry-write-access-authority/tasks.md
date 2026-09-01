@@ -4,7 +4,7 @@
 - [x] 1.2 Reshape `RouteRequest::Write` to carry the authority and make `RouteRequest::access()` return it rather than `RelayAccess::Public`; verify a test asserts an automatically routed write accepted under an account selects destinations under that account's authority
 - [x] 1.3 Route a write accepted with no selection as public, unchanged; verify the existing automatic-publication tests pass with no assertion text changed
 - [x] 1.4 Update every `RouteRequest::Write` construction and destructuring site in `fava-publication`, the router crates, and their tests; verify `cargo build --workspace --all-targets --locked` succeeds
-- [ ] 1.5 Prove a selection change, signer replacement, or account removal after acceptance does not retarget accepted work; verify a test asserts the author and the authority are both unchanged after each
+- [x] 1.5 Prove a selection change, signer replacement, or account removal after acceptance does not retarget accepted work; verify a test asserts the author and the authority are both unchanged after each
 
 ## 2. Persist it
 
@@ -17,7 +17,7 @@
 ## 3. Prove it end to end
 
 - [ ] 3.1 Prove a write parked awaiting a signer resumes after a real process restart under its accepted authority and not under public access; verify with a process-kill test in `fava-write-store-redb`
-- [ ] 3.2 Prove a store reopened by a process with no account selected reads the authority from the store rather than defaulting it; verify a test asserts the reconstructed write's authority
+- [x] 3.2 Prove a store reopened by a process with no account selected reads the authority from the store rather than defaulting it; verify a test asserts the reconstructed write's authority
 - [ ] 3.3 Prove an authenticated publication completes end to end through one assembled `Fava` against a relay that demands `AUTH` for writes; verify through the public API, not direct provider calls
 
 ## 4. Verification

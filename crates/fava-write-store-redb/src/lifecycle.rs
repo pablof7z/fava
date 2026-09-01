@@ -60,6 +60,7 @@ impl RedbWriteStore {
 
 pub(super) fn destinations(
     routing: &WriteRouting,
+    access: &RelayAccess,
 ) -> BTreeMap<RelaySessionKey, RelayDeliveryOutcome> {
     match routing {
         WriteRouting::Automatic => BTreeMap::new(),
@@ -70,7 +71,7 @@ pub(super) fn destinations(
                 (
                     RelaySessionKey {
                         relay,
-                        access: RelayAccess::Public,
+                        access: access.clone(),
                     },
                     RelayDeliveryOutcome::Pending,
                 )

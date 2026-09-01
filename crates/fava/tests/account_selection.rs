@@ -215,3 +215,68 @@ async fn a_query_under_a_selection_uses_that_accounts_authority() {
         "the read ran over the selected account's session"
     );
 }
+
+/// A write accepted under an account routes to that account's sessions, not to
+/// public ones.
+///
+/// `RouteRequest::access()` returned public for every write, so this was
+/// unreachable however the application named its account.
+#[tokio::test(flavor = "current_thread")]
+async fn an_authenticated_write_routes_under_its_own_authority() {
+    let alice = Keys::generate();
+    let (fava, _transport, _publisher) = assemble(vec![alice.clone()]);
+    let relay = RelayUrl::parse("wss://shared.example").expect("relay URL");
+
+    let write = fava
+        .to(vec![relay.clone()])
+        .expect("explicit route")
+        .with_account(alice.public_key())
+        .publish(EventBuilder::new(Kind::TextNote).content("gm"))
+        .expect("the write is accepted");
+
+    let receipt = fava
+        .receipt(write.receipt_id())
+        .expect("the receipt reads back")
+        .expect("the receipt exists");
+    assert_eq!(
+        receipt.access,
+        RelayAccess::Authenticated(alice.public_key()),
+        "the write recorded the authority it was accepted under"
+    );
+    assert!(
+        receipt
+            .destinations()
+            .keys()
+            .all(|session| session.access == RelayAccess::Authenticated(alice.public_key())),
+        "every destination is a session under that authority, got {:?}",
+        receipt.destinations().keys().collect::<Vec<_>>()
+    );
+}
+
+/// A write with no selection stays public work, unchanged.
+#[tokio::test(flavor = "current_thread")]
+async fn a_write_with_no_selection_is_public_work() {
+    let alice = Keys::generate();
+    let (fava, _transport, _publisher) = assemble(vec![alice.clone()]);
+    let relay = RelayUrl::parse("wss://shared.example").expect("relay URL");
+
+    let write = fava
+        .to(vec![relay])
+        .expect("explicit route")
+        .publish(
+            EventBuilder::new(Kind::TextNote)
+                .content("gm")
+                .by(alice.public_key()),
+        )
+        .expect("the write is accepted");
+
+    let receipt = fava
+        .receipt(write.receipt_id())
+        .expect("the receipt reads back")
+        .expect("the receipt exists");
+    assert_eq!(
+        receipt.access,
+        RelayAccess::Public,
+        "a current account may author work without making the connection authenticated"
+    );
+}

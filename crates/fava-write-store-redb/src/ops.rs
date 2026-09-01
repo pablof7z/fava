@@ -57,7 +57,7 @@ impl WriteStore for RedbWriteStore {
             }
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
         };
-        let destinations = destinations(&routing);
+        let destinations = destinations(&routing, &accepted_access);
         let desired_destinations = destinations.keys().cloned().collect();
         let explicit = matches!(routing, WriteRouting::Explicit(_));
         let current = LocalWriteEvent::new(

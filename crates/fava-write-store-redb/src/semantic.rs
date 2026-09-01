@@ -132,7 +132,7 @@ impl RedbWriteStore {
             revision_failure: None,
             retired_revisions: Vec::new(),
             signature: SignatureState::Unsigned,
-            destinations: destinations(&routing),
+            destinations: destinations(&routing, &accepted_access),
         };
         let current = LocalWriteEvent::new(EventValue::Unsigned(event), publication)?;
         let explicit = matches!(routing, WriteRouting::Explicit(_));

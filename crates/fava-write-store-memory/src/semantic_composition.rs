@@ -118,7 +118,7 @@ impl MemoryWriteStore {
             revision_failure: None,
             retired_revisions: retired,
             signature: SignatureState::Unsigned,
-            destinations: destinations(routing),
+            destinations: destinations(routing, &receipt.access),
         };
         let current = LocalWriteEvent::new(EventValue::Unsigned(event), publication)?;
         let explicit = matches!(routing, WriteRouting::Explicit(_));

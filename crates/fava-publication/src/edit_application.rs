@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fava_query::{OpenedQuerySource, Query, SourceEvent, SourceKind, SourceSnapshot};
-use fava_relay::RelayAccess;
 use fava_routing::{RoutePlan, RouteRequest};
 use fava_state::{EventCoordinate, event_coordinate, event_is_newer};
 use fava_write::{
@@ -227,6 +226,7 @@ impl Publication {
             source,
             current,
             intent.routing(),
+            intent.access(),
         )
     }
 
@@ -237,6 +237,7 @@ impl Publication {
         source: Option<&EventValue>,
         current: Option<&EventValue>,
         routing: &WriteRouting,
+        access: &fava_relay::RelayAccess,
     ) -> Result<(UnsignedEvent, RoutePlan), PublicationError> {
         if edits.is_empty() {
             return Err(PublicationError::Routing(
@@ -273,7 +274,7 @@ impl Publication {
             output = Some(event);
         }
         let event = output.expect("non-empty edit sequence produces one event");
-        let route = self.route_for(&event, routing, &fava_relay::RelayAccess::Public)?;
+        let route = self.route_for(&event, routing, access)?;
         Ok((event, route))
     }
 
@@ -362,12 +363,13 @@ impl Publication {
             access: access.clone(),
         };
         match routing {
-            WriteRouting::Explicit(relays) => RoutePlan::explicit(
-                relays.iter().cloned(),
-                &RelayAccess::Public,
-                &request.targets(),
-            )
-            .map_err(|error| PublicationError::Routing(error.to_string())),
+            // The read path has always passed the query's own authority here.
+            // The write path hardcoded public, which is why a write accepted
+            // under an account still went to public sessions.
+            WriteRouting::Explicit(relays) => {
+                RoutePlan::explicit(relays.iter().cloned(), access, &request.targets())
+                    .map_err(|error| PublicationError::Routing(error.to_string()))
+            }
             WriteRouting::Automatic => fava_routing::preview(
                 self.routers.as_slice(),
                 &request,

@@ -337,6 +337,9 @@ impl Publication {
             successor.as_ref(),
             Some(&receipt.current.event),
             &receipt.routing,
+            // A revision resumes under the authority its write was accepted
+            // with, not under whatever this process defaults to.
+            &receipt.access,
         ) {
             Ok(applied) => applied,
             Err(error) => {

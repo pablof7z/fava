@@ -5,6 +5,7 @@ use fava_write::{Event, Receipt, ReceiptOutcome, RelayDeliveryOutcome, WriteRout
 
 pub(super) fn destinations(
     routing: &WriteRouting,
+    access: &RelayAccess,
 ) -> BTreeMap<RelaySessionKey, RelayDeliveryOutcome> {
     match routing {
         WriteRouting::Automatic => BTreeMap::new(),
@@ -15,7 +16,7 @@ pub(super) fn destinations(
                 (
                     RelaySessionKey {
                         relay,
-                        access: RelayAccess::Public,
+                        access: access.clone(),
                     },
                     RelayDeliveryOutcome::Pending,
                 )
@@ -93,7 +94,10 @@ mod tests {
             routing,
             WriteRouting::Explicit(vec![relay("first"), relay("second")])
         );
-        assert_eq!(destinations(&routing).len(), 2);
+        assert_eq!(
+            destinations(&routing, &fava_relay::RelayAccess::Public).len(),
+            2
+        );
     }
 
     fn relay(name: &str) -> RelayUrl {

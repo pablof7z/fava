@@ -122,7 +122,7 @@ impl WriteStore for MemoryWriteStore {
             }
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
         };
-        let destinations = destinations(&routing);
+        let destinations = destinations(&routing, &accepted_access);
         let desired_destinations = destinations.keys().cloned().collect();
         let explicit = matches!(routing, fava_write::WriteRouting::Explicit(_));
         let publication = PublicationEvidence {
