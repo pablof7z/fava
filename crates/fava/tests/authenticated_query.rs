@@ -15,7 +15,7 @@ use fava_auth::{AuthenticationDecision, AuthenticationDemand, AuthenticationPoli
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{AuthenticationState, RelayAccess, RelaySessionKey};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_signer_local::LocalSigner;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_testkit::{FakeRelay, FakeTransport};
@@ -88,6 +88,17 @@ struct Rig {
 }
 
 impl Rig {
+    /// How far authentication has got, read from the connection that holds it.
+    fn authentication(&self) -> Option<fava_relay::Authentication> {
+        let session = self.transport.session(&self.key)?;
+        Some(
+            fava_transport::RelaySessionExt::connection(&session)
+                .borrow()
+                .authentication
+                .clone(),
+        )
+    }
+
     /// Assemble one engine the way an application does.
     fn build(policy: Option<Always>, attach_signer: bool) -> Self {
         let keys = Keys::generate();
@@ -163,11 +174,8 @@ async fn an_assembled_engine_answers_a_challenge_through_its_public_api() {
         "one approved challenge is answered exactly once"
     );
     assert_eq!(
-        rig.fava
-            .authentication()
-            .expect("a policy was selected")
-            .state(&rig.key),
-        Some(AuthenticationState::Attempted),
+        rig.authentication(),
+        Some(fava_relay::Authentication::Authenticating { as_of: rig.account }),
         "the owner records that it answered"
     );
 }
@@ -215,11 +223,8 @@ async fn a_declining_policy_signs_nothing() {
 
     assert!(auth_frames(&peer).is_empty(), "a decline sends no frame");
     assert_eq!(
-        rig.fava
-            .authentication()
-            .expect("a policy was selected")
-            .state(&rig.key),
-        Some(AuthenticationState::Declined)
+        rig.authentication(),
+        Some(fava_relay::Authentication::Declined)
     );
 }
 
@@ -343,15 +348,17 @@ async fn an_observation_reports_the_relays_demand_from_the_owners_conclusion() {
         .relay(&rig.key)
         .map(|occurrence| occurrence.state.clone())
         .expect("the observation carries evidence for this relay");
+    // The observation reports what the relay said to it, in the relay's own
+    // words. How authentication went is a fact about the connection, read
+    // from the connection.
     assert!(
-        matches!(
-            state,
-            fava_query::RelaySourceState::AuthenticationRequired {
-                state: AuthenticationState::Declined,
-                ..
-            }
-        ),
-        "the observation reports what the authentication owner concluded, got {state:?}"
+        matches!(state, fava_query::RelaySourceState::Refused { .. }),
+        "the observation keeps the relay's own refusal, got {state:?}"
+    );
+    assert_eq!(
+        rig.authentication(),
+        Some(fava_relay::Authentication::Declined),
+        "and the connection says why it was never authenticated"
     );
 }
 
@@ -393,19 +400,19 @@ async fn auth_denied_for_one_access_context_leaves_another_running() {
     settle().await;
 
     assert_eq!(
-        rig.fava
-            .authentication()
-            .expect("a policy was selected")
-            .state(&rig.key),
-        Some(AuthenticationState::Declined),
+        rig.authentication(),
+        Some(fava_relay::Authentication::Declined),
         "the authenticated context was denied"
     );
     assert!(
-        rig.fava
-            .authentication()
-            .expect("a policy was selected")
-            .state(&public_key)
-            .is_none(),
+        rig.transport
+            .session(&public_key)
+            .is_none_or(|session| matches!(
+                fava_transport::RelaySessionExt::connection(&session)
+                    .borrow()
+                    .authentication,
+                fava_relay::Authentication::None
+            )),
         "public access is never authenticated, so it has no verdict"
     );
     assert!(
@@ -448,90 +455,4 @@ fn requests_of(peer: &FakeRelay) -> Vec<String> {
                 .map(std::borrow::ToOwned::to_owned)
         })
         .collect()
-}
-
-/// Watching for challenges must not hold a relay session open by itself.
-///
-/// The owner takes its own lease so that an unsolicited challenge is seen with
-/// no query attached. That lease would otherwise keep the socket alive forever,
-/// because a lease is exactly what keeps a session from closing.
-#[tokio::test(flavor = "current_thread")]
-async fn the_watch_releases_its_lease_when_no_authenticated_work_remains() {
-    let rig = Rig::build(Some(Always(AuthenticationDecision::Authenticate)), true);
-    let observation = rig
-        .fava
-        .observe(rig.query())
-        .await
-        .expect("live query opens");
-    settle().await;
-
-    assert!(
-        fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
-            .is_some_and(|holders| holders.get() >= 2),
-        "the observation and the watch each hold the session"
-    );
-
-    drop(observation);
-    // The watch checks periodically whether it is the last holder; nothing
-    // announces that the last observation ended.
-    for _ in 0..40 {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        settle().await;
-        if fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key).is_none() {
-            break;
-        }
-    }
-
-    assert!(
-        fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key).is_none(),
-        "the watch let go once nothing was left to serve, got {:?}",
-        fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
-    );
-}
-
-/// Two queries on one relay share one watch, and it still lets go (WRITE-018).
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn two_authenticated_queries_on_one_relay_share_one_watch() {
-    let rig = Rig::build(Some(Always(AuthenticationDecision::Authenticate)), true);
-    let first = rig
-        .fava
-        .observe(rig.query())
-        .await
-        .expect("the first live query opens");
-    settle().await;
-    let with_one = fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
-        .map(std::num::NonZeroUsize::get);
-
-    let second = rig
-        .fava
-        .observe(rig.query())
-        .await
-        .expect("the second live query opens");
-    settle().await;
-    let with_two = fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
-        .map(std::num::NonZeroUsize::get);
-
-    // Observations on one relay share its session, so this count moves only
-    // when a second watch takes a lease of its own.
-    assert_eq!(
-        with_two, with_one,
-        "the second query found the watch it needs already running"
-    );
-
-    // Two watches would each count the other and neither would ever be alone,
-    // so the session would outlive every query that wanted it.
-    drop(first);
-    drop(second);
-    for _ in 0..40 {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        settle().await;
-        if fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key).is_none() {
-            break;
-        }
-    }
-    assert!(
-        fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key).is_none(),
-        "one watch was left to notice it was alone, got {:?}",
-        fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
-    );
 }

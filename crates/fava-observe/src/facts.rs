@@ -8,7 +8,6 @@ use fava_relay::RelaySessionKey;
 use fava_subscriptions::{RelayDemand, SubscriptionPlan};
 use fava_transport::{TransportBounds, TransportDeadlines};
 use fava_wire::SubscriptionId;
-use nostr::types::Timestamp;
 
 use crate::diagnostics;
 use crate::engine::Engine;
@@ -26,28 +25,6 @@ impl Engine {
             self.registry
                 .record_state(item.owner, relay, Some(generation), state.clone());
         }
-    }
-
-    /// Report what the authentication owner determined about one relay session.
-    ///
-    /// This owner decodes no challenge and derives no verdict: it reads the
-    /// conclusion of the one component that holds that state, so a relay's
-    /// demand has one source. A session with no authentication owner, or one
-    /// the owner has nothing to say about, publishes nothing.
-    pub(crate) fn publish_authentication(&self, relay: &RelaySessionKey) {
-        let Some(outcomes) = self.providers.authentication.as_ref() else {
-            return;
-        };
-        let Some(state) = outcomes.state(relay) else {
-            return;
-        };
-        self.publish_state_for_relay(
-            relay,
-            &RelaySourceState::AuthenticationRequired {
-                state,
-                at: Timestamp::now(),
-            },
-        );
     }
 
     /// Tell every observation holding demand at this relay how far it has got.

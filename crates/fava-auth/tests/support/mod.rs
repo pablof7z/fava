@@ -7,7 +7,7 @@ use std::time::Duration;
 use fava_auth::{
     AuthenticationDecision, AuthenticationDemand, AuthenticationPolicy, Authenticator,
 };
-use fava_relay::{AuthenticationState, RelayAccess, RelaySessionKey};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
 use fava_signer_local::LocalSigner;
@@ -56,6 +56,9 @@ pub struct Rig {
     authenticator: Authenticator,
     transport: Arc<FakeTransport>,
     key: RelaySessionKey,
+    /// Somebody has to want this connection. Nothing authenticates a relay no
+    /// component is talking to.
+    lease: fava_transport::RelaySessionLease,
 }
 
 impl Rig {
@@ -74,24 +77,41 @@ impl Rig {
             max_tasks: nonzero(1_024),
             max_provider_operations: nonzero(256),
         });
-        let authenticator = Authenticator::new(
-            Arc::clone(&transport) as Arc<dyn fava_transport::Transport>,
-            signers,
-            Arc::new(Fixed(decision)),
-            runtime,
-        );
+        let authenticator = Authenticator::new(signers, Arc::new(Fixed(decision)), runtime);
         let key = RelaySessionKey {
             relay: RelayUrl::parse("wss://relay.example.com").expect("valid relay url"),
             access: RelayAccess::Authenticated(account),
         };
         authenticator
-            .watch_session(key.clone())
-            .await
-            .expect("the watch begins");
+            .answer_requests(transport.as_ref())
+            .expect("the owner begins answering");
+        // Nothing authenticates a relay nobody has connected to, so the rig
+        // opens the session the test will drive.
+        let lease = fava_transport::Transport::acquire_session(
+            transport.as_ref(),
+            fava_transport::OpenRelaySession {
+                key: key.clone(),
+                deadlines: fava_transport::TransportDeadlines {
+                    establish: std::time::Duration::from_secs(1),
+                    write: std::time::Duration::from_secs(1),
+                    idle: std::time::Duration::from_secs(1),
+                    close: std::time::Duration::from_secs(1),
+                },
+                bounds: fava_transport::TransportBounds {
+                    inbound_frames: std::num::NonZeroUsize::new(64).expect("non-zero"),
+                    outbound_frames: std::num::NonZeroUsize::new(4).expect("non-zero"),
+                    max_frame_bytes: std::num::NonZeroUsize::new(1_048_576).expect("non-zero"),
+                },
+                reconnect_attempts: None,
+            },
+        )
+        .await
+        .expect("the rig opens the session under test");
         let rig = Self {
             authenticator,
             transport,
             key,
+            lease,
         };
         rig.settle().await;
         rig
@@ -127,8 +147,17 @@ impl Rig {
             .expect("the watch acquired this session")
     }
 
-    pub fn state(&self) -> Option<AuthenticationState> {
-        self.authenticator.state(&self.key)
+    /// How far authentication has got, read from the connection that holds it.
+    pub fn state(&self) -> fava_relay::Authentication {
+        fava_transport::RelaySessionExt::connection(&self.session())
+            .borrow()
+            .authentication
+            .clone()
+    }
+
+    /// The session under test.
+    pub fn session(&self) -> std::sync::Arc<dyn fava_transport::RelaySession> {
+        std::sync::Arc::clone(self.lease.session())
     }
 
     /// Let the watch task drain what the relay pushed.

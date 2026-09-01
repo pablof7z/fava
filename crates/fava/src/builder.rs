@@ -287,12 +287,15 @@ impl FavaBuilder {
         // Build the authentication owner first: the observation owner reads
         // its conclusions, and a relay's demand must have one source.
         let authentication = match (self.authentication, transport_for_auth) {
-            (Some(policy), Some(transport)) => Some(Authenticator::new(
-                transport,
-                session.clone(),
-                policy,
-                runtime_for_auth,
-            )),
+            (Some(policy), Some(transport)) => {
+                let owner = Authenticator::new(session.clone(), policy, runtime_for_auth);
+                // It answers the relays that ask, on connections everything
+                // else opened. It opens none of its own.
+                owner
+                    .answer_requests(transport.as_ref())
+                    .map_err(|error| BuildError::Runtime(error.to_string()))?;
+                Some(owner)
+            }
             (Some(_), None) => return Err(BuildError::MissingAuthenticationTransport),
             (None, _) => None,
         };
@@ -313,9 +316,6 @@ impl FavaBuilder {
                 delivery,
                 transport,
                 self.routers.clone(),
-                authentication
-                    .clone()
-                    .map(|owner| Arc::new(owner) as Arc<dyn fava_relay::AuthenticationOutcomes>),
             )
             .map_err(|error| BuildError::Publication(error.to_string()))?;
             publication
@@ -336,9 +336,6 @@ impl FavaBuilder {
         }
         if let Some(planner) = self.subscription_planner {
             observer = observer.with_subscription_planner(planner);
-        }
-        if let Some(authentication) = authentication.clone() {
-            observer = observer.with_authentication(Arc::new(authentication));
         }
         Ok(Fava {
             observer,
@@ -398,6 +395,9 @@ pub enum BuildError {
     /// An authentication policy was selected without a transport.
     #[error("Fava authentication assembly requires one transport")]
     MissingAuthenticationTransport,
+    /// The runtime refused to register the work an assembly needs.
+    #[error("Fava assembly could not register its own work: {0}")]
+    Runtime(String),
     /// Publication selected without a transport.
     #[error("Fava publication assembly requires one transport")]
     MissingPublicationTransport,

@@ -42,7 +42,6 @@ pub use fava_publication::PublicationError;
 pub use fava_query::{
     EventRecord, Freshness, Query, QueryRevision, QuerySnapshot, ResultAuthority, SingleLetterTag,
 };
-use fava_relay::RelayAccess;
 pub use fava_routing::RoutePlan;
 pub use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
@@ -139,36 +138,7 @@ impl Fava {
         reason = "opening is total and synchronous; the async signature is the public door and never awaits a provider"
     )]
     pub async fn observe(&self, query: Query) -> Result<Observation, ObserveError> {
-        self.watch_authenticated_relays(&query);
         self.observer.open(query)
-    }
-
-    /// Start watching for challenges on every authenticated relay this query
-    /// will use.
-    ///
-    /// A relay challenges the connection, not the request, and it may do so
-    /// before any subscription is installed. The owner therefore takes its own
-    /// lease and begins watching before the observation opens, rather than
-    /// discovering the challenge through work that the challenge is blocking.
-    ///
-    /// A query under public access, or an assembly with no authentication
-    /// policy, watches nothing.
-    fn watch_authenticated_relays(&self, query: &Query) {
-        let Some(authentication) = self.authentication.as_ref() else {
-            return;
-        };
-        if !matches!(query.access(), RelayAccess::Authenticated(_)) {
-            return;
-        }
-        let Ok(plan) = self.observer.preview_routes(query) else {
-            // Routing refused the preview. Opening the observation reports that
-            // failure with its own reason; inventing one here would report the
-            // same fault twice in different words.
-            return;
-        };
-        for key in plan.destinations.keys() {
-            authentication.watch_session_soon(key.clone());
-        }
     }
 
     /// Cancel one accepted event before publication work exists.

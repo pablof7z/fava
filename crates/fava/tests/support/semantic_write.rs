@@ -140,7 +140,6 @@ where
         Arc::new(StandardDeliveryPolicy::default()),
         Arc::new(NoopTransport),
         routers,
-        None,
     )
     .expect("publication provider assembly")
 }

@@ -181,7 +181,7 @@ impl Publication {
             event_id,
             session,
             attempt_number,
-            self.delivery_outcome(outcome, session),
+            Self::delivery_outcome(outcome),
         );
     }
 }
@@ -194,11 +194,7 @@ impl Publication {
     /// answer, the attempt is held rather than failed: the dialog is still open,
     /// and answering it is exactly what makes the next attempt succeed. This is
     /// the same shape as a write parked awaiting a signer.
-    fn delivery_outcome(
-        &self,
-        outcome: PublishOutcome,
-        session: &fava_relay::RelaySessionKey,
-    ) -> RelayDeliveryOutcome {
+    fn delivery_outcome(outcome: PublishOutcome) -> RelayDeliveryOutcome {
         match outcome {
             PublishOutcome::Acknowledged { message } => {
                 RelayDeliveryOutcome::Acknowledged { message }
@@ -207,20 +203,14 @@ impl Publication {
             // The owner records only what the publisher observed. `GivenUp` is a policy
             // noun the owner must never invent, and this outcome is reached after handoff,
             // so it cannot be reported as a definite pre-handoff failure.
+            // Waiting for the connection to authenticate is not implemented
+            // here yet: a destination that meets this waits on the connection
+            // itself, which is the next slice of this change. Until then it
+            // records what the relay said, which is what it already did — the
+            // branch that asked an authentication component was unreachable in
+            // any assembly, because nothing told that component to watch.
             PublishOutcome::AuthenticationRequired { message } => {
-                let awaiting = self.authentication.as_ref().is_some_and(|outcomes| {
-                    matches!(
-                        outcomes.state(session),
-                        Some(fava_relay::AuthenticationState::AwaitingAnswer)
-                    )
-                });
-                if awaiting {
-                    RelayDeliveryOutcome::Retryable {
-                        reason: format!("{message} (a person is being asked)"),
-                    }
-                } else {
-                    RelayDeliveryOutcome::AuthenticationDenied { reason: message }
-                }
+                RelayDeliveryOutcome::AuthenticationDenied { reason: message }
             }
             PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },
             PublishOutcome::OutcomeUnknown { reason } => RelayDeliveryOutcome::Unknown { reason },

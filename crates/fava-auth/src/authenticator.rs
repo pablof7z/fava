@@ -1,19 +1,23 @@
 //! The lifecycle owner: one authenticated session, watched and answered.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
 
-use fava_relay::{AuthenticationState, BoundedText, RelayAccess, RelaySessionKey};
+use fava_relay::{BoundedText, RelayAccess, RelaySessionKey};
 use fava_runtime::{CancellationToken, Runtime, TaskName};
-use fava_transport::{RelayConnection, RelaySessionIdentity, Transport};
+use fava_transport::RelaySessionIdentity;
 use fava_write::PublicKey;
 use tokio::sync::watch;
 
 use crate::challenge::Challenge;
 use crate::demand::{AuthenticationDemand, AuthenticationDemandId, PendingAuthentication};
 use crate::policy::{AuthenticationDecision, AuthenticationPolicy};
-use crate::state::SessionAuthentication;
+/// How many answers one connection may be driven to send.
+///
+/// A relay that keeps asking is either broken or hostile; either way this
+/// stops it costing an unbounded number of signatures.
+pub const MAX_ATTEMPTS: u32 = 8;
 
 mod answer;
 mod session_watch;
@@ -36,7 +40,6 @@ pub struct Authenticator {
 }
 
 pub(crate) struct Inner {
-    pub(crate) transport: Arc<dyn Transport>,
     pub(crate) signers: fava_session::Session,
     pub(crate) policy: Arc<dyn AuthenticationPolicy>,
     pub(crate) runtime: Runtime,
@@ -46,12 +49,19 @@ pub(crate) struct Inner {
 
 #[derive(Default)]
 pub(crate) struct State {
-    pub(crate) sessions: BTreeMap<RelaySessionKey, SessionAuthentication>,
-    pub(crate) deferred: BTreeMap<AuthenticationDemandId, AuthenticationDemand>,
-    /// Keys a query-driven watch is already running for. One watch serves
-    /// every query on a relay; a second would lease the same session, and the
-    /// two would each count the other as a reason to keep it open.
-    pub(crate) watching: BTreeSet<RelaySessionKey>,
+    /// Answers spent on each connection. A replacement is a different
+    /// connection and starts at none, so nothing resets this.
+    pub(crate) attempts: BTreeMap<RelaySessionIdentity, u32>,
+    /// Demands a person still owes an answer, and the connection each one
+    /// belongs to. Held weakly: a connection nobody is using any more takes
+    /// its question with it, and an answer for it applies to nothing.
+    pub(crate) deferred: BTreeMap<
+        AuthenticationDemandId,
+        (
+            AuthenticationDemand,
+            std::sync::Weak<dyn fava_transport::RelaySession>,
+        ),
+    >,
     next_id: u64,
     revision: u64,
 }
@@ -64,51 +74,27 @@ impl State {
         )
     }
 
-    pub(crate) fn entry(&mut self, key: &RelaySessionKey) -> &mut SessionAuthentication {
-        self.sessions
-            .entry(key.clone())
-            .or_insert_with(|| SessionAuthentication::new(key.clone()))
-    }
-
     /// Drop every deferred demand already outstanding for this exact session
     /// and connection.
     pub(crate) fn drop_deferred_for(&mut self, session: &RelaySessionIdentity) {
-        self.deferred.retain(|_, demand| &demand.session != session);
-    }
-
-    /// Drop every deferred demand belonging to a generation that is gone.
-    pub(crate) fn drop_deferred_before(
-        &mut self,
-        key: &RelaySessionKey,
-        current: RelayConnection,
-    ) -> bool {
-        let stale: Vec<_> = self
-            .deferred
-            .iter()
-            .filter(|(_, demand)| {
-                demand.session.key == *key && demand.session.connection != current
-            })
-            .map(|(id, _)| *id)
-            .collect();
-        for id in &stale {
-            self.deferred.remove(id);
-        }
-        !stale.is_empty()
+        self.deferred
+            .retain(|_, (demand, _)| &demand.session != session);
     }
 }
 
 impl Authenticator {
     /// Build the owner for one engine.
+    ///
+    /// It takes no transport: it answers connections other components open,
+    /// and opens none of its own.
     #[must_use]
     pub fn new(
-        transport: Arc<dyn Transport>,
         signers: fava_session::Session,
         policy: Arc<dyn AuthenticationPolicy>,
         runtime: Runtime,
     ) -> Self {
         Self {
             inner: Arc::new(Inner {
-                transport,
                 signers,
                 policy,
                 runtime,
@@ -125,7 +111,14 @@ impl Authenticator {
         state
             .deferred
             .iter()
-            .map(|(id, demand)| PendingAuthentication {
+            // A question asked on a connection that has been replaced, or is
+            // gone, is not waiting on anybody.
+            .filter(|(_, (demand, session))| {
+                session
+                    .upgrade()
+                    .is_some_and(|session| session.identity() == demand.session)
+            })
+            .map(|(id, (demand, _))| PendingAuthentication {
                 id: *id,
                 session: demand.session.clone(),
             })
@@ -145,21 +138,6 @@ impl Authenticator {
         self.inner.pending_changed.subscribe()
     }
 
-    /// How far authentication has got on one session.
-    #[must_use]
-    pub fn state(&self, key: &RelaySessionKey) -> Option<AuthenticationState> {
-        self.lock().sessions.get(key)?.state().cloned()
-    }
-
-    /// Whether one session's current generation is authenticated.
-    #[must_use]
-    pub fn authenticated(&self, key: &RelaySessionKey) -> bool {
-        self.lock()
-            .sessions
-            .get(key)
-            .is_some_and(SessionAuthentication::authenticated)
-    }
-
     pub(crate) fn lock(&self) -> std::sync::MutexGuard<'_, State> {
         self.inner
             .state
@@ -172,22 +150,26 @@ impl Authenticator {
     }
 
     /// Record a new state for one generation and publish it.
+    /// Write a verdict onto the connection it belongs to.
+    ///
+    /// The connection is where this is read from, so it is where it is kept.
+    /// A verdict for a connection that has been replaced is dropped: it
+    /// describes one that no longer exists.
     pub(crate) fn record(
         &self,
         identity: &RelaySessionIdentity,
-        state: AuthenticationState,
+        session: &Arc<dyn fava_transport::RelaySession>,
+        state: fava_relay::Authentication,
     ) -> bool {
-        {
-            let mut guard = self.lock();
-            let entry = guard.entry(&identity.key);
-            if entry.generation() != Some(identity.connection) {
-                return false;
-            }
-            entry.resolved(identity.connection, state);
+        if session.identity() != *identity {
+            return false;
         }
-        // A relay accepting an answer is as much a change as a person being
-        // asked for one. Without this, the only way to learn a session
-        // finished authenticating is to keep asking.
+        if matches!(state, fava_relay::Authentication::Authenticating { .. }) {
+            let mut guard = self.lock();
+            let spent = guard.attempts.entry(identity.clone()).or_default();
+            *spent = spent.saturating_add(1);
+        }
+        fava_transport::RelaySessionExt::record_authentication(session, state);
         self.signal();
         true
     }
@@ -200,16 +182,20 @@ impl Authenticator {
     /// Without this a relay that re-challenges under a deferring policy grows
     /// the set without bound: the attempt ceiling counts attempts, and a
     /// deferred demand never makes one.
-    pub(crate) fn defer(&self, demand: &AuthenticationDemand) -> AuthenticationDemandId {
+    pub(crate) fn defer(
+        &self,
+        demand: &AuthenticationDemand,
+        session: &std::sync::Arc<dyn fava_transport::RelaySession>,
+    ) -> AuthenticationDemandId {
         let mut guard = self.lock();
         guard.drop_deferred_for(&demand.session);
         let id = guard.mint_id();
-        guard.deferred.insert(id, demand.clone());
-        guard.entry(&demand.session.key).resolved(
-            demand.session.connection,
-            AuthenticationState::AwaitingAnswer,
-        );
+        guard
+            .deferred
+            .insert(id, (demand.clone(), std::sync::Arc::downgrade(session)));
         drop(guard);
+        // Nothing has been signed and nothing sent. The connection stays where
+        // the relay left it: asked, and not yet answered.
         self.signal();
         id
     }
@@ -245,30 +231,26 @@ impl Authenticator {
             challenge,
         };
 
-        {
-            let mut guard = self.lock();
-            let entry = guard.entry(&identity.key);
-            entry.challenged(identity.connection, demand.challenge.clone());
-            if !entry.may_attempt() {
-                entry.resolved(
-                    identity.connection,
-                    AuthenticationState::Failed {
-                        reason: BoundedText::new(format!(
-                            "relay re-challenged past the {} attempt bound",
-                            SessionAuthentication::MAX_ATTEMPTS
-                        )),
-                    },
-                );
-                return None;
-            }
+        // A relay may not drive unbounded signing by asking again and again.
+        if self.lock().attempts.get(&identity).copied().unwrap_or(0) >= MAX_ATTEMPTS {
+            self.record(
+                &identity,
+                session,
+                fava_relay::Authentication::Failed {
+                    reason: BoundedText::new(format!(
+                        "relay re-challenged past the {MAX_ATTEMPTS} attempt bound"
+                    )),
+                },
+            );
+            return None;
         }
 
         match self.inner.policy.decide(&demand) {
             AuthenticationDecision::Decline => {
-                self.record(&identity, AuthenticationState::Declined);
+                self.record(&identity, session, fava_relay::Authentication::Declined);
                 None
             }
-            AuthenticationDecision::Defer => Some(self.defer(&demand)),
+            AuthenticationDecision::Defer => Some(self.defer(&demand, session)),
             AuthenticationDecision::Authenticate => {
                 answer::authenticate(self, &demand, session).await;
                 None
@@ -276,14 +258,8 @@ impl Authenticator {
         }
     }
 
-    /// Cancellation token for one session's watch, minted by the runtime.
+    /// Cancellation token for this owner's work, minted by the runtime.
     pub(crate) fn cancellation(&self) -> CancellationToken {
         self.inner.runtime.cancellation_token()
-    }
-}
-
-impl fava_relay::AuthenticationOutcomes for Authenticator {
-    fn state(&self, key: &RelaySessionKey) -> Option<AuthenticationState> {
-        Self::state(self, key)
     }
 }

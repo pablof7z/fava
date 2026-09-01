@@ -352,6 +352,12 @@ pub trait RelaySessionExt {
     /// a lease holder that owns no wire key still needs it.
     fn connection(&self) -> tokio::sync::watch::Receiver<crate::Connection>;
 
+    /// Record how far authentication has got on this connection.
+    ///
+    /// Only the one component that answers challenges calls this. Everything
+    /// else reads it, and a connection is where it is read from.
+    fn record_authentication(&self, state: crate::Authentication);
+
     /// Read the relay's authentication challenges.
     ///
     /// A challenge is correlated to nothing a component sent, and exactly one
@@ -439,6 +445,12 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
                 }
             }
         })
+    }
+
+    fn record_authentication(&self, state: crate::Authentication) {
+        self.router().moved(|connection| {
+            connection.authentication = state;
+        });
     }
 
     fn challenges(&self) -> std::sync::Arc<crate::Mailbox<String>> {

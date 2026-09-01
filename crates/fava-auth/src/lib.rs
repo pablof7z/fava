@@ -16,11 +16,9 @@ mod challenge;
 mod demand;
 mod event;
 mod policy;
-mod state;
 
-pub use authenticator::{AnswerError, AnswerOutcome, Authenticator, WatchError};
+pub use authenticator::{AnswerError, AnswerOutcome, Authenticator, MAX_ATTEMPTS, WatchError};
 pub use challenge::{Challenge, ChallengeError};
 pub use demand::{AuthenticationDemand, AuthenticationDemandId, PendingAuthentication};
 pub use event::auth_event;
 pub use policy::{AuthenticationDecision, AuthenticationPolicy};
-pub use state::SessionAuthentication;

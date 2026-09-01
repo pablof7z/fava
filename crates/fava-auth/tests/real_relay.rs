@@ -44,7 +44,7 @@ use std::time::Duration;
 use fava_auth::{
     AuthenticationDecision, AuthenticationDemand, AuthenticationPolicy, Authenticator,
 };
-use fava_relay::{AuthenticationState, RelayAccess, RelaySessionKey};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
 use fava_signer::Signer;
@@ -79,37 +79,17 @@ async fn nostr_rs_relay_challenge_and_kind_22242_response_are_exact_wire_frames(
         max_tasks: nonzero(1_024),
         max_provider_operations: nonzero(256),
     });
-    let authenticator =
-        Authenticator::new(transport, signers, Arc::new(AlwaysAuthenticate), runtime);
+    let authenticator = Authenticator::new(signers, Arc::new(AlwaysAuthenticate), runtime);
+    authenticator
+        .answer_requests(transport.as_ref())
+        .expect("the owner begins answering");
     let key = RelaySessionKey {
         relay: RelayUrl::parse(&proxy_url).expect("proxy url parses"),
         access: RelayAccess::Authenticated(account),
     };
-    authenticator
-        .watch_session(key.clone())
-        .await
-        .expect("the watch reaches the proxied relay");
+    let lease = connect(transport.as_ref(), key.clone()).await;
 
-    // Wait for the real wire round trip: the challenge Fava received, and the
-    // response Fava sent for it. This is a bounded wait on the frames a real
-    // condition produces, not a fixed sleep.
-    let deadline = Instant::now() + FRAME_TIMEOUT;
-    loop {
-        if has_two_frames(&transcript) {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "the challenge/response wire round trip did not complete before the deadline; \
-             transcript so far: {:?}; authenticator state: {:?}",
-            transcript
-                .lock()
-                .expect("transcript lock is not poisoned")
-                .clone(),
-            authenticator.state(&key)
-        );
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
+    wait_for_round_trip(&transcript, &lease).await;
 
     let frames = transcript
         .lock()
@@ -167,12 +147,16 @@ async fn nostr_rs_relay_challenge_and_kind_22242_response_are_exact_wire_frames(
     );
 
     // Fava genuinely attempted this exact real handshake: the response was
-    // handed to the transport. `Attempted` is where this stays -- see the
-    // module doc for why `nostr-rs-relay` never moves it to `Accepted`.
-    assert_eq!(
-        authenticator.state(&key),
-        Some(AuthenticationState::Attempted),
-        "Fava's own lifecycle recorded the real attempt"
+    // handed to the transport. `Authenticating` is where this stays -- see the
+    // module doc for why `nostr-rs-relay` never rules on it.
+    assert!(
+        matches!(
+            fava_transport::RelaySessionExt::connection(lease.session())
+                .borrow()
+                .authentication,
+            fava_relay::Authentication::Authenticating { .. }
+        ),
+        "the connection records the real attempt"
     );
 
     let mut relay_process = relay.child;
@@ -208,6 +192,38 @@ impl AuthenticationPolicy for AlwaysAuthenticate {
     fn decide(&self, _demand: &AuthenticationDemand) -> AuthenticationDecision {
         AuthenticationDecision::Authenticate
     }
+}
+
+fn nonzero_usize(value: usize) -> std::num::NonZeroUsize {
+    std::num::NonZeroUsize::new(value).expect("constant is non-zero")
+}
+
+/// Something has to want this relay. The owner answers connections other
+/// components open; it opens none itself.
+async fn connect(
+    transport: &dyn fava_transport::Transport,
+    key: RelaySessionKey,
+) -> fava_transport::RelaySessionLease {
+    fava_transport::Transport::acquire_session(
+        transport,
+        fava_transport::OpenRelaySession {
+            key,
+            deadlines: fava_transport::TransportDeadlines {
+                establish: FRAME_TIMEOUT,
+                write: FRAME_TIMEOUT,
+                idle: FRAME_TIMEOUT,
+                close: FRAME_TIMEOUT,
+            },
+            bounds: fava_transport::TransportBounds {
+                inbound_frames: nonzero_usize(64),
+                outbound_frames: nonzero_usize(4),
+                max_frame_bytes: nonzero_usize(1_048_576),
+            },
+            reconnect_attempts: None,
+        },
+    )
+    .await
+    .expect("the proxied relay accepts a connection")
 }
 
 fn nonzero(value: usize) -> std::num::NonZeroUsize {
@@ -397,5 +413,29 @@ impl TempDir {
 impl Drop for TempDir {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Wait for the real wire round trip: the challenge Fava received, and the
+/// response Fava sent for it. A bounded wait on a real condition, not a sleep.
+async fn wait_for_round_trip(transcript: &Transcript, lease: &fava_transport::RelaySessionLease) {
+    let deadline = Instant::now() + FRAME_TIMEOUT;
+    loop {
+        if has_two_frames(transcript) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the challenge/response wire round trip did not complete before the deadline; \
+             transcript so far: {:?}; connection state: {:?}",
+            transcript
+                .lock()
+                .expect("transcript lock is not poisoned")
+                .clone(),
+            fava_transport::RelaySessionExt::connection(lease.session())
+                .borrow()
+                .authentication
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
 }

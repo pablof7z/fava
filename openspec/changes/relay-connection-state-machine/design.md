@@ -36,6 +36,12 @@ This replaces access-as-identity and is strictly more expressive: the old keying
 
 A broadcast rather than a watch, because each request is its own event: a coalesced one is a relay whose demand nobody ever answers.
 
+**Work waits on connection state, and never asks about authentication.** A publication is a small machine whose every step has the same shape: name the state this connection must be in, wait for it, act. It does not ask whether a relay is authenticated any more than it asks whether a socket is open. Both are conditions on the connection, waited for the same way.
+
+A write accepted under an account wants a connected connection that can carry that account. An unauthenticated one satisfies that, because it can still become theirs, so the write goes out without anything authenticating first. Only the relay's refusal tightens the requirement from *can reach* to *has arrived* — connected and authenticated as that exact account. Reaching it sends again; reaching a refusal, or a connection that will not return, ends the write.
+
+So `can_serve` is read two ways by design: reachability when choosing a connection, arrival when waiting on one. Nothing asks an authentication component a question at any point.
+
 **Nothing carries authentication facts sideways.** `AuthenticationOutcomes` exists so two readers can learn a conclusion without depending on the crate that reached it. Both readers already hold the connection, so the trait's job disappears rather than moving. Its removal also ends the arrangement where an observation's authentication state is republished from nine unrelated completion handlers and overwrites the fact just published beside it.
 
 ## Risks / Trade-offs

@@ -8,7 +8,7 @@
 ## 2. The demand is a state
 
 - [x] 2.1 Move the relay's `AUTH` frame from `Router::read_challenges` into an authentication state carrying the challenge; verify a challenge queued before a reconnect cannot be recorded against the connection that replaces it, which is the bug this closes
-- [ ] 2.2 Add the session verb that records a refusal without sending a frame; verify a test distinguishes refused from undecided and asserts no frame reached the relay
+- [x] 2.2 Add the session verb that records a refusal without sending a frame; verify a test distinguishes refused from undecided and asserts no frame reached the relay
 - [ ] 2.3 Delete `Router::read_challenges`, the challenges field, the `Correlation::Challenge` arm, and `RelaySessionExt::challenges`; verify a grep for each name is empty and the workspace builds
 - [ ] 2.4 Confirm a repeated identical challenge wakes no watcher; verify a test pushes the same challenge three times and asserts one wake
 - [ ] 2.5 Prove a coalescing channel cannot lose a challenge that matters: a relay re-challenging with a *different* nonce while the decider is between wakes must still be answered against the nonce the relay last sent; verify a test holds the decider, pushes two different nonces, and asserts the answer carries the second — this is the one risk the watch channel introduces
@@ -24,16 +24,17 @@
 ## 4. The owner decides and answers, nothing more
 
 - [x] 4.0 Add `Transport::authentication_requests`, a broadcast of the sessions whose relay has just asked, so the one component that answers hears about a demand without holding, opening, or enumerating connections; verify a test asserts a challenge on one connection reaches a subscriber and a connection nobody challenged does not
-- [ ] 4.1 Replace `watch_session` and `watch_session_soon` with attending the session handed to it by that signal, and delete the lease, `open_request`, `SESSION_DEADLINE`, the frame bounds, `LAST_HOLDER_CHECK`, `LONE_CHECKS_BEFORE_RELEASE`, the `watching` set, the release loop, `WatchError` and `live_session`; verify `fava-auth` no longer depends on `Transport` and a grep for each name is empty
-- [ ] 4.2 Delete `Fava::watch_authenticated_relays`, `transport_for_auth`, and `BuildError::MissingAuthenticationTransport`; verify an engine with a policy and no transport builds
-- [ ] 4.3 Let the policy name the account it authenticates as; verify a test's policy authenticates as an account the connection was not opened for
-- [ ] 4.4 Delete the deferred-demand ledger, `AuthenticationDemandId` and `PendingAuthentication`, answering by connection instead; verify the deferred-then-answered test passes and the session entry is the only record of an outstanding ask
-- [ ] 4.5 Delete `SessionAuthentication`'s copy of the connection counter and the stale-generation comparisons it served; verify the existing proof that a stale answer resolves nothing still passes
+- [x] 4.1 Replace `watch_session` and `watch_session_soon` with attending the session handed to it by that signal, and delete the lease, `open_request`, `SESSION_DEADLINE`, the frame bounds, `LAST_HOLDER_CHECK`, `LONE_CHECKS_BEFORE_RELEASE`, the `watching` set, the release loop, `WatchError` and `live_session`; verify `fava-auth` no longer depends on `Transport` and a grep for each name is empty
+- [x] 4.2 Delete `Fava::watch_authenticated_relays`, `transport_for_auth`, and `BuildError::MissingAuthenticationTransport`; verify an engine with a policy and no transport builds
+- [x] 4.3 Let the policy name the account it authenticates as; verify a test's policy authenticates as an account the connection was not opened for
+- [x] 4.4 Delete the deferred-demand ledger, `AuthenticationDemandId` and `PendingAuthentication`, answering by connection instead; verify the deferred-then-answered test passes and the session entry is the only record of an outstanding ask
+- [x] 4.5 Delete `SessionAuthentication`'s copy of the connection counter and the stale-generation comparisons it served; verify the existing proof that a stale answer resolves nothing still passes
 
 ## 5. Waiting on the connection
 
-- [ ] 5.1 Delete `AuthenticationOutcomes` and read the connection directly in both callers; verify `fava-observe` and `fava-publication` compile without it and a grep for the name is empty
-- [ ] 5.2 Stop republishing authentication from the nine completion handlers, so a relay's own words and an end-of-stored-events are no longer overwritten by an authentication state; verify a test asserts a refusal keeps the relay's message and that a completed stored window survives
+- [x] 5.0 Remove `state` and `authenticated` from the authentication owner's public surface, along with the copy of connection state they read; verify a grep finds no caller and nothing outside the owner holds a second opinion about a connection
+- [x] 5.1 Delete `AuthenticationOutcomes` and read the connection directly in both callers; verify `fava-observe` and `fava-publication` compile without it and a grep for the name is empty
+- [x] 5.2 Stop republishing authentication from the nine completion handlers, so a relay's own words and an end-of-stored-events are no longer overwritten by an authentication state; verify a test asserts a refusal keeps the relay's message and that a completed stored window survives
 - [ ] 5.3 Park a destination that meets `auth-required:` on its connection's authentication, spending no attempt and eligible for no policy; verify a test asserts the attempt count does not advance while it waits
 - [ ] 5.4 Resume a parked destination when its connection satisfies the write's authority and fail it when it cannot; verify one test drives each transition and asserts the resulting receipt
 - [ ] 5.5 Confirm the deciding component knows nothing of waiting work; verify a test parks a publication, drives the answer through the policy alone, and asserts the publication proceeds

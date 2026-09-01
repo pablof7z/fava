@@ -51,7 +51,6 @@ pub struct Observer {
     registry: Arc<Registry>,
     engine: Arc<OnceLock<()>>,
     session: Option<Session>,
-    authentication: Option<Arc<dyn fava_relay::AuthenticationOutcomes>>,
 }
 
 impl Observer {
@@ -79,7 +78,6 @@ impl Observer {
             registry: Arc::new(Registry::default()),
             engine: Arc::new(OnceLock::new()),
             session: None,
-            authentication: None,
         }
     }
 
@@ -108,19 +106,6 @@ impl Observer {
     #[must_use]
     pub fn with_event_cache(mut self, events: Arc<dyn EventCache>) -> Self {
         self.events = Some(events);
-        self
-    }
-
-    /// Read authentication outcomes from the owner that determined them.
-    ///
-    /// Without one, a relay demanding authentication is simply a relay this
-    /// owner is not being served by, and its evidence says only that.
-    #[must_use]
-    pub fn with_authentication(
-        mut self,
-        outcomes: Arc<dyn fava_relay::AuthenticationOutcomes>,
-    ) -> Self {
-        self.authentication = Some(outcomes);
         self
     }
 
@@ -618,7 +603,6 @@ impl Observer {
             deadlines: self.deadlines,
             bounds: self.bounds,
             admission_window: self.admission_window,
-            authentication: self.authentication.clone(),
         };
         let mut started = Ok(());
         self.engine.get_or_init(|| {

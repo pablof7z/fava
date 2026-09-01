@@ -71,6 +71,19 @@ impl FakeTransport {
         Self::default()
     }
 
+    /// The live session for one key, for reading what its connection says.
+    ///
+    /// # Panics
+    ///
+    /// If a previous test thread panicked while holding the registry lock.
+    #[must_use]
+    pub fn session(&self, key: &RelaySessionKey) -> Option<Arc<dyn RelaySession>> {
+        let entries = self.state.entries.lock().expect("registry is not poisoned");
+        entries
+            .get(key)
+            .map(|entry| Arc::clone(&entry.session) as Arc<dyn RelaySession>)
+    }
+
     /// Controls for the session currently registered under `key`.
     ///
     /// # Panics
