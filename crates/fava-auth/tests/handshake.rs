@@ -249,3 +249,31 @@ async fn a_reconnected_session_begins_unauthenticated() {
         "a replaced connection is not the one that authenticated"
     );
 }
+
+#[tokio::test]
+async fn a_second_watch_on_a_live_session_keeps_its_verdict() {
+    let rig = Rig::approving().await;
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
+    rig.settle().await;
+    let id = rig.last_auth_event_id();
+    rig.relay().push_frame(&ok_frame(&id, true, ""));
+    rig.settle().await;
+    assert_eq!(rig.state(), Some(AuthenticationState::Accepted));
+
+    // A second authenticated query on the same relay starts its own watch.
+    // The connection has not been replaced, so the answer the relay already
+    // accepted stands: a relay that challenges once per connection will never
+    // ask again, and there would be nothing to conclude from.
+    rig.authenticator()
+        .watch_session(rig.key().clone())
+        .await
+        .expect("a second watch begins");
+    rig.settle().await;
+
+    assert_eq!(
+        rig.state(),
+        Some(AuthenticationState::Accepted),
+        "a second watcher must not undo an accepted session"
+    );
+    assert!(rig.authenticator().authenticated(rig.key()));
+}

@@ -69,7 +69,16 @@ impl SessionAuthentication {
     }
 
     /// Begin a replaced connection unauthenticated.
+    ///
+    /// A connection is replaced only when its identity changes. Told about the
+    /// one it already knows, this keeps what it concluded: a second watcher
+    /// arriving on a live session must not undo an answer the relay already
+    /// accepted, and a relay that challenges once per connection would never
+    /// give it a chance to conclude again.
     pub fn reconnected(&mut self, generation: RelayConnection) {
+        if self.generation == Some(generation) {
+            return;
+        }
         self.reset_to(generation);
     }
 
