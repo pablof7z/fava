@@ -209,3 +209,41 @@ mod tests {
         assert_eq!(maximum.get(), u64::MAX);
     }
 }
+
+/// One relay connection, and everything true of it right now.
+///
+/// The two states are independent questions. Connectivity is whether a socket
+/// exists; authentication is how far NIP-42 has got on the socket that does.
+/// A replacement connection carries a new `identity` and begins at
+/// [`Authentication::None`], because nothing proved to the relay outlives the
+/// connection that proved it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Connection {
+    /// Which relay, and which physical connection to it.
+    pub identity: RelaySessionIdentity,
+    /// Whether a socket exists.
+    pub connectivity: fava_relay::Connectivity,
+    /// How far authentication has got on it.
+    pub authentication: fava_relay::Authentication,
+}
+
+impl Connection {
+    /// A connection that is being opened and has offered nothing.
+    #[must_use]
+    pub const fn opening(identity: RelaySessionIdentity) -> Self {
+        Self {
+            identity,
+            connectivity: fava_relay::Connectivity::Connecting,
+            authentication: fava_relay::Authentication::None,
+        }
+    }
+
+    /// Whether this connection can carry work needing `authority`.
+    ///
+    /// A connection with no socket carries nothing, whatever it once proved.
+    #[must_use]
+    pub fn can_serve(&self, authority: &fava_relay::Authority) -> bool {
+        matches!(self.connectivity, fava_relay::Connectivity::Connected)
+            && self.authentication.can_serve(authority)
+    }
+}

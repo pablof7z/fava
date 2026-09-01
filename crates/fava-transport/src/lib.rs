@@ -29,8 +29,8 @@ use std::pin::Pin;
 use std::time::Duration;
 
 pub use error::TransportError;
-pub use fava_relay::BoundedText;
 use fava_relay::RelaySessionKey;
+pub use fava_relay::{Authentication, Authority, BoundedText, Connectivity};
 pub use fava_wire::SubscriptionId;
 pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportFailure};
 pub use lease::{LeaseRelease, RelaySessionLease};
@@ -42,8 +42,8 @@ pub use routed::{
 };
 pub use router::{Mailbox, Router, Unrouted};
 pub use session::{
-    HandoffCorrelation, OpenedSubscription, RelayConnection, RelaySession, RelaySessionIdentity,
-    SUBSCRIPTION_ID_BYTES, subscription_id,
+    Connection, HandoffCorrelation, OpenedSubscription, RelayConnection, RelaySession,
+    RelaySessionIdentity, SUBSCRIPTION_ID_BYTES, subscription_id,
 };
 
 /// Future yielding an acquired lease on the current session for one key.

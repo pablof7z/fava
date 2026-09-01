@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "e2e-rules": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["examples/docs/rules/_mcp_server.py"]
+    }
+  }
+}

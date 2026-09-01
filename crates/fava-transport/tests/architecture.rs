@@ -129,3 +129,38 @@ fn the_transport_owns_no_query_meaning() {
         );
     }
 }
+
+/// A connection with no socket carries nothing, whatever it once proved.
+#[test]
+fn a_dropped_connection_serves_no_work_it_previously_could() {
+    let alice = nostr::key::PublicKey::parse(
+        "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    )
+    .expect("public key");
+    let identity = fava_transport::RelaySessionIdentity {
+        key: fava_relay::RelaySessionKey {
+            relay: nostr::types::RelayUrl::parse("wss://relay.example").expect("relay URL"),
+            access: fava_relay::RelayAccess::Authenticated(alice),
+        },
+        connection: fava_transport::RelayConnection::new(1).expect("non-zero"),
+    };
+    let live = fava_transport::Connection {
+        identity: identity.clone(),
+        connectivity: fava_relay::Connectivity::Connected,
+        authentication: fava_relay::Authentication::Authenticated { as_of: alice },
+    };
+    let want = fava_relay::Authority::As(alice);
+    assert!(
+        live.can_serve(&want),
+        "a live authenticated connection serves its own account"
+    );
+
+    let dropped = fava_transport::Connection {
+        connectivity: fava_relay::Connectivity::Disconnected,
+        ..live
+    };
+    assert!(
+        !dropped.can_serve(&want),
+        "a connection with no socket carries nothing"
+    );
+}
