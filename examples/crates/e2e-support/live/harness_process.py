@@ -6,6 +6,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -13,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from harness_safety import HarnessError, MAX_COMMAND_BYTES, MAX_LOG_BYTES, read_bounded_text
-from relay_inspection import InspectionError, inspect_until_eose
+from relay_inspection import InspectionError, WebSocket, inspect_until_eose
 
 ROOT = Path(__file__).resolve().parents[4]
 READINESS_SECONDS = 10.0
@@ -175,6 +176,100 @@ def start_ordinary(binary: Path, root: Path, environment: dict[str, str]) -> Rel
     config.write_text(f'''[info]\nrelay_url = "ws://127.0.0.1:{port}/"\n[database]\nengine = "sqlite"\nin_memory = false\n[network]\naddress = "127.0.0.1"\nport = {port}\nping_interval = 30\n[options]\nreject_future_seconds = 1800\n[limits]\nmax_event_bytes = 131072\nmax_ws_message_bytes = 131072\nmax_ws_frame_bytes = 131072\nbroadcast_buffer = 1024\nevent_persist_buffer = 1024\n[authorization]\nnip42_auth = false\n''', encoding="utf-8")
     process = ManagedProcess.start("ordinary relay", [str(binary), "--config", str(config), "--db", str(data)], relay_root, {**environment, "RUST_LOG": "info"})
     return Relay("state", f"ws://127.0.0.1:{port}", process)
+
+
+def start_authenticating(binary: Path, root: Path, environment: dict[str, str]) -> Relay:
+    """Start `nostr-rs-relay` with `nip42_auth = true`.
+
+    A sibling of `start_ordinary`, not a mutation of it: other consumers of
+    the ordinary (non-authenticating) profile must keep seeing exactly that.
+    This relay sends a real `AUTH` challenge on connect but does not enforce
+    it -- an unauthenticated `REQ`/`EVENT` still succeeds. It exists to prove
+    Fava's real challenge/response wire behavior against a genuine
+    third-party relay implementation, not to prove enforcement; enforcement
+    is proved separately by `start_nip42_enforcing`.
+    """
+    port = _port()
+    relay_root = root / "relays" / "authenticating"
+    relay_root.mkdir(parents=True)
+    data = relay_root / "data"
+    data.mkdir()
+    config = relay_root / "config.toml"
+    config.write_text(
+        f'[info]\nrelay_url = "ws://127.0.0.1:{port}/"\n[database]\nengine = "sqlite"\n'
+        f'in_memory = false\n[network]\naddress = "127.0.0.1"\nport = {port}\n'
+        f"ping_interval = 30\n[options]\nreject_future_seconds = 1800\n[limits]\n"
+        f"max_event_bytes = 131072\nmax_ws_message_bytes = 131072\nmax_ws_frame_bytes = 131072\n"
+        f"broadcast_buffer = 1024\nevent_persist_buffer = 1024\n[authorization]\nnip42_auth = true\n",
+        encoding="utf-8",
+    )
+    process = ManagedProcess.start(
+        "authenticating relay",
+        [str(binary), "--config", str(config), "--db", str(data)],
+        relay_root,
+        {**environment, "RUST_LOG": "info"},
+    )
+    return Relay("authenticating", f"ws://127.0.0.1:{port}", process)
+
+
+def start_nip42_enforcing(
+    verify_bin: Path, root: Path, environment: dict[str, str], mode: str, label: str
+) -> Relay:
+    """Start the harness-owned NIP-42-enforcing relay in one exact mode.
+
+    Unlike `start_ordinary`/`start_authenticating`, this relay is not a
+    pinned external binary: it is `nip42_relay.py`, run under the same
+    Python interpreter as the harness, using `verify_bin` (the built
+    `nip01_wire` Rust helper) for real signature verification. `mode` is one
+    of `accept`, `reject`, `accept-refuse`.
+    """
+    port = _port()
+    relay_root = root / "relays" / label
+    relay_root.mkdir(parents=True)
+    script = Path(__file__).resolve().with_name("nip42_relay.py")
+    process = ManagedProcess.start(
+        f"NIP-42-enforcing relay ({mode})",
+        [
+            sys.executable,
+            str(script),
+            "--port",
+            str(port),
+            "--mode",
+            mode,
+            "--verify-bin",
+            str(verify_bin),
+        ],
+        relay_root,
+        environment,
+    )
+    return Relay(label, f"ws://127.0.0.1:{port}", process)
+
+
+def wait_ready_enforcing(relay: Relay) -> None:
+    """Bounded readiness wait for a relay that gates `REQ` before `AUTH`.
+
+    `wait_ready`'s ordinary `REQ`/`EOSE` probe cannot be reused here: a
+    NIP-42-enforcing relay answers an unauthenticated `REQ` with `CLOSED
+    auth-required`, not `EOSE`. Readiness here means exactly one thing: the
+    relay accepts a WebSocket connection and sends its unsolicited `AUTH`
+    challenge.
+    """
+    deadline = time.monotonic() + READINESS_SECONDS
+    while time.monotonic() < deadline:
+        relay.process.require_healthy()
+        try:
+            remaining = min(1.0, max(0.1, deadline - time.monotonic()))
+            socket_client = WebSocket(relay.url, remaining)
+            try:
+                frame = socket_client.receive_json()
+            finally:
+                socket_client.close()
+            if isinstance(frame, list) and frame[:1] == ["AUTH"]:
+                return
+        except (InspectionError, OSError):
+            time.sleep(0.05)
+    relay.process.require_healthy()
+    raise HarnessError(f"{relay.label} relay did not send its AUTH challenge in {READINESS_SECONDS}s")
 
 
 def wait_ready(relay: Relay) -> None:
