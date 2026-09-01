@@ -64,7 +64,7 @@ async fn enabling_two_protocols_in_either_order_produces_the_same_facade() {
 
     for fava in [nip02_first, bookmarks_first] {
         let nip02_write = fava
-            .by(actor)
+            .with_account(actor)
             .to([relay_url()])
             .expect("route validates")
             .publish(nip02_edit())
@@ -73,7 +73,7 @@ async fn enabling_two_protocols_in_either_order_produces_the_same_facade() {
         assert_eq!(nip02_receipt.current.event.kind(), Kind::ContactList);
 
         let bookmark_write = fava
-            .by(actor)
+            .with_account(actor)
             .to([relay_url()])
             .expect("route validates")
             .publish(bookmark_edit())
@@ -104,7 +104,7 @@ async fn app_defined_applier_and_enabled_protocol_coexist_in_one_index() {
     .expect("app-defined applier and enabled protocol coexist");
 
     let app_write = fava
-        .by(actor)
+        .with_account(actor)
         .to([relay_url()])
         .expect("route validates")
         .publish(EventEdit::new(app_kind, None, vec![1]).expect("bounded app edit"))
@@ -120,7 +120,7 @@ async fn app_defined_applier_and_enabled_protocol_coexist_in_one_index() {
     );
 
     let nip02_write = fava
-        .by(actor)
+        .with_account(actor)
         .to([relay_url()])
         .expect("route validates")
         .publish(nip02_edit())
@@ -235,7 +235,7 @@ async fn forgotten_enabling_call_fails_at_first_publish_naming_the_kind() {
     .expect("assembly without any outstanding write succeeds");
 
     let result = fava
-        .by(actor)
+        .with_account(actor)
         .to([relay_url()])
         .expect("route validates")
         .publish(nip02_edit());

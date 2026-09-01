@@ -27,7 +27,7 @@ async fn every_pre_custody_provider_failure_releases_active_reservation() {
     for failure in [ERROR, PANIC, WRONG_TIMESTAMP] {
         applier.set(failure);
         assert!(
-            fava.by(keys.public_key())
+            fava.with_account(keys.public_key())
                 .to([relay_url()])
                 .expect("explicit route validates")
                 .publish(edit(Kind::ContactList))
@@ -57,7 +57,7 @@ async fn release_failure_preserves_preparation_context_and_does_not_hide_capacit
     store.fail_reservation_release(true);
 
     let error = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .publish(edit(Kind::ContactList))
         .expect_err("preparation and reservation release both refuse");
     let PublishError::Publication(PublicationError::Store(error)) = error else {
@@ -69,7 +69,7 @@ async fn release_failure_preserves_preparation_context_and_does_not_hide_capacit
 
     store.fail_reservation_release(false);
     applier.set(VALID);
-    fava.by(keys.public_key())
+    fava.with_account(keys.public_key())
         .publish(edit(Kind::ContactList))
         .expect("released capacity remains reusable");
 }
@@ -88,14 +88,15 @@ async fn initial_automatic_route_commits_with_acceptance_or_returns_without_cust
     store.fail_initial_route_acceptance(true);
 
     assert!(matches!(
-        fava.by(keys.public_key()).publish(edit(Kind::ContactList)),
+        fava.with_account(keys.public_key())
+            .publish(edit(Kind::ContactList)),
         Err(PublishError::Publication(PublicationError::Store(_)))
     ));
     assert_eq!(store.len().expect("store remains readable"), 0);
 
     store.fail_initial_route_acceptance(false);
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .publish(edit(Kind::ContactList))
         .expect("atomic route acceptance succeeds after fault clears");
     let receipt = write.receipt().expect("accepted receipt remains readable");

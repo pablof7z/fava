@@ -85,7 +85,7 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
     // build and this synchronous admission. This is the deterministic restart
     // barrier: the facade itself must already be reconciled.
     let second = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to([relay_url()])
         .unwrap()
         .publish(edit(2))

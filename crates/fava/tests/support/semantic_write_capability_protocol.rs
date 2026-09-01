@@ -111,13 +111,13 @@ async fn prove_pre_signature_composition<Add, Adjacent>(
     .unwrap();
 
     let first = fava
-        .by(actor)
+        .with_account(actor)
         .to([super::support::relay_url()])
         .unwrap()
         .publish(add().unwrap())
         .unwrap();
     let second = fava
-        .by(actor)
+        .with_account(actor)
         .to([super::support::relay_url()])
         .unwrap()
         .publish(adjacent().unwrap())
@@ -296,7 +296,7 @@ where
     let malformed = EventEdit::new(edit.kind(), None, Vec::new()).unwrap();
     let (fava, _, store, signer, publisher) = assembly(keys.clone(), enable);
     assert!(matches!(
-        fava.by(actor)
+        fava.with_account(actor)
             .to([super::support::relay_url()])
             .expect("route validates")
             .publish(malformed),
@@ -333,7 +333,7 @@ where
     .unwrap();
     assert!(matches!(
         bounded
-            .by(actor)
+            .with_account(actor)
             .to([super::support::relay_url()])
             .expect("route validates")
             .publish(edit.clone()),
@@ -357,7 +357,7 @@ where
         .unwrap();
     assert!(matches!(
         capacity
-            .by(actor)
+            .with_account(actor)
             .to([super::support::relay_url()])
             .expect("route validates")
             .publish(edit),
@@ -412,7 +412,7 @@ async fn publish_terminal(
     author: PublicKey,
 ) -> (Write, Receipt, Event) {
     let accepted = fava
-        .by(author)
+        .with_account(author)
         .to([super::support::relay_url()])
         .expect("route validates")
         .publish(edit)

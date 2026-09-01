@@ -38,7 +38,7 @@ async fn reapplication_commits_newer_route_revision() {
     .build()
     .unwrap();
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .publish(edit(Kind::ContactList))
         .unwrap();
     wait_for_signer(&signer, 1).await;

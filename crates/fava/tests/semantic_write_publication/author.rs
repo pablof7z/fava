@@ -21,7 +21,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
     .expect("two-signer semantic assembly");
 
     let write = fava
-        .by(alice.public_key())
+        .with_account(alice.public_key())
         .to([relay_url()])
         .expect("route validates")
         .publish(edit(Kind::ContactList))
@@ -135,7 +135,7 @@ async fn addressable_edit_selects_only_its_exact_identifier() {
     );
     let edit = EventEdit::new(kind, Some("wanted".to_owned()), vec![1]).unwrap();
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to([relay_url()])
         .expect("route validates")
         .publish(edit)

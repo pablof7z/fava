@@ -35,7 +35,7 @@ fn content(receipt: &Receipt) -> &str {
 }
 
 fn publish_change(fava: &Fava, change: u8) -> fava::Write {
-    fava.by(keys().public_key())
+    fava.with_account(keys().public_key())
         .to([relay()])
         .unwrap()
         .publish(EventEdit::new(Kind::ContactList, None, vec![change]).unwrap())

@@ -19,14 +19,14 @@ async fn shared_store_capacity_refuses_before_second_publication_provider_effect
     );
 
     let first_write = first
-        .by(first_keys.public_key())
+        .with_account(first_keys.public_key())
         .to([relay_url()])
         .expect("first route validates")
         .publish(edit(Kind::ContactList))
         .expect("first publication owns the only slot");
     assert!(
         second
-            .by(second_keys.public_key())
+            .with_account(second_keys.public_key())
             .to([relay_url()])
             .expect("second route validates")
             .publish(edit(Kind::ContactList))

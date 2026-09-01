@@ -30,7 +30,7 @@ pub(super) fn edit(kind: Kind) -> EventEdit {
 }
 
 pub(super) fn publish_edit(fava: &Fava, author: fava::PublicKey, kind: Kind) -> Write {
-    fava.by(author)
+    fava.with_account(author)
         .to([relay_url()])
         .expect("public explicit route validates")
         .publish(edit(kind))

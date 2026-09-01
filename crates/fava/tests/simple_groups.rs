@@ -137,7 +137,7 @@ async fn saved_group_edit_applies_through_the_ordinary_semantic_write_lifecycle(
     let group = group();
     let edit = save_simple_group(&group, Some("Photos")).expect("bounded saved-group edit");
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to(group.relays().collect::<Vec<_>>())
         .expect("explicit route")
         .publish(edit)

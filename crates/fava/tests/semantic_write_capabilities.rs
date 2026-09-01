@@ -104,7 +104,7 @@ where
     assert_eq!(router.previews(), 1);
     assert_eq!(router.opens(), 0);
     let write = fava
-        .by(actor)
+        .with_account(actor)
         .publish(edit.clone())
         .expect("live write accepts");
     let receipt = wait_for_revision(&fava, write.receipt_id(), 1).await;
@@ -131,7 +131,7 @@ fn assert_selection_and_capacity_refusals(
     .expect("publication without appliers is valid");
     assert!(matches!(
         empty
-            .by(actor)
+            .with_account(actor)
             .to([relay_url()])
             .expect("route validates")
             .publish(edit.clone()),
@@ -179,7 +179,7 @@ fn assert_selection_and_capacity_refusals(
         .expect("one active write fills capacity");
     assert!(matches!(
         bounded
-            .by(actor)
+            .with_account(actor)
             .to([relay_url()])
             .expect("route validates")
             .publish(edit),

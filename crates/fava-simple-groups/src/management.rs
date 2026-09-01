@@ -11,7 +11,7 @@
 //!
 //! ```ignore
 //! let builder = create_group(&group)?;
-//! let write = fava.by(author.public_key()).publish(builder)?;
+//! let write = fava.with_account(author.public_key()).publish(builder)?;
 //! ```
 //!
 //! # Encapsulation guarantee

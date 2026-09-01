@@ -31,7 +31,7 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
     .build()
     .expect("semantic publication assembly");
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to([relay_url()])
         .expect("route validates")
         .publish(edit(Kind::ContactList))

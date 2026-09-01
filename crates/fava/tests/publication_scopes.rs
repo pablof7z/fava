@@ -31,13 +31,13 @@ async fn signer_and_relay_scopes_compose_in_both_orders() {
     let second_route = [relay("second"), relay("first")];
 
     let first_scope = fava
-        .by(second_author.public_key())
+        .with_account(second_author.public_key())
         .to(first_route.clone())
         .expect("explicit route validates");
     let second_scope = fava
         .to(second_route.clone())
         .expect("explicit route validates")
-        .by(author.public_key());
+        .with_account(author.public_key());
     let first = first_scope
         .publish(fava_nip02::follow(target).expect("first edit builds"))
         .expect("by then to accepts");
@@ -84,7 +84,7 @@ async fn authorless_builder_composes_with_signer_and_relay_scopes_in_both_orders
     let second_route = [relay("authorless-second"), relay("authorless-first")];
 
     let first = fava
-        .by(second_author.public_key())
+        .with_account(second_author.public_key())
         .to(first_route.clone())
         .expect("explicit route validates")
         .publish(EventBuilder::new(Kind::TextNote).content("by then to"))
@@ -92,7 +92,7 @@ async fn authorless_builder_composes_with_signer_and_relay_scopes_in_both_orders
     let second = fava
         .to(second_route.clone())
         .expect("explicit route validates")
-        .by(author.public_key())
+        .with_account(author.public_key())
         .publish(EventBuilder::new(Kind::TextNote).content("to then by"))
         .expect("to then by accepts an authorless builder");
 
@@ -137,11 +137,11 @@ async fn a_cloned_authorless_builder_publishes_under_a_different_author() {
     let builder = EventBuilder::new(Kind::TextNote).content("constructed exactly once");
 
     let first = fava
-        .by(author.public_key())
+        .with_account(author.public_key())
         .publish(builder.clone())
         .expect("first author accepts the constructed value");
     let second = fava
-        .by(second_author.public_key())
+        .with_account(second_author.public_key())
         .publish(builder)
         .expect("second author accepts the same constructed value, unreconstructed");
 
@@ -175,7 +175,7 @@ async fn authorless_builder_route_conflicts_with_narrowed_scope_in_either_order(
     let embedded = relay("authorless-conflict-embedded");
 
     let by_then_to = fava
-        .by(author.public_key())
+        .with_account(author.public_key())
         .to([relay("authorless-conflict-facade-a")])
         .expect("facade route validates")
         .publish(
@@ -195,7 +195,7 @@ async fn authorless_builder_route_conflicts_with_narrowed_scope_in_either_order(
     let to_then_by = fava
         .to([relay("authorless-conflict-facade-b")])
         .expect("facade route validates")
-        .by(author.public_key())
+        .with_account(author.public_key())
         .publish(
             EventBuilder::new(Kind::TextNote)
                 .content("authorless builder route")
@@ -211,7 +211,7 @@ async fn authorless_builder_route_conflicts_with_narrowed_scope_in_either_order(
     assert_no_effects(&store, &signer, &publisher);
 
     let automatic = fava
-        .by(author.public_key())
+        .with_account(author.public_key())
         .publish(
             EventBuilder::new(Kind::TextNote)
                 .content("authorless builder route")
@@ -261,11 +261,11 @@ async fn equivalent_explicitly_authored_edits_have_distinct_custody_identities()
     let edit = fava_nip02::follow(target).expect("edit builds");
 
     let first = fava
-        .by(author.public_key())
+        .with_account(author.public_key())
         .publish(edit.clone())
         .expect("first edit accepts");
     let second = fava
-        .by(author.public_key())
+        .with_account(author.public_key())
         .publish(edit)
         .expect("equivalent edit accepts separately");
 
@@ -373,7 +373,7 @@ async fn publication_scopes_are_inert_before_valid_payload() {
     let store = Arc::new(MemoryWriteStore::default());
     let (fava, signer, publisher, _) = assembly(Arc::clone(&store), author.clone());
 
-    drop(fava.by(author.public_key()));
+    drop(fava.with_account(author.public_key()));
     drop(fava.to([relay("dropped")]).expect("route validates"));
     assert_no_effects(&store, &signer, &publisher);
 

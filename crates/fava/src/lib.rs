@@ -231,13 +231,23 @@ impl Fava {
     /// # use fava::{EventBuilder, Fava, Kind, PublicKey};
     /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
     /// let builder = EventBuilder::new(Kind::TextNote).content("gm");
-    /// let write = fava.by(author).publish(builder)?;
+    /// let write = fava.with_account(author).publish(builder)?;
     /// # let _ = write;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn by(&self, author: PublicKey) -> PublishAs<'_> {
-        publication::by(self, author)
+    /// Name the account this work runs as.
+    ///
+    /// It selects the relay-session authority the work goes over, and authors a
+    /// payload that states none. A payload that states its own author keeps it:
+    /// whose event it is and whose connection it goes over are separate facts,
+    /// and this names the second.
+    ///
+    /// # Arguments
+    ///
+    /// * `account` - the account whose authority this work runs under
+    pub fn with_account(&self, account: PublicKey) -> PublishAs<'_> {
+        publication::with_account(self, account)
     }
 
     /// Narrow one publication to an exact bounded finite owned relay sequence.

@@ -1,10 +1,10 @@
 ## 1. The verb names the account
 
-- [ ] 1.1 Add `Fava::with_account(public_key)` yielding the publication expression `by` yields today, carrying a selected account rather than an asserted author; verify a test asserts the selection reaches the relay session key's access authority
-- [ ] 1.2 Resolve an authorless payload's author in the stated order — the payload's own author, then the selected account, then `Session::current_account()`; verify tests cover each rung and assert a payload that states its author keeps it under a selection naming someone else
-- [ ] 1.3 Refuse before durable custody when a payload states no author and neither a selection nor a current account supplies one; verify a test asserts a typed refusal with no write identifier, no receipt identifier, and nothing handed to the publication owner
-- [ ] 1.4 Delete `AuthorlessPayload` and widen `publish` to accept any payload; verify a test publishes an event authored by one account under a selection naming another and asserts the event's author and the session's account differ exactly as expected
-- [ ] 1.5 Remove `Fava::by` with no alias or deprecation, and move every call site across crates, tests, and doctests; verify `cargo build --workspace --all-targets --locked` succeeds and a grep for the removed verb is empty
+- [x] 1.1 Add `Fava::with_account(public_key)` yielding the publication expression `by` yields today, carrying a selected account rather than an asserted author; verify a test asserts the selection reaches the relay session key's access authority
+- [x] 1.2 Resolve an authorless payload's author in the stated order — the payload's own author, then the selected account, then `Session::current_account()`; verify tests cover each rung and assert a payload that states its author keeps it under a selection naming someone else
+- [x] 1.3 Refuse before durable custody when a payload states no author and neither a selection nor a current account supplies one; verify a test asserts a typed refusal with no write identifier, no receipt identifier, and nothing handed to the publication owner
+- [x] 1.4 Delete `AuthorlessPayload` and widen `publish` to accept any payload; verify a test publishes an event authored by one account under a selection naming another and asserts the event's author and the session's account differ exactly as expected
+- [x] 1.5 Remove `Fava::by` with no alias or deprecation, and move every call site across crates, tests, and doctests; verify `cargo build --workspace --all-targets --locked` succeeds and a grep for the removed verb is empty
 
 ## 2. One door for reads
 

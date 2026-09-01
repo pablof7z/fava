@@ -87,7 +87,7 @@ async fn first_value_edit_publishes_through_public_fava() {
         .expect("semantic query opens");
 
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to([relay_url()])
         .expect("route validates")
         .publish(edit(Kind::ContactList))
@@ -146,7 +146,7 @@ async fn an_applier_registered_through_the_sink_publishes_like_one_registered_th
     .expect("semantic publication assembly");
 
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to([relay_url()])
         .expect("route validates")
         .publish(edit(Kind::ContactList))
@@ -183,7 +183,7 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
     let second_edit =
         EventEdit::new(Kind::ContactList, None, vec![2]).expect("distinct bounded edit");
     let first = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to([relay_url()])
         .expect("first route validates")
         .publish(first_edit)
@@ -191,7 +191,7 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
     let generation_one = first.receipt().expect("first receipt");
 
     let second = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to([relay_url()])
         .expect("second route validates")
         .publish(second_edit)
@@ -279,7 +279,7 @@ async fn signer_authorization_holds_one_successor_until_exact_completion() {
     .unwrap();
 
     let first = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .publish(EventEdit::new(Kind::ContactList, None, vec![1]).unwrap())
         .unwrap();
     tokio::time::timeout(Duration::from_secs(1), async {
@@ -292,7 +292,7 @@ async fn signer_authorization_holds_one_successor_until_exact_completion() {
     let predecessor = first.receipt().unwrap();
 
     let second = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .publish(EventEdit::new(Kind::ContactList, None, vec![2]).unwrap())
         .unwrap();
     assert_eq!(second.write_id(), first.write_id());
@@ -335,7 +335,7 @@ async fn applier_selection_bounds_refuse_before_custody() {
     );
     assert!(
         empty
-            .by(keys.public_key())
+            .with_account(keys.public_key())
             .to([relay_url()])
             .expect("route validates")
             .publish(edit(Kind::ContactList))
@@ -351,7 +351,7 @@ async fn applier_selection_bounds_refuse_before_custody() {
     );
     assert!(
         unsupported
-            .by(keys.public_key())
+            .with_account(keys.public_key())
             .to([relay_url()])
             .expect("route validates")
             .publish(edit(Kind::Custom(10_003)))
@@ -407,7 +407,7 @@ async fn applier_selection_bounds_refuse_before_custody() {
         .expect("one existing active write occupies capacity");
     assert!(
         bounded
-            .by(keys.public_key())
+            .with_account(keys.public_key())
             .to([relay_url()])
             .expect("route validates")
             .publish(edit(Kind::ContactList))
@@ -447,7 +447,7 @@ async fn first_value_receives_exact_injected_timestamp() {
     );
 
     let write = fava
-        .by(source.pubkey)
+        .with_account(source.pubkey)
         .to([relay_url()])
         .expect("route validates")
         .publish(edit(Kind::ContactList))
@@ -499,7 +499,7 @@ async fn newer_source_reapplies_once_and_preserves_unrelated_fields() {
     .expect("semantic publication assembly");
 
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to([relay_url()])
         .expect("route validates")
         .publish(edit(Kind::ContactList))
@@ -552,7 +552,7 @@ async fn own_local_revision_does_not_create_a_second_generation() {
     .expect("semantic publication assembly");
 
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to([relay_url()])
         .expect("route validates")
         .publish(edit(Kind::ContactList))
@@ -591,7 +591,7 @@ async fn source_removal_selects_next_or_empty_once() {
     .build()
     .expect("semantic publication assembly");
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .to([relay_url()])
         .expect("route validates")
         .publish(edit(Kind::ContactList))
@@ -692,7 +692,7 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
     assert_eq!(store.len().expect("store readable"), 0);
 
     let write = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .publish(edit(Kind::ContactList))
         .expect("same edit accepts");
     let receipt = wait_for_revision(&fava, write.receipt_id(), 1).await;

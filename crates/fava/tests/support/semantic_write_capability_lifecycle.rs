@@ -225,7 +225,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
 }
 
 fn publish_edit(fava: &fava::Fava, edit: EventEdit, actor: PublicKey) -> Write {
-    fava.by(actor)
+    fava.with_account(actor)
         .to([relay_url()])
         .expect("route validates")
         .publish(edit)

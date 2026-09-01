@@ -40,7 +40,7 @@ async fn initial_route_commits_before_semantic_revision() {
     .build()
     .unwrap();
     let accepted = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .publish(edit(Kind::ContactList))
         .unwrap();
     wait_for_signer_calls(&signer, 1).await;
@@ -71,7 +71,7 @@ async fn activation_retry_exhaustion_is_durable_attributable_and_retryable() {
     .build()
     .unwrap();
     let accepted = fava
-        .by(keys.public_key())
+        .with_account(keys.public_key())
         .publish(edit(Kind::ContactList))
         .unwrap();
 

@@ -91,7 +91,7 @@ impl fmt::Debug for Write {
 ///     author: fava::PublicKey,
 ///     event: fava::UnsignedEvent,
 /// ) {
-///     let _ = fava.by(author).publish(event);
+///     let _ = fava.with_account(author).publish(event);
 /// }
 /// ```
 ///
@@ -103,7 +103,7 @@ impl fmt::Debug for Write {
 ///     author: fava::PublicKey,
 ///     event: fava::Event,
 /// ) {
-///     let _ = fava.by(author).publish(event);
+///     let _ = fava.with_account(author).publish(event);
 /// }
 /// ```
 ///
@@ -116,13 +116,15 @@ impl fmt::Debug for Write {
 ///     author: fava::PublicKey,
 ///     builder: fava::AuthoredEventBuilder,
 /// ) {
-///     let _ = fava.by(author).publish(builder);
+///     let _ = fava.with_account(author).publish(builder);
 /// }
 /// ```
 #[must_use = "a signer scope is inert until publish is called"]
 pub struct PublishAs<'a> {
     fava: &'a crate::Fava,
-    author: PublicKey,
+    /// The account this work runs as: the relay-session authority it goes
+    /// over, and the author of a payload that states none.
+    account: PublicKey,
     routing: WriteRouting,
 }
 
@@ -145,7 +147,7 @@ impl PublishAs<'_> {
     /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
     /// let relay = RelayUrl::parse("wss://relay.example")?;
     /// let builder = EventBuilder::new(Kind::TextNote).content("gm");
-    /// let write = fava.by(author).to(vec![relay])?.publish(builder)?;
+    /// let write = fava.with_account(author).to(vec![relay])?.publish(builder)?;
     /// # let _ = write;
     /// # Ok(())
     /// # }
@@ -172,20 +174,19 @@ impl PublishAs<'_> {
     /// # use fava::{EventBuilder, Fava, Kind, PublicKey};
     /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
     /// let builder = EventBuilder::new(Kind::TextNote).content("gm");
-    /// let write = fava.by(author).publish(builder)?;
+    /// let write = fava.with_account(author).publish(builder)?;
     /// # let _ = write;
     /// # Ok(())
     /// # }
     /// ```
-    #[allow(private_bounds)]
     pub fn publish<P>(self, payload: P) -> Result<Write, PublishError>
     where
-        P: AuthorlessPayload,
+        P: PublishPayload,
     {
         publish_scoped(
             self.fava.publication.as_ref(),
             payload,
-            Some(self.author),
+            Some(self.account),
             self.routing,
         )
     }
@@ -212,15 +213,20 @@ impl<'a> PublishTo<'a> {
     /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
     /// let relay = RelayUrl::parse("wss://relay.example")?;
     /// let builder = EventBuilder::new(Kind::TextNote).content("gm");
-    /// let write = fava.to(vec![relay])?.by(author).publish(builder)?;
+    /// let write = fava.to(vec![relay])?.with_account(author).publish(builder)?;
     /// # let _ = write;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn by(self, author: PublicKey) -> PublishAs<'a> {
+    /// Name the account this work runs as, through this explicit route.
+    ///
+    /// # Arguments
+    ///
+    /// * `account` - the account whose authority this work runs under
+    pub fn with_account(self, account: PublicKey) -> PublishAs<'a> {
         PublishAs {
             fava: self.fava,
-            author,
+            account,
             routing: self.routing,
         }
     }
@@ -338,22 +344,17 @@ pub fn at_least(minimum: usize) -> Result<impl Fn(&Receipt) -> bool + Copy, Publ
 
 /// Anything an application can hand to `Fava::publish`, converted once into a
 /// validated write intent.
-pub(crate) trait PublishPayload {
+/// What a publication expression accepts.
+///
+/// Implemented for every payload shape: one that states its own author keeps
+/// it, and one that states none takes the selected account.
+pub trait PublishPayload {
     fn into_intent(
         self,
         author: Option<PublicKey>,
         routing: WriteRouting,
     ) -> Result<WriteIntent, PublishError>;
 }
-
-/// Payloads that carry no author of their own and so accept one from an
-/// author scope. Implemented only by [`EventBuilder`] and [`EventEdit`] —
-/// this is what excludes [`AuthoredEventBuilder`], [`UnsignedEvent`], and
-/// [`Event`] from [`PublishAs::publish`].
-pub(crate) trait AuthorlessPayload: PublishPayload {}
-
-impl AuthorlessPayload for EventBuilder {}
-impl AuthorlessPayload for EventEdit {}
 
 impl PublishPayload for UnsignedEvent {
     fn into_intent(
@@ -453,10 +454,10 @@ where
     )
 }
 
-pub(crate) fn by(fava: &crate::Fava, author: PublicKey) -> PublishAs<'_> {
+pub(crate) fn with_account(fava: &crate::Fava, account: PublicKey) -> PublishAs<'_> {
     PublishAs {
         fava,
-        author,
+        account,
         routing: WriteRouting::Automatic,
     }
 }

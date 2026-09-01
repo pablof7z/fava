@@ -14,7 +14,7 @@ async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current(
     );
     assert!(
         first
-            .by(first_keys.public_key())
+            .with_account(first_keys.public_key())
             .to([support::relay_url()])
             .expect("explicit route validates")
             .publish(failure_support::edit(Kind::ContactList))
@@ -73,7 +73,7 @@ async fn wrong_author_or_kind_refuses_before_custody() {
         );
 
         assert!(
-            fava.by(keys.public_key())
+            fava.with_account(keys.public_key())
                 .to([support::relay_url()])
                 .expect("explicit route validates")
                 .publish(failure_support::edit(Kind::ContactList))
