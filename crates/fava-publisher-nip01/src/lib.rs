@@ -18,6 +18,10 @@ use fava_transport::{
 /// Inbound queue depth this publisher asks the transport for.
 const INBOUND_FRAMES: usize = 64;
 
+/// The machine-readable prefix NIP-42 gives an `OK` refusal that authentication
+/// would have satisfied.
+const AUTH_REQUIRED: &str = "auth-required:";
+
 /// Deadlines and bounds this publisher hands the transport for one attempt.
 /// The attempt's own timeout is the only Fava-owned duration it knows.
 fn open_request(key: &RelaySessionKey, timeout: std::time::Duration) -> OpenRelaySession {
@@ -96,9 +100,18 @@ impl Publisher for Nip01Publisher {
                 Ok(Settlement::Accepted { message }) => PublishOutcome::Acknowledged {
                     message: message.as_str().to_owned(),
                 },
-                Ok(Settlement::Rejected { message }) => PublishOutcome::Rejected {
-                    message: message.as_str().to_owned(),
-                },
+                Ok(Settlement::Rejected { message }) => {
+                    let message = message.as_str().to_owned();
+                    // NIP-01 makes an `OK` refusal's prefix machine-readable and
+                    // NIP-42 defines this one. Reading it is decoding the wire,
+                    // which is this publisher's whole job; deciding what to do
+                    // about the demand belongs to whoever owns authentication.
+                    if message.starts_with(AUTH_REQUIRED) {
+                        PublishOutcome::AuthenticationRequired { message }
+                    } else {
+                        PublishOutcome::Rejected { message }
+                    }
+                }
                 Ok(Settlement::Ended(ended)) => PublishOutcome::OutcomeUnknown {
                     reason: match ended {
                         SessionEnded::Disconnected { detail } => {

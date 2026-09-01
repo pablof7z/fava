@@ -100,7 +100,9 @@ async fn a_refusing_router_is_isolated_into_an_attributed_shortfall() {
 #[tokio::test]
 async fn auth_denial_is_a_distinct_post_handoff_destination_fact() {
     let publisher = Arc::new(ScriptedPublisher::new(
-        PublishOutcome::AuthenticationRequired,
+        PublishOutcome::AuthenticationRequired {
+            message: "auth-required: we only serve authenticated users".to_owned(),
+        },
     ));
     let harness = HarnessBuilder::default()
         .publisher(publisher.clone())
@@ -139,7 +141,9 @@ async fn the_delivery_policy_observes_the_authentication_fact() {
     let policy = Arc::new(RecordingPolicy::default());
     let harness = HarnessBuilder::default()
         .publisher(Arc::new(ScriptedPublisher::new(
-            PublishOutcome::AuthenticationRequired,
+            PublishOutcome::AuthenticationRequired {
+                message: "auth-required: we only serve authenticated users".to_owned(),
+            },
         )))
         .delivery(policy.clone())
         .build();

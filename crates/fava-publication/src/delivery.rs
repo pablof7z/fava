@@ -207,7 +207,7 @@ impl Publication {
             // The owner records only what the publisher observed. `GivenUp` is a policy
             // noun the owner must never invent, and this outcome is reached after handoff,
             // so it cannot be reported as a definite pre-handoff failure.
-            PublishOutcome::AuthenticationRequired => {
+            PublishOutcome::AuthenticationRequired { message } => {
                 let awaiting = self.authentication.as_ref().is_some_and(|outcomes| {
                     matches!(
                         outcomes.state(session),
@@ -216,14 +216,10 @@ impl Publication {
                 });
                 if awaiting {
                     RelayDeliveryOutcome::Retryable {
-                        reason: "relay demanded authentication and a person is being asked"
-                            .to_owned(),
+                        reason: format!("{message} (a person is being asked)"),
                     }
                 } else {
-                    RelayDeliveryOutcome::AuthenticationDenied {
-                        reason: "relay demanded authentication this attempt did not satisfy"
-                            .to_owned(),
-                    }
+                    RelayDeliveryOutcome::AuthenticationDenied { reason: message }
                 }
             }
             PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },

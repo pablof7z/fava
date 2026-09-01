@@ -40,8 +40,12 @@ pub enum PublishOutcome {
         /// Exact bounded relay message.
         message: String,
     },
-    /// Relay requires authentication not supplied by this attempt.
-    AuthenticationRequired,
+    /// Relay requires authentication not supplied by this attempt, with this
+    /// exact bounded message.
+    AuthenticationRequired {
+        /// Exact bounded relay message, carrying its `auth-required:` prefix.
+        message: String,
+    },
     /// Bytes definitely were not handed to transport.
     NotHandedOff {
         /// Exact definite failure reason.
