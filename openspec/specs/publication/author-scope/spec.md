@@ -38,25 +38,6 @@ An authorless payload has no identity of its own. Publishing one outside an auth
 - **WHEN** publication is refused for a missing author
 - **THEN** no write identifier or receipt identifier is produced, and nothing is handed to the publication owner
 
-### Requirement: A payload that already carries an author refuses an author scope
-
-An authored event body, an unsigned event, and a pre-signed event have each already settled their identity. Offering such a payload to an author scope SHALL be rejected rather than silently overriding or silently ignoring the scope.
-
-#### Scenario: An authored event body is offered to an author scope
-
-- **WHEN** a caller offers an authored event body to a publication expression carrying an author scope
-- **THEN** the expression rejects it, on the grounds that the payload already carries its author
-
-#### Scenario: An unsigned or pre-signed event is offered to an author scope
-
-- **WHEN** a caller offers an unsigned event or a pre-signed event to a publication expression carrying an author scope
-- **THEN** the expression rejects it, unchanged from current behavior
-
-#### Scenario: Authored payloads publish without a scope
-
-- **WHEN** an application publishes an authored event body, an unsigned event, or a pre-signed event through an expression with no author scope
-- **THEN** publication proceeds using the author the payload already carries
-
 ### Requirement: An author scope composes with an explicit relay route
 
 Supplying an author and narrowing the relay route are independent concerns of one publication expression, and SHALL remain composable in either order for authorless payloads.
@@ -89,3 +70,22 @@ A constructor that describes a protocol event for an application to publish SHAL
 
 - **WHEN** an internal caller rebuilds a specific existing event, such as applying a replaceable edit onto a prior event or answering a relay authentication challenge
 - **THEN** that caller supplies the exact author required for the resulting event id to match, through the authored construction path
+
+### Requirement: A payload that already carries an author is published as its author
+
+An authored event body, an unsigned event, and a pre-signed event have each already settled who signs them. A selection names the account work runs as — the connection it goes over — which is a different fact, so offering such a payload to a selection SHALL be accepted and the payload's own author SHALL be kept.
+
+#### Scenario: An authored event body is offered to a selection
+
+- **WHEN** a caller offers an authored event body to a publication expression carrying an account selection
+- **THEN** the expression accepts it, the event is authored by the payload's author, and the relay session is authenticated as the selected account
+
+#### Scenario: An unsigned or pre-signed event is offered to a selection
+
+- **WHEN** a caller offers an unsigned event or a pre-signed event to a publication expression carrying an account selection
+- **THEN** the expression accepts it and publishes it under the author it already carries
+
+#### Scenario: Authored payloads still publish without a selection
+
+- **WHEN** an application publishes an authored event body, an unsigned event, or a pre-signed event through an expression with no selection
+- **THEN** publication proceeds using the author the payload already carries

@@ -1,10 +1,16 @@
-## MODIFIED Requirements
+## REMOVED Requirements
+
+### Requirement: A payload that already carries an author refuses an author scope
+
+**Reason**: The rejection was correct while the publication verb asserted authorship — offering an authored payload to an author scope named two authors, which is a contradiction. `Fava::with_account` names the account work runs as, which is the relay authority the work goes over, not who signs. Under that verb the rejection falls exactly on publishing one account's event over another account's authenticated connection, which is the case naming them separately exists to allow.
+
+**Migration**: An authored payload offered to a selection is now accepted and keeps its own author. Callers that relied on the rejection to catch a double-named author no longer need to: there is no second author to conflict with, because the selection names a connection.
+
+## ADDED Requirements
 
 ### Requirement: A payload that already carries an author is published as its author
 
 An authored event body, an unsigned event, and a pre-signed event have each already settled who signs them. A selection names the account work runs as — the connection it goes over — which is a different fact, so offering such a payload to a selection SHALL be accepted and the payload's own author SHALL be kept.
-
-This replaces the rejection that existed while the publication verb asserted authorship: refusing an authored payload under a selection would refuse publishing one account's event over another account's authenticated connection, which is the point of naming them separately.
 
 #### Scenario: An authored event body is offered to a selection
 

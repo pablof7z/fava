@@ -14,6 +14,6 @@
 
 ## 3. Verification
 
-- [ ] 3.1 Update the settled `publication/author-scope` spec's rejection requirement through this change's delta, so the archived capability describes the verb that exists; verify `openspec validate` accepts the change
-- [ ] 3.2 Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, and `cargo test --workspace --locked`, and verify every one passes
-- [ ] 3.3 Re-sign the changed public declarations under Symbol Gate. (Expected to stay open until the repository owner supplies a trusted key: the tool runs, but `verify` refuses because none is named and the user-local trust store is empty.)
+- [x] 3.1 Update the settled `publication/author-scope` spec's rejection requirement through this change's delta, so the archived capability describes the verb that exists; verify `openspec validate` accepts the change
+- [x] 3.2 Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, and `cargo test --workspace --locked`, and verify every one passes
+- [ ] 3.3 Re-sign the changed public declarations under Symbol Gate. (Open, at the repository owner's instruction: the tool runs, but `verify` refuses because no trusted key is named and the user-local trust store is empty. The owner's key is needed.)
