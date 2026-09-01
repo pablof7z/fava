@@ -12,10 +12,10 @@
 ## 3. Update vocabulary records and review the public break
 
 - [x] 3.1 Update the query-work ownership row in `docs/spec/ARCHITECTURE.md` and current focused issue records `0028`, `0039`, `0040`, and `0054` to use `WorkEpoch`/`epoch`, preserving the owner and lifecycle distinctions without retaining an old-name alias or migration narrative; verify a scoped `rg` finds no old public spelling in live source, active specifications, or those issue records.
-- [ ] 3.2 Re-scan the changed public declaration surface and obtain fresh Symbol Gate review/approval for `WorkEpoch`, `WorkEpochIssuer`, and `WorkEpochExhausted` under the existing observation/query-work vocabulary; verify `symbol-gate status` and `symbol-gate verify` report the replacement surface approved and no former declaration remains signed.
+- [ ] 3.2 Re-scan the changed public declaration surface and obtain fresh Symbol Gate review/approval for the renamed identities. (Open, at the repository owner's instruction: the tool runs, but `verify` refuses because no trusted key is named and the user-local trust store at `~/Library/Application Support/symbol-gate/trusted_keys` is empty.)
 
 ## 4. Validate the focused breaking rename
 
 - [x] 4.1 Run `cargo fmt --check`, strict Clippy for `fava-query`, `fava-runtime`, `fava-observe`, `fava-diagnostics`, `fava-subscriptions`, and `fava`, and `cargo check --workspace --all-targets`; verify all pass with no compatibility aliases or behavior changes.
-- [ ] 4.2 Run `bazel test //crates/fava-query:query_evidence //crates/fava-runtime:provider_isolation //crates/fava-diagnostics:ownership_graph //crates/fava-observe:access_work_isolation` and the corresponding Cargo focused tests; verify the Bazel and Cargo paths both preserve independent authorities, exhaustion refusal, and stale-work isolation.
+- [x] 4.2 Run `bazel test //crates/fava-query:query_evidence //crates/fava-runtime:provider_isolation //crates/fava-diagnostics:ownership_graph //crates/fava-observe:access_work_isolation` and the corresponding Cargo focused tests; verify the Bazel and Cargo paths both preserve independent authorities, exhaustion refusal, and stale-work isolation.
 - [x] 4.3 Perform a final repository search excluding approved historical evidence and this change's planning artifacts; verify every live declaration, import, re-export, field, accessor, test, diagnostic, and current documentation reference uses `WorkEpoch`/`epoch`, while `RelaySessionGeneration` retains its transport-owned `generation` vocabulary.
