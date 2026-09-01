@@ -80,45 +80,29 @@ impl fmt::Debug for Write {
     }
 }
 
-/// An inert, edit-only signer scope for one publication expression.
+/// An inert account scope for one publication expression.
 ///
-/// Signer scope cannot publish an unsigned event because that event already
-/// carries its author:
+/// The account names two facts at once: the relay authority this work runs
+/// over, and the author of a payload that states none. When the payload
+/// already states its author, the account still names the connection — which
+/// is how one person's event goes out over another's authenticated session:
 ///
-/// ```compile_fail
-/// fn unsigned_is_not_an_edit(
-///     fava: &fava::Fava,
-///     author: fava::PublicKey,
-///     event: fava::UnsignedEvent,
-/// ) {
-///     let _ = fava.with_account(author).publish(event);
-/// }
+/// ```
+/// # use fava::{EventBuilder, Fava, Kind, PublicKey};
+/// # fn bob_over_alices_connection(
+/// #     fava: &Fava,
+/// #     alice: PublicKey,
+/// #     bob: PublicKey,
+/// # ) -> Result<(), Box<dyn std::error::Error>> {
+/// let note = EventBuilder::new(Kind::TextNote).content("gm").by(bob);
+/// let write = fava.with_account(alice).publish(note)?;
+/// # let _ = write;
+/// # Ok(())
+/// # }
 /// ```
 ///
-/// A pre-signed event has already used its signer and is likewise excluded:
-///
-/// ```compile_fail
-/// fn signed_event_already_has_a_signer(
-///     fava: &fava::Fava,
-///     author: fava::PublicKey,
-///     event: fava::Event,
-/// ) {
-///     let _ = fava.with_account(author).publish(event);
-/// }
-/// ```
-///
-/// An authored event body has already settled its identity and is likewise
-/// excluded:
-///
-/// ```compile_fail
-/// fn authored_builder_already_has_an_author(
-///     fava: &fava::Fava,
-///     author: fava::PublicKey,
-///     builder: fava::AuthoredEventBuilder,
-/// ) {
-///     let _ = fava.with_account(author).publish(builder);
-/// }
-/// ```
+/// The event is Bob's and the relay session is Alice's. An authorless payload
+/// takes the account for both.
 #[must_use = "a signer scope is inert until publish is called"]
 pub struct PublishAs<'a> {
     fava: &'a crate::Fava,
