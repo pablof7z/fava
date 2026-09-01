@@ -127,7 +127,7 @@ impl MemoryWriteStore {
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         let mut state = self.lock_state()?;
-        let (payload, routing) = intent.into_parts();
+        let (payload, routing, accepted_access) = intent.into_parts();
         let WritePayload::Edit { edit, author } = payload else {
             return Err(WriteStoreError::Refused(
                 "semantic acceptance requires a replaceable-event edit".to_owned(),
@@ -215,6 +215,7 @@ impl MemoryWriteStore {
             receipt_id,
             current: current.clone(),
             routing,
+            access: accepted_access.clone(),
             outcome: ReceiptOutcome::Open,
             route_revision: u64::from(explicit),
             route_settled: explicit,

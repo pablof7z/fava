@@ -35,7 +35,10 @@ fn zero_indexers_remains_unresolved() {
         .by(author.public_key())
         .build()
         .unwrap();
-    let request = RouteRequest::Write(EventValue::Unsigned(event));
+    let request = RouteRequest::Write {
+        event: EventValue::Unsigned(event),
+        access: fava_relay::RelayAccess::Public,
+    };
     let router = OutboxRouter::new("nip65", []).unwrap();
     let mut session = router
         .open(request, Arc::new(RoutePlan::default()), Vec::new())

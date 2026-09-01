@@ -437,7 +437,10 @@ impl Publication {
         revision: u64,
         contribution: &RouteContribution,
     ) -> u64 {
-        let request = RouteRequest::Write(receipt.current.event.clone());
+        let request = RouteRequest::Write {
+            event: receipt.current.event.clone(),
+            access: receipt.access.clone(),
+        };
         self.apply_route(receipt, revision.saturating_add(1), &request, contribution)
     }
 

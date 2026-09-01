@@ -93,6 +93,7 @@ impl WriteIntent {
         Ok(Self {
             payload: WritePayload::Edit { edit, author },
             routing,
+            access: fava_relay::RelayAccess::Public,
         })
     }
 }

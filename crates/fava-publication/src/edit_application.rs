@@ -273,7 +273,7 @@ impl Publication {
             output = Some(event);
         }
         let event = output.expect("non-empty edit sequence produces one event");
-        let route = self.route_for(&event, routing)?;
+        let route = self.route_for(&event, routing, &fava_relay::RelayAccess::Public)?;
         Ok((event, route))
     }
 
@@ -355,8 +355,12 @@ impl Publication {
         &self,
         event: &UnsignedEvent,
         routing: &WriteRouting,
+        access: &fava_relay::RelayAccess,
     ) -> Result<RoutePlan, PublicationError> {
-        let request = RouteRequest::Write(EventValue::Unsigned(event.clone()));
+        let request = RouteRequest::Write {
+            event: EventValue::Unsigned(event.clone()),
+            access: access.clone(),
+        };
         match routing {
             WriteRouting::Explicit(relays) => RoutePlan::explicit(
                 relays.iter().cloned(),

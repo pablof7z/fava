@@ -47,7 +47,7 @@ impl WriteStore for RedbWriteStore {
         let next_identity = next_identity(identity)?;
         let write_id = WriteId::from_nonzero(identity);
         let receipt_id = ReceiptId::from_nonzero(identity);
-        let (payload, routing) = intent.into_parts();
+        let (payload, routing, accepted_access) = intent.into_parts();
         let (event, signature) = match payload {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
             WritePayload::Edit { .. } => {
@@ -78,6 +78,7 @@ impl WriteStore for RedbWriteStore {
             receipt_id,
             current: current.clone(),
             routing,
+            access: accepted_access.clone(),
             outcome: ReceiptOutcome::Open,
             route_revision: u64::from(explicit),
             route_settled: explicit,

@@ -31,7 +31,10 @@ impl Publication {
                 continue;
             };
 
-            let request = RouteRequest::Write(receipt.current.event.clone());
+            let request = RouteRequest::Write {
+                event: receipt.current.event.clone(),
+                access: receipt.access.clone(),
+            };
             let opened = fava_routing::open(
                 self.routers.as_slice(),
                 &request,

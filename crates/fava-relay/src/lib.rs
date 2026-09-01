@@ -4,7 +4,9 @@ use nostr::key::PublicKey;
 use nostr::types::RelayUrl;
 
 /// Exact application-selected access authority for relay work.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
 pub enum RelayAccess {
     /// Public unauthenticated relay authority.
     Public,

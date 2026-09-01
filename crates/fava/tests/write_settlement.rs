@@ -439,6 +439,7 @@ fn mixed_receipt() -> Receipt {
             rejected.relay.clone(),
             unknown.relay.clone(),
         ]),
+        access: fava_relay::RelayAccess::Public,
         outcome: ReceiptOutcome::Complete,
         route_revision: 1,
         route_settled: true,

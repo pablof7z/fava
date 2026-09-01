@@ -14,7 +14,7 @@ const RECEIPTS: TableDefinition<u64, &[u8]> = TableDefinition::new("receipts");
 const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
 const NEXT_ID: &str = "next_id";
 const SCHEMA_VERSION_KEY: &str = "schema_version";
-const SCHEMA_VERSION: u64 = 4;
+const SCHEMA_VERSION: u64 = 5;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct PersistedReceipt {

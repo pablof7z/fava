@@ -81,7 +81,10 @@ async fn known_destinations_deliver_immediately() {
         .expect("event");
     let preview = fava_routing::preview(
         &routers,
-        &RouteRequest::Write(EventValue::Unsigned(event.clone())),
+        &RouteRequest::Write {
+            event: EventValue::Unsigned(event.clone()),
+            access: fava_relay::RelayAccess::Public,
+        },
         &vec![Vec::new(); routers.len()],
     )
     .expect("routing-provider preview");

@@ -47,7 +47,10 @@ fn reference_hint_and_actual_relay_evidence_are_independent_reasons() {
 
     let contribution = router
         .preview(
-            &RouteRequest::Write(EventValue::Unsigned(reply)),
+            &RouteRequest::Write {
+                event: EventValue::Unsigned(reply),
+                access: fava_relay::RelayAccess::Public,
+            },
             &RoutePlan::default(),
             &[],
         )

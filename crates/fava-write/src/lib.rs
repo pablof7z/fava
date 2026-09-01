@@ -1,5 +1,6 @@
 //! Event values and publication evidence shared by write owners and queries.
 
+use fava_relay::RelayAccess;
 use fava_state::{EventCoordinate, event_coordinate};
 pub use nostr::event::{Event, EventId, Kind, Tag, UnsignedEvent};
 pub use nostr::key::PublicKey;
@@ -85,9 +86,28 @@ pub enum WritePayload {
 pub struct WriteIntent {
     payload: WritePayload,
     routing: WriteRouting,
+    /// The relay authority this write is accepted under. Separate from the
+    /// event's author: a write may go over one account's authenticated session
+    /// and be signed by another.
+    access: RelayAccess,
 }
 
 impl WriteIntent {
+    /// The relay authority this write is accepted under.
+    #[must_use]
+    pub const fn access(&self) -> &RelayAccess {
+        &self.access
+    }
+
+    /// Accept this write under one account's relay authority.
+    ///
+    /// Separate from the event's author, which the payload already carries.
+    #[must_use]
+    pub fn under(mut self, access: RelayAccess) -> Self {
+        self.access = access;
+        self
+    }
+
     /// Validate one unsigned event and its route before custody.
     ///
     /// # Arguments
@@ -118,6 +138,7 @@ impl WriteIntent {
         Ok(Self {
             payload: WritePayload::Event(event),
             routing,
+            access: RelayAccess::Public,
         })
     }
 
@@ -147,6 +168,7 @@ impl WriteIntent {
         Ok(Self {
             payload: WritePayload::Presigned(event),
             routing,
+            access: RelayAccess::Public,
         })
     }
 
@@ -174,8 +196,8 @@ impl WriteIntent {
 
     /// Consume the intent into its exact parts.
     #[must_use]
-    pub fn into_parts(self) -> (WritePayload, WriteRouting) {
-        (self.payload, self.routing)
+    pub fn into_parts(self) -> (WritePayload, WriteRouting, RelayAccess) {
+        (self.payload, self.routing, self.access)
     }
 }
 

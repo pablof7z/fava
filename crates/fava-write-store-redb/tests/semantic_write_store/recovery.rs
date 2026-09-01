@@ -47,7 +47,7 @@ fn ordered_explicit_route_survives_reopen_with_one_lane_per_identity() {
 }
 
 #[test]
-fn schema_v4_refuses_unsound_ordered_route_shapes() {
+fn row_mutation_refuses_unsound_ordered_route_shapes() {
     let empty_path = terminal_no_destination_path("empty-explicit-route");
     mutate_row(&empty_path, |row| {
         set(
@@ -87,7 +87,7 @@ fn schema_v4_refuses_unsound_ordered_route_shapes() {
 }
 
 #[test]
-fn schema_v4_refuses_missing_extra_and_substituted_explicit_lanes() {
+fn row_mutation_refuses_missing_extra_and_substituted_explicit_lanes() {
     let (missing_path, _first, second) = explicit_path("missing-explicit-lane");
     let second_lane = RelaySessionKey {
         relay: second.clone(),
@@ -331,7 +331,7 @@ fn reopen_refuses_recovered_counts_beyond_configured_bounds_without_dropping_row
 }
 
 #[test]
-fn schema_v4_reconstruction_refuses_every_malformed_invariant() {
+fn row_mutation_reconstruction_refuses_every_malformed_invariant() {
     assert_row_mutation_refused("semantic-author", |row| {
         set(
             row,
@@ -517,7 +517,7 @@ fn schema_v1_refusal_precedes_malformed_row_decode() {
 }
 
 #[test]
-fn schema_v4_accepts_attributed_empty_source_failure() {
+fn row_mutation_accepts_attributed_empty_source_failure() {
     let path = unique_path("empty-source-failure");
     let keys = Keys::generate();
     let base = source(&keys, 10, "base");

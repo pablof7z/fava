@@ -151,7 +151,7 @@ impl Router for ComposingRouter {
     ) -> Result<Box<dyn RouterSession>, RouterError> {
         let open = self.opens.fetch_add(1, Ordering::SeqCst) + 1;
         let relay = if open == 1 {
-            let RouteRequest::Write(source) = &request else {
+            let RouteRequest::Write { event: source, .. } = &request else {
                 panic!("semantic router receives a write request");
             };
             let next_edit = EventEdit::new(Kind::ContactList, None, vec![9]).unwrap();

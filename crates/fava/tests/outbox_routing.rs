@@ -132,7 +132,10 @@ fn write_request(author: nostr::key::PublicKey) -> RouteRequest {
         .by(author)
         .build()
         .expect("event");
-    RouteRequest::Write(EventValue::Unsigned(event))
+    RouteRequest::Write {
+        event: EventValue::Unsigned(event),
+        access: fava_relay::RelayAccess::Public,
+    }
 }
 
 fn snapshot(indexer: RelayUrl, state: RelaySourceState) -> QuerySnapshot {

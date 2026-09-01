@@ -211,6 +211,7 @@ impl PublishAs<'_> {
             payload,
             Some(self.account),
             self.routing,
+            fava_relay::RelayAccess::Authenticated(self.account),
         )
     }
 }
@@ -286,6 +287,9 @@ impl<'a> PublishTo<'a> {
             payload,
             self.fava.session.current_account(),
             self.routing,
+            // No account was named, so this is public work. The current account
+            // may author it; it does not make the connection authenticated.
+            fava_relay::RelayAccess::Public,
         )
     }
 }
@@ -474,6 +478,7 @@ where
         payload,
         current_account,
         WriteRouting::Automatic,
+        fava_relay::RelayAccess::Public,
     )
 }
 
@@ -504,11 +509,12 @@ fn publish_scoped<P>(
     payload: P,
     author: Option<PublicKey>,
     routing: WriteRouting,
+    access: fava_relay::RelayAccess,
 ) -> Result<Write, PublishError>
 where
     P: PublishPayload,
 {
-    let intent = payload.into_intent(author, routing)?;
+    let intent = payload.into_intent(author, routing)?.under(access);
     let publication = publication.ok_or(PublicationError::NotConfigured)?;
     let accepted = publication.accept(intent)?;
     Ok(Write {

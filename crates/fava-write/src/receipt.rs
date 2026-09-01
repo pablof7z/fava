@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use fava_relay::RelaySessionKey;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use serde::{Deserialize, Serialize};
 
 use crate::{EventId, EventValue, InvalidEventValue, ReceiptId, RevisionId, WriteId, WriteRouting};
@@ -161,6 +161,13 @@ pub struct Receipt {
     pub current: LocalWriteEvent,
     /// Selected routing mode.
     pub routing: WriteRouting,
+    /// The relay authority this write was accepted under.
+    ///
+    /// Separate from the event's author: a write may be accepted over one
+    /// account's authenticated session and signed by another. Recorded so the
+    /// write resumes under the authority it was accepted with, including after
+    /// a restart, rather than under whatever the resuming process defaults to.
+    pub access: RelayAccess,
     /// Aggregate current receipt result.
     pub outcome: ReceiptOutcome,
     /// Last route revision atomically applied to this receipt.

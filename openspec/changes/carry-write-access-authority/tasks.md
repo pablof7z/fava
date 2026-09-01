@@ -1,18 +1,18 @@
 ## 1. Carry the authority
 
-- [ ] 1.1 Add the accepted `RelayAccess` to `WriteIntent` and `Receipt` as one value beside the existing author, not a second public key; verify a test asserts both are recorded, that neither is derived from the other, and that the author is unchanged
-- [ ] 1.2 Reshape `RouteRequest::Write` to carry the authority and make `RouteRequest::access()` return it rather than `RelayAccess::Public`; verify a test asserts an automatically routed write accepted under an account selects destinations under that account's authority
-- [ ] 1.3 Route a write accepted with no selection as public, unchanged; verify the existing automatic-publication tests pass with no assertion text changed
-- [ ] 1.4 Update every `RouteRequest::Write` construction and destructuring site in `fava-publication`, the router crates, and their tests; verify `cargo build --workspace --all-targets --locked` succeeds
+- [x] 1.1 Add the accepted `RelayAccess` to `WriteIntent` and `Receipt` as one value beside the existing author, not a second public key; verify a test asserts both are recorded, that neither is derived from the other, and that the author is unchanged
+- [x] 1.2 Reshape `RouteRequest::Write` to carry the authority and make `RouteRequest::access()` return it rather than `RelayAccess::Public`; verify a test asserts an automatically routed write accepted under an account selects destinations under that account's authority
+- [x] 1.3 Route a write accepted with no selection as public, unchanged; verify the existing automatic-publication tests pass with no assertion text changed
+- [x] 1.4 Update every `RouteRequest::Write` construction and destructuring site in `fava-publication`, the router crates, and their tests; verify `cargo build --workspace --all-targets --locked` succeeds
 - [ ] 1.5 Prove a selection change, signer replacement, or account removal after acceptance does not retarget accepted work; verify a test asserts the author and the authority are both unchanged after each
 
 ## 2. Persist it
 
-- [ ] 2.1 Bump `SCHEMA_VERSION` from 4 to 5 in `crates/fava-write-store-redb/src/schema.rs`; verify `redb_schema_mismatch_refuses_without_fallback` still refuses a store stamped with a different version
+- [x] 2.1 Bump `SCHEMA_VERSION` from 4 to 5 in `crates/fava-write-store-redb/src/schema.rs`; verify `redb_schema_mismatch_refuses_without_fallback` still refuses a store stamped with a different version
 - [ ] 2.2 Refuse reconstruction of a stored row whose access authority is absent or malformed, rather than defaulting it to public; verify tests cover each and fail when the check is removed
 - [ ] 2.3 Refuse reconstruction of a stored row whose authority contradicts its routed destinations; verify a test tampers with one and asserts reconstruction refuses rather than choosing either
 - [ ] 2.4 Extend the four row-mutation recovery tests with a tampered access field; verify each new case fails when its check is removed
-- [ ] 2.5 Rename those four tests to drop the `schema_v4_` prefix, which reads as though they test an earlier schema version when they mutate rows in the current one; verify the renamed tests still run and pass
+- [x] 2.5 Rename those four tests to drop the `schema_v4_` prefix, which reads as though they test an earlier schema version when they mutate rows in the current one; verify the renamed tests still run and pass
 
 ## 3. Prove it end to end
 
