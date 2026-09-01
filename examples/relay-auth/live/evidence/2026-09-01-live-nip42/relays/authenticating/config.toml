@@ -1,11 +1,11 @@
 [info]
-relay_url = "ws://127.0.0.1:50184/"
+relay_url = "ws://127.0.0.1:57604/"
 [database]
 engine = "sqlite"
 in_memory = false
 [network]
 address = "127.0.0.1"
-port = 50184
+port = 57604
 ping_interval = 30
 [options]
 reject_future_seconds = 1800

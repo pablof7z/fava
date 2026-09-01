@@ -78,16 +78,22 @@ The live proof demonstrates a demand actually appearing (`auth pending`),
 being answered (`auth answer`), and the session's own `Attempted` verdict
 following it -- through the real public API, against a real relay. It does
 **not** demonstrate a *write* visibly held open by that demand:
-`fava-publisher-nip01::Nip01Publisher`, the publisher every real Fava
-assembly (this app and `examples/account` included) actually uses, maps
-every relay `OK false` straight to `PublishOutcome::Rejected` and never
-constructs `PublishOutcome::AuthenticationRequired` -- so the
-`RelayDeliveryOutcome::Retryable`/`AuthenticationDenied` distinction
-documented in `fava-publication/src/delivery.rs`, and proven in
-`fava-publication`'s own tests, is reachable only through a scripted test
-publisher, never through this or any other real application. See "Public-API
-developer-experience gaps" below; this is the most consequential one this
-app found.
+`fava-publication/src/delivery.rs` turns a demand into a wait by reporting
+`RelayDeliveryOutcome::Retryable`, and nothing in the delivery loop can
+wait. `DeliveryDecision` offers `AttemptNow`, `GiveUp`, and `Settled`, with
+no "attempt later", and `run_destination` re-decides immediately because
+`read_receipt` sleeps only when the store read itself fails. At the default
+ceiling of one attempt the write gives up on the next pass, microseconds
+after the person is asked; a higher ceiling burns every attempt in one tick.
+
+This app's live evidence does record the *denial* half correctly --
+`authentication-denied:auth-required: ...`, carrying the relay's own
+sentence -- because `Nip01Publisher` now reads the `auth-required:` prefix
+NIP-42 defines (`crates/fava-publisher-nip01/src/lib.rs`, commit
+`656ed944`). Before that it flattened every `OK false` to
+`PublishOutcome::Rejected`, which is what the first version of this README
+described. What remains open is the wait, tracked as task 3.4 of
+`finish-relay-authentication`.
 
 ## Why `publish` doesn't wait for its own write to settle
 
@@ -139,7 +145,8 @@ check.
 ## Public-API developer-experience gaps this app surfaced
 
 Building ordinary `publish as:<account>` workflows against this exact
-surface found two things an app author should not have had to work around.
+surface found two things an app author should not have had to work around;
+the second has since been fixed in the library.
 Both are documented at their exact call site (`examples/relay-auth/src/app.rs`,
 `ensure_watched`), and both are reported to the surface's owner rather than
 quietly patched over:
@@ -156,16 +163,17 @@ quietly patched over:
    and consequently `publish as:<account>` needs a reachable relay even to
    be *accepted* (see `tests/repl.rs` for why the offline suite only
    exercises `publish public`).
-2. **A second `watch_session` on an already-resolved, still-live session
-   destroys its verdict.** `SessionAuthentication::reconnected`, reached
-   through `watch_session_inner`'s unconditional call on every invocation,
-   resets state to `None` even when the connection's generation has not
-   actually changed (`crates/fava-auth/src/state.rs`; contrast with
-   `challenged`/`resolved`, which both guard on the generation first). A
-   relay that (like this app's own harness relay, and many real ones)
-   challenges once per connection then never repopulates that state, and the
-   session reports `unknown` forever. The app now watches each session key
-   at most once for the life of the process.
+2. **Fixed.** A second watch on an already-resolved, still-live session used
+   to destroy its verdict: `SessionAuthentication::reconnected` reset
+   unconditionally where `challenged` and `resolved` both guard on the
+   generation first. Since every authenticated `observe` starts a watch per
+   destination, two queries on one relay were enough, and a relay that
+   challenges once per connection never repopulated the state. `reconnected`
+   now resets only when the connection identity actually changed
+   (`crates/fava-auth/src/state.rs`), and `watch_session_soon` keeps one
+   query-driven watch per session key, so two watches no longer each count
+   the other as a reason to hold the socket open. The app's own per-key
+   dedupe in `ensure_watched` is now belt-and-braces rather than load-bearing.
 
 An independent DX review of this app (see `.pi/e2e-builder` for the process)
 found five more, all confirmed against the exact cited source:

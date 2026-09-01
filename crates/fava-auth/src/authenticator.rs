@@ -1,6 +1,6 @@
 //! The lifecycle owner: one authenticated session, watched and answered.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
 
@@ -48,6 +48,10 @@ pub(crate) struct Inner {
 pub(crate) struct State {
     pub(crate) sessions: BTreeMap<RelaySessionKey, SessionAuthentication>,
     pub(crate) deferred: BTreeMap<AuthenticationDemandId, AuthenticationDemand>,
+    /// Keys a query-driven watch is already running for. One watch serves
+    /// every query on a relay; a second would lease the same session, and the
+    /// two would each count the other as a reason to keep it open.
+    pub(crate) watching: BTreeSet<RelaySessionKey>,
     next_id: u64,
     revision: u64,
 }

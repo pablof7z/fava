@@ -488,3 +488,50 @@ async fn the_watch_releases_its_lease_when_no_authenticated_work_remains() {
         fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
     );
 }
+
+/// Two queries on one relay share one watch, and it still lets go (WRITE-018).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_authenticated_queries_on_one_relay_share_one_watch() {
+    let rig = Rig::build(Some(Always(AuthenticationDecision::Authenticate)), true);
+    let first = rig
+        .fava
+        .observe(rig.query())
+        .await
+        .expect("the first live query opens");
+    settle().await;
+    let with_one = fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
+        .map(std::num::NonZeroUsize::get);
+
+    let second = rig
+        .fava
+        .observe(rig.query())
+        .await
+        .expect("the second live query opens");
+    settle().await;
+    let with_two = fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
+        .map(std::num::NonZeroUsize::get);
+
+    // Observations on one relay share its session, so this count moves only
+    // when a second watch takes a lease of its own.
+    assert_eq!(
+        with_two, with_one,
+        "the second query found the watch it needs already running"
+    );
+
+    // Two watches would each count the other and neither would ever be alone,
+    // so the session would outlive every query that wanted it.
+    drop(first);
+    drop(second);
+    for _ in 0..40 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        settle().await;
+        if fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key).is_none() {
+            break;
+        }
+    }
+    assert!(
+        fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key).is_none(),
+        "one watch was left to notice it was alone, got {:?}",
+        fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
+    );
+}

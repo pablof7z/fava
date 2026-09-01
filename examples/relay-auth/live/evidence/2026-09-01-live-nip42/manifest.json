@@ -5,8 +5,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "app/stdout.log": {
-      "bytes": 17751,
-      "sha256": "e29e4fbe83713452632902817f4086bbec6dbec1829239297cf2f218eb665659"
+      "bytes": 17770,
+      "sha256": "62543bfd1d98fc3c857c9e03475fa167aa4321dd51e2eea4ceb8b9550d48be96"
     },
     "relays/accept/stderr.log": {
       "bytes": 0,
@@ -14,19 +14,19 @@
     },
     "relays/accept/stdout.log": {
       "bytes": 27,
-      "sha256": "6febd19e38db861401bf5e4a596fcf2d2c7e854c5cbecc1b960e0c95a0db172b"
+      "sha256": "45147f59d0dbe52f3e87a74bd089ce6496acbdaa655bf5d4e732dfc057600473"
     },
     "relays/authenticating/config.toml": {
       "bytes": 371,
-      "sha256": "f7b0f9ca35a4cc6a4d27a8fac7ce58f1ee224e4a8c75f68cc4a4bf5d58acf18b"
+      "sha256": "4ba5cf9d33f76e1383de97cce3f69c4e70b4bafae942eb313f2c4581675f12d0"
     },
     "relays/authenticating/stderr.log": {
       "bytes": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "relays/authenticating/stdout.log": {
-      "bytes": 4539,
-      "sha256": "40e25356179c2875fb99c882164cfd66ebef01bc430219922d3398c4dc63f165"
+      "bytes": 4538,
+      "sha256": "5fc824b1047356b2294a9bb10b273b65e7f444c97fe0c8f3110f0a027e509d85"
     },
     "relays/refuse/stderr.log": {
       "bytes": 0,
@@ -34,7 +34,7 @@
     },
     "relays/refuse/stdout.log": {
       "bytes": 27,
-      "sha256": "8721a5472632eadfce0b2aa2b6a259948caa9e3a3ee93e13ec02842d33490ab0"
+      "sha256": "6010ed814b71aa6c9e0e593b3144bedfddea0504c8a95c450c717c2c746e7189"
     },
     "relays/reject/stderr.log": {
       "bytes": 0,
@@ -42,31 +42,31 @@
     },
     "relays/reject/stdout.log": {
       "bytes": 27,
-      "sha256": "d8b6f8360e6ab1b582bef4ceb50f7cedea6563eb21fef072258ce1b22f6848ea"
+      "sha256": "05db939ddfcb3cda26529054ad78134a1c030e864b54131e119a86fe29a3f1c7"
     },
     "result.json": {
       "bytes": 2923,
-      "sha256": "85e87d3ac9946f2747af432e3a8cb0c449876515c457c8f0dff42cc8b49cae38"
+      "sha256": "82f4a8bfe32b6508a46cbd8feefae95ca79884ca2ec2f31868a737c42d49163e"
     },
     "run.jsonl": {
-      "bytes": 18744,
-      "sha256": "e02833854cb993d0b96fb57e7ad47085943e84549dbbb61151f3eb17fd896e14"
+      "bytes": 18763,
+      "sha256": "e3be405586b2aae4b95fb2949468116e183ab4a19f91fdf777df327c05770116"
     },
     "teardown-accept.json": {
-      "bytes": 388,
-      "sha256": "2e12dc56496213653924c41d6b94eea75ff8fe3cacaddf1c5ce7d348d8b65b2f"
+      "bytes": 389,
+      "sha256": "83c707b161e379adddbce2515e21ff335da7b4651715a1751ce11b2c46d9a8e1"
     },
     "teardown-nostr.json": {
-      "bytes": 388,
-      "sha256": "6baf8046c93b3c9b8bce0cf877a3891225cb40e0e9ccd2c02d95bc0a6d1a3dda"
+      "bytes": 389,
+      "sha256": "c4542029e8b02625f944b6b4591c3e0107a72ddabe2f391076373249254bcad6"
     },
     "teardown-refuse.json": {
-      "bytes": 388,
-      "sha256": "b3355ebf87b8f72375d77a02c01ba463c8eb17ba05355d207d15b309d57c3a93"
+      "bytes": 389,
+      "sha256": "55c788a390815f2f56610ce54f7c8fa30ebce83a6c3d0cbf61c783f03faa5281"
     },
     "teardown-reject.json": {
-      "bytes": 388,
-      "sha256": "9b3e2f6d95be3036b8079feabb3c9f2c2b1a7b50b53bef419e45b3e4211c821b"
+      "bytes": 389,
+      "sha256": "05e73f65919c9eeae396f065ee95cf2420286e629235e01c8852fa035c6b68c7"
     }
   },
   "format": 1,

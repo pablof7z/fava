@@ -75,6 +75,12 @@ impl Authenticator {
         if Self::account(&key).is_none() {
             return;
         }
+        // Two queries on one relay need one watch between them. Claiming the
+        // key here, under the same lock the watch releases it with, is what
+        // makes concurrent opens settle on a single watcher.
+        if !self.lock().watching.insert(key.clone()) {
+            return;
+        }
         let owner = self.clone();
         let token = self.cancellation();
         let _ = self
@@ -86,7 +92,12 @@ impl Authenticator {
                 // relay demanding authentication.
                 // Started because a query named this relay, so it lets go when
                 // that query is gone.
-                let _ = owner.watch_session_inner(key, true).await;
+                // A watch that never began releases its claim, so the next
+                // query on this relay can try again rather than inherit a
+                // watcher that does not exist.
+                if owner.watch_session_inner(key.clone(), true).await.is_err() {
+                    owner.lock().watching.remove(&key);
+                }
             });
     }
 
@@ -171,6 +182,9 @@ impl Authenticator {
                     }
                 }
                 let _ = lease.release().await;
+                if release_when_alone {
+                    owner.lock().watching.remove(&watched);
+                }
             });
 
         spawned.map(|_| ()).map_err(WatchError::Register)
