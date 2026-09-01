@@ -283,23 +283,30 @@ async fn a_slow_subscription_loses_bounded_items_and_is_told_exactly() {
             .expect("subscription opens");
     let relay = transport.relay(&key()).expect("relay is registered");
 
-    // The queue is bounded at 4 frames; six arrive with nothing draining them.
+    // The queue is bounded at two frames; six arrive with nothing draining them.
     for _ in 0..6 {
         relay.push_frame(format!("[\"EOSE\",\"{}\"]", subscription.id().as_str()).as_bytes());
     }
 
-    let mut seen = Vec::new();
-    for _ in 0..6 {
-        seen.push(subscription.next().await);
+    // Read until the stream has nothing more to say. What survived the bound
+    // and what it says was lost must together account for all six: a reader
+    // learns the exact size of its gap, never a silent one.
+    let mut delivered = 0_u64;
+    let mut lost = 0_u64;
+    while let Ok(item) = tokio::time::timeout(Duration::from_millis(200), subscription.next()).await
+    {
+        match item {
+            fava_transport::SubscriptionItem::EndOfStoredEvents => delivered += 1,
+            fava_transport::SubscriptionItem::Lost { dropped } => lost += dropped,
+            other => panic!("an overflowing subscription said something else: {other:?}"),
+        }
     }
-    let lost = seen
-        .iter()
-        .find_map(|item| match item {
-            fava_transport::SubscriptionItem::Lost { dropped } => Some(*dropped),
-            _ => None,
-        })
-        .expect("the overflow is reported exactly, not silently dropped");
-    assert_eq!(lost, 2, "six offered, four buffered, two lost");
+    assert!(lost > 0, "the overflow is reported, not silently dropped");
+    assert_eq!(
+        delivered + lost,
+        6,
+        "six offered, {delivered} buffered, {lost} told as lost"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

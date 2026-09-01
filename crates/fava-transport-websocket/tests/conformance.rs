@@ -79,11 +79,31 @@ async fn until(
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn one_physical_session_fans_out_every_inbound_frame_to_every_consumer() {
     let (listener, key) = listener().await;
+    // The session mints its own subscription ids, so the server cannot name one
+    // in advance. It answers the first REQ it is sent, which is the owner's.
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("connection");
         let mut socket = accept_async(stream).await.expect("WebSocket accepts");
+        let first = loop {
+            let message = socket.next().await.expect("client speaks").expect("frame");
+            let Message::Text(text) = message else {
+                continue;
+            };
+            let frame = nostr::message::ClientMessage::from_json(text.as_str())
+                .expect("the client speaks NIP-01");
+            if let nostr::message::ClientMessage::Req {
+                subscription_id, ..
+            } = frame
+            {
+                break subscription_id.into_owned();
+            }
+        };
         socket
-            .send(Message::Text("[\"EOSE\",\"one\"]".into()))
+            .send(Message::Text(
+                nostr::message::RelayMessage::EndOfStoredEvents(std::borrow::Cow::Owned(first))
+                    .as_json()
+                    .into(),
+            ))
             .await
             .expect("server sends");
         tokio::time::sleep(Duration::from_millis(300)).await;
