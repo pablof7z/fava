@@ -546,7 +546,7 @@ fn exhausted_durable_identity_refuses_acceptance_atomically() {
 }
 
 #[test]
-fn schema_v1_refusal_precedes_malformed_row_decode() {
+fn schema_mismatch_refusal_precedes_malformed_row_decode() {
     let path = valid_path("version-before-row");
     let database = Database::create(&path).unwrap();
     let mut transaction = database.begin_write().unwrap();
@@ -555,7 +555,7 @@ fn schema_v1_refusal_precedes_malformed_row_decode() {
         transaction
             .open_table(META)
             .unwrap()
-            .insert("schema_version", 1)
+            .insert("schema_version", u64::MAX)
             .unwrap();
     }
     {
