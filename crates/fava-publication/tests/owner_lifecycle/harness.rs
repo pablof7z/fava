@@ -137,6 +137,7 @@ impl HarnessBuilder {
             self.delivery,
             Arc::new(RefusingTransport),
             self.routers,
+            None,
         )
         .expect("test providers assemble");
         Harness {

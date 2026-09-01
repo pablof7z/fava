@@ -284,6 +284,18 @@ impl FavaBuilder {
             || !self.signers.is_empty()
             || !self.appliers.is_empty();
         let session = Session::new(self.signers)?;
+        // Build the authentication owner first: the observation owner reads
+        // its conclusions, and a relay's demand must have one source.
+        let authentication = match (self.authentication, transport_for_auth) {
+            (Some(policy), Some(transport)) => Some(Authenticator::new(
+                transport,
+                session.clone(),
+                policy,
+                runtime_for_auth,
+            )),
+            (Some(_), None) => return Err(BuildError::MissingAuthenticationTransport),
+            (None, _) => None,
+        };
         let publication = if publication_selected {
             let publisher = self.publisher.ok_or(BuildError::MissingPublisher)?;
             let delivery = self.delivery.ok_or(BuildError::MissingDeliveryPolicy)?;
@@ -301,6 +313,9 @@ impl FavaBuilder {
                 delivery,
                 transport,
                 self.routers.clone(),
+                authentication
+                    .clone()
+                    .map(|owner| Arc::new(owner) as Arc<dyn fava_relay::AuthenticationOutcomes>),
             )
             .map_err(|error| BuildError::Publication(error.to_string()))?;
             publication
@@ -309,18 +324,6 @@ impl FavaBuilder {
             Some(publication)
         } else {
             None
-        };
-        // Build the authentication owner first: the observation owner reads
-        // its conclusions, and a relay's demand must have one source.
-        let authentication = match (self.authentication, transport_for_auth) {
-            (Some(policy), Some(transport)) => Some(Authenticator::new(
-                transport,
-                session.clone(),
-                policy,
-                runtime_for_auth,
-            )),
-            (Some(_), None) => return Err(BuildError::MissingAuthenticationTransport),
-            (None, _) => None,
         };
         let mut observer = Observer::new(event_source, write_source, evaluator)
             .with_session(session.clone())

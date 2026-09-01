@@ -42,6 +42,10 @@ pub struct Publication {
     delivery: Arc<dyn DeliveryPolicy>,
     transport: Arc<dyn Transport>,
     routers: Arc<Vec<Arc<dyn Router>>>,
+    /// What the authentication owner determined about each relay session, when
+    /// one was assembled. Read, never derived: an attempt whose challenge is
+    /// still awaiting a person has not been denied.
+    authentication: Option<Arc<dyn fava_relay::AuthenticationOutcomes>>,
     cancellations: Arc<Mutex<BTreeMap<ReceiptId, watch::Sender<bool>>>>,
     // Rejected late signer completions: receipt, write, generation, event, reason.
     // Deliberately existing identity values rather than a new architectural noun.
@@ -67,10 +71,12 @@ impl Publication {
         delivery: Arc<dyn DeliveryPolicy>,
         transport: Arc<dyn Transport>,
         routers: Vec<Arc<dyn Router>>,
+        authentication: Option<Arc<dyn fava_relay::AuthenticationOutcomes>>,
     ) -> Result<Self, PublicationError> {
         let appliers = Self::index_appliers(appliers)?;
         Ok(Self {
             store,
+            authentication,
             event_source,
             evaluator,
             appliers: Arc::new(appliers),

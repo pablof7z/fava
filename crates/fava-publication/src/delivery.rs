@@ -181,22 +181,53 @@ impl Publication {
             event_id,
             session,
             attempt_number,
-            delivery_outcome(outcome),
+            self.delivery_outcome(outcome, session),
         );
     }
 }
 
-fn delivery_outcome(outcome: PublishOutcome) -> RelayDeliveryOutcome {
-    match outcome {
-        PublishOutcome::Acknowledged { message } => RelayDeliveryOutcome::Acknowledged { message },
-        PublishOutcome::Rejected { message } => RelayDeliveryOutcome::Rejected { message },
-        // The owner records only what the publisher observed. `GivenUp` is a policy
-        // noun the owner must never invent, and this outcome is reached after handoff,
-        // so it cannot be reported as a definite pre-handoff failure.
-        PublishOutcome::AuthenticationRequired => RelayDeliveryOutcome::AuthenticationDenied {
-            reason: "relay demanded authentication this attempt did not satisfy".to_owned(),
-        },
-        PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },
-        PublishOutcome::OutcomeUnknown { reason } => RelayDeliveryOutcome::Unknown { reason },
+impl Publication {
+    /// What the owner records for one attempt's outcome.
+    ///
+    /// A relay demanding authentication is a denial only when nothing is being
+    /// done about it. If the challenge on that session is awaiting a person's
+    /// answer, the attempt is held rather than failed: the dialog is still open,
+    /// and answering it is exactly what makes the next attempt succeed. This is
+    /// the same shape as a write parked awaiting a signer.
+    fn delivery_outcome(
+        &self,
+        outcome: PublishOutcome,
+        session: &fava_relay::RelaySessionKey,
+    ) -> RelayDeliveryOutcome {
+        match outcome {
+            PublishOutcome::Acknowledged { message } => {
+                RelayDeliveryOutcome::Acknowledged { message }
+            }
+            PublishOutcome::Rejected { message } => RelayDeliveryOutcome::Rejected { message },
+            // The owner records only what the publisher observed. `GivenUp` is a policy
+            // noun the owner must never invent, and this outcome is reached after handoff,
+            // so it cannot be reported as a definite pre-handoff failure.
+            PublishOutcome::AuthenticationRequired => {
+                let awaiting = self.authentication.as_ref().is_some_and(|outcomes| {
+                    matches!(
+                        outcomes.state(session),
+                        Some(fava_relay::AuthenticationState::AwaitingAnswer)
+                    )
+                });
+                if awaiting {
+                    RelayDeliveryOutcome::Retryable {
+                        reason: "relay demanded authentication and a person is being asked"
+                            .to_owned(),
+                    }
+                } else {
+                    RelayDeliveryOutcome::AuthenticationDenied {
+                        reason: "relay demanded authentication this attempt did not satisfy"
+                            .to_owned(),
+                    }
+                }
+            }
+            PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },
+            PublishOutcome::OutcomeUnknown { reason } => RelayDeliveryOutcome::Unknown { reason },
+        }
     }
 }
