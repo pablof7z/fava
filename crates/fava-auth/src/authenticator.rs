@@ -70,6 +70,12 @@ impl State {
             .or_insert_with(|| SessionAuthentication::new(key.clone()))
     }
 
+    /// Drop every deferred demand already outstanding for this exact session
+    /// and connection.
+    pub(crate) fn drop_deferred_for(&mut self, session: &RelaySessionIdentity) {
+        self.deferred.retain(|_, demand| &demand.session != session);
+    }
+
     /// Drop every deferred demand belonging to a generation that is gone.
     pub(crate) fn drop_deferred_before(
         &mut self,
@@ -187,8 +193,16 @@ impl Authenticator {
     }
 
     /// Retain a demand a policy deferred, and signal the change.
+    ///
+    /// One connection is one conversation. A relay repeating its challenge has
+    /// not asked a second question, and nobody can answer one it has already
+    /// superseded, so the outstanding ask is replaced rather than joined.
+    /// Without this a relay that re-challenges under a deferring policy grows
+    /// the set without bound: the attempt ceiling counts attempts, and a
+    /// deferred demand never makes one.
     pub(crate) fn defer(&self, demand: &AuthenticationDemand) -> AuthenticationDemandId {
         let mut guard = self.lock();
+        guard.drop_deferred_for(&demand.session);
         let id = guard.mint_id();
         guard.deferred.insert(id, demand.clone());
         guard.entry(&demand.session.key).resolved(

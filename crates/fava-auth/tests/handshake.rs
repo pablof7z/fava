@@ -304,3 +304,24 @@ async fn a_session_reaching_a_verdict_wakes_a_watcher() {
     );
     assert_eq!(rig.state(), Some(AuthenticationState::Accepted));
 }
+
+#[tokio::test]
+async fn a_relay_that_re_challenges_asks_a_person_once() {
+    let rig = Rig::deferring().await;
+
+    for nonce in ["nonce-1", "nonce-2", "nonce-3"] {
+        rig.relay().push_frame(&challenge_frame(nonce));
+        rig.settle().await;
+    }
+
+    // One connection is one conversation. A relay repeating itself has not
+    // asked three questions, and a person cannot answer a challenge that has
+    // already been superseded.
+    let pending = rig.authenticator().pending();
+    assert_eq!(
+        pending.len(),
+        1,
+        "a re-challenge replaces the outstanding ask, got {pending:?}"
+    );
+    assert_eq!(rig.state(), Some(AuthenticationState::AwaitingAnswer));
+}
