@@ -60,33 +60,33 @@
     }
   ],
   "captures": {
-    "accept-event": "483abec000b07e2ffd5e450036fe37ea81317c30408394ca14488e32381da509",
+    "accept-event": "dad5c943c483ba4c6c03e180e6f0afa26e32ffb560eca62b7b951c28857d77f3",
     "accept-write": "2",
-    "cross-event": "a8149592022cd7a2316244691c3f958fbb835a2ceaa7aab24eba5ef413d79ed1",
+    "cross-event": "415da381a623fafe42d632609c7c9b11caca5c46abae2da54379da0e1b8cec99",
     "cross-write": "7",
     "decline-write": "4",
-    "defer-event": "47e17e7ea9639aa05da225616ae99910dc310011e4989770092c8a79a8fcade3",
+    "defer-event": "34fb26456a0f8de37c37461eccf9cf32be5abda3c211ea9762455f679be4eb74",
     "defer-write": "8",
     "failed-write": "3",
     "pending-id": "1",
-    "pub-event": "60c69df3ebc171d76616fba886a9f6babfd1bbc70635af714fb1fb1eee8d06ef",
+    "pub-event": "4e97d41ab4d94bf4032228c4623792cdd547d7ae56c036287456b665165749f2",
     "pub-write": "1",
     "refuse-write": "6",
     "reject-write": "5"
   },
   "fixtures": {
     "app": "relay-auth 0.1.0",
-    "app_sha256": "c4438496242e778c7e34e78126027943d79efbd1cd0d03f0dc3b69febfc31103",
+    "app_sha256": "848ce8078df4b1568a4099ce5234c5414c557cddbd44d139f6fdbc5d8b2553ea",
     "authenticating_relay": "nostr-rs-relay 0.8.12",
     "authenticating_relay_sha256": "772530158c5562ccafabd4d93aa2ac3a686b2203cbeec1ce313791b4e1fc28b9",
     "enforcing_relay": "examples/crates/e2e-support/live/nip42_relay.py (harness-owned)",
-    "nip01_wire_sha256": "20401f8c07af973c831dfa4a9311eb923ebd9488157541766641db8ba8166144",
+    "nip01_wire_sha256": "e1fd85105ae14151eec551384a3aec7eeb16ee60435115fac2cba84f9f6d982d",
     "scenario_sha256": "03682de39be8b5126305d0cd8886e1b00914f466bf79b243558e234bc000c86d"
   },
   "relays": {
-    "accept": "ws://127.0.0.1:59697",
-    "nostr": "ws://127.0.0.1:59696",
-    "refuse": "ws://127.0.0.1:59699",
-    "reject": "ws://127.0.0.1:59698"
+    "accept": "ws://127.0.0.1:50185",
+    "nostr": "ws://127.0.0.1:50184",
+    "refuse": "ws://127.0.0.1:50187",
+    "reject": "ws://127.0.0.1:50186"
   }
 }
