@@ -9,9 +9,9 @@
 ## 2. Persist it
 
 - [x] 2.1 Bump `SCHEMA_VERSION` from 4 to 5 in `crates/fava-write-store-redb/src/schema.rs`; verify `redb_schema_mismatch_refuses_without_fallback` still refuses a store stamped with a different version
-- [ ] 2.2 Refuse reconstruction of a stored row whose access authority is absent or malformed, rather than defaulting it to public; verify tests cover each and fail when the check is removed
-- [ ] 2.3 Refuse reconstruction of a stored row whose authority contradicts its routed destinations; verify a test tampers with one and asserts reconstruction refuses rather than choosing either
-- [ ] 2.4 Extend the four row-mutation recovery tests with a tampered access field; verify each new case fails when its check is removed
+- [x] 2.2 Refuse reconstruction of a stored row whose access authority is absent or malformed, rather than defaulting it to public; verify tests cover each and fail when the check is removed
+- [x] 2.3 Refuse reconstruction of a stored row whose authority contradicts its routed destinations; verify a test tampers with one and asserts reconstruction refuses rather than choosing either
+- [x] 2.4 Extend the four row-mutation recovery tests with a tampered access field; verify each new case fails when its check is removed
 - [x] 2.5 Rename those four tests to drop the `schema_v4_` prefix, which reads as though they test an earlier schema version when they mutate rows in the current one; verify the renamed tests still run and pass
 
 ## 3. Prove it end to end

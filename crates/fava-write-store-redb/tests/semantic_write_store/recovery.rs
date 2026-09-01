@@ -47,6 +47,67 @@ fn ordered_explicit_route_survives_reopen_with_one_lane_per_identity() {
 }
 
 #[test]
+fn row_mutation_refuses_an_access_authority_that_cannot_be_trusted() {
+    // Absent. The field has no default, so a row without it does not decode --
+    // reconstruction refuses rather than silently treating the write as public.
+    let absent_path = terminal_no_destination_path("absent-access");
+    mutate_row(&absent_path, |row| {
+        row.pointer_mut("/receipt")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("the receipt is an object")
+            .remove("access");
+    });
+    let absent = RedbWriteStore::open(absent_path)
+        .err()
+        .expect("a write with no recorded authority refuses");
+
+    // Malformed. Same door: an authority that cannot be decoded is not an
+    // authority, and defaulting it would send the write out as public work.
+    let malformed_path = terminal_no_destination_path("malformed-access");
+    mutate_row(&malformed_path, |row| {
+        set(
+            row,
+            "/receipt/access",
+            serde_json::json!("not an authority"),
+        );
+    });
+    let malformed = RedbWriteStore::open(malformed_path)
+        .err()
+        .expect("a write whose authority cannot be decoded refuses");
+
+    for error in [absent, malformed] {
+        assert!(
+            !error.to_string().is_empty(),
+            "the refusal names what it could not read"
+        );
+    }
+
+    // Contradictory. The authority and the sessions the write was routed to are
+    // two records of one decision; choosing either would send work somewhere it
+    // was never accepted for.
+    let relay = RelayUrl::parse("wss://contradiction.example").unwrap();
+    let other = nostr::key::Keys::generate().public_key();
+    let (contradiction_path, _first, _second) = explicit_path("contradictory-access");
+    mutate_row(&contradiction_path, |row| {
+        set(
+            row,
+            "/receipt/access",
+            serde_json::to_value(fava_relay::RelayAccess::Authenticated(other)).unwrap(),
+        );
+    });
+    let _ = relay;
+    let contradiction = RedbWriteStore::open(contradiction_path)
+        .err()
+        .expect("an authority contradicting its destinations refuses");
+    assert!(
+        contradiction
+            .to_string()
+            .contains("contradicts its destination"),
+        "unexpected contradiction refusal: {contradiction}"
+    );
+}
+
+#[test]
 fn row_mutation_refuses_unsound_ordered_route_shapes() {
     let empty_path = terminal_no_destination_path("empty-explicit-route");
     mutate_row(&empty_path, |row| {

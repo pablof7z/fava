@@ -125,6 +125,21 @@ pub(super) fn load(
                 "durable receipt identity does not match its row".to_owned(),
             ));
         }
+        // A write's authority and the sessions it was routed to are two records
+        // of one decision. If they disagree the row was tampered with or written
+        // by a build with a different idea of the shape, and choosing either one
+        // sends work somewhere it was never accepted for.
+        if let Some(mismatch) = row
+            .receipt
+            .desired_destinations
+            .iter()
+            .find(|session| session.access != row.receipt.access)
+        {
+            return Err(WriteStoreError::Refused(format!(
+                "durable write authority {:?} contradicts its destination {:?}",
+                row.receipt.access, mismatch.access
+            )));
+        }
         if let Some(semantic) = row.semantic {
             if row.receipt.current.publication.revision_source
                 != semantic.current_source.map(|(id, _)| id)
