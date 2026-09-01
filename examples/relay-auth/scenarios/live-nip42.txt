@@ -1,0 +1,60 @@
+relay add nostr ws://127.0.0.1:18090
+relay add accept ws://127.0.0.1:18091
+relay add reject ws://127.0.0.1:18092
+relay add refuse ws://127.0.0.1:18093
+account import alice 0000000000000000000000000000000000000000000000000000000000000001
+account import bob 0000000000000000000000000000000000000000000000000000000000000002
+account import carol 0000000000000000000000000000000000000000000000000000000000000003
+policy set authenticate
+publish public 1 "public note on nostr" nostr
+capture pub-write receipt_id
+receipt wait ${pub-write}
+capture pub-event event_id
+publish as:alice 1 "alice accepted" accept
+capture accept-write receipt_id
+receipt wait ${accept-write}
+capture accept-event event_id
+auth state accept as:alice
+account add-pubkey dave e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13
+publish as:dave for alice 1 "alices note via daves unsigned session" refuse
+capture failed-write receipt_id
+receipt wait ${failed-write}
+auth state refuse as:dave
+account switch alice
+policy set decline
+publish as:carol 1 "carol declines" reject
+capture decline-write receipt_id
+receipt wait ${decline-write}
+auth state reject as:carol
+policy set authenticate
+publish as:bob 1 "bob rejected" reject
+capture reject-write receipt_id
+receipt wait ${reject-write}
+auth state reject as:bob
+publish as:alice 1 "alice still refused" refuse
+capture refuse-write receipt_id
+receipt wait ${refuse-write}
+auth state refuse as:alice
+publish as:alice for bob 2 "bobs note via alices session" accept
+capture cross-write receipt_id
+receipt wait ${cross-write}
+capture cross-event event_id
+query open accept-read as:alice 1 accept
+query wait accept-read 1
+query snapshot accept-read
+query close accept-read
+policy set defer
+publish as:alice 3 "alice deferred on nostr" nostr
+capture defer-write receipt_id
+auth pending
+capture pending-id first_id
+auth state nostr as:alice
+auth answer ${pending-id} authenticate
+receipt wait ${defer-write}
+capture defer-event event_id
+auth state nostr as:alice
+routes
+diagnostics
+receipt list
+dump
+quit

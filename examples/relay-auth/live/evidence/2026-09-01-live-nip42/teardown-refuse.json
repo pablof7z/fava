@@ -1,0 +1,16 @@
+{
+  "descendants_survived_parent": false,
+  "group_alive_before_teardown": true,
+  "group_gone": true,
+  "kill_sent": false,
+  "output_overflowed": false,
+  "output_threads_joined": true,
+  "parent_exited_before_teardown": false,
+  "permission_denied": false,
+  "pid": 82948,
+  "returncode": -15,
+  "stderr_bytes": 0,
+  "stdout_bytes": 27,
+  "teardown_error": false,
+  "term_sent": true
+}

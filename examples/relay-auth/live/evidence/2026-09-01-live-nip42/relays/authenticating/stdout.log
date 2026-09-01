@@ -1,0 +1,29 @@
+[2m2026-09-01T03:49:09.747564Z[0m [32m INFO[0m [2mnostr_rs_relay[0m[2m:[0m Starting up from main
+[2m2026-09-01T03:49:09.749936Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m listening on: 127.0.0.1:59696
+[2m2026-09-01T03:49:09.757937Z[0m [32m INFO[0m [2mnostr_rs_relay::repo::sqlite[0m[2m:[0m Built a connection pool "writer" (min=0, max=2)
+[2m2026-09-01T03:49:09.758204Z[0m [32m INFO[0m [2mnostr_rs_relay::repo::sqlite[0m[2m:[0m Built a connection pool "maintenance" (min=0, max=2)
+[2m2026-09-01T03:49:09.758563Z[0m [32m INFO[0m [2mnostr_rs_relay::repo::sqlite[0m[2m:[0m Built a connection pool "reader" (min=4, max=8)
+[2m2026-09-01T03:49:09.759657Z[0m [32m INFO[0m [2mnostr_rs_relay::repo::sqlite_migration[0m[2m:[0m DB version = 0
+[2m2026-09-01T03:49:09.761288Z[0m [32m INFO[0m [2mnostr_rs_relay::repo::sqlite_migration[0m[2m:[0m database pragma/schema initialized to v18, and ready
+[2m2026-09-01T03:49:09.761297Z[0m [32m INFO[0m [2mnostr_rs_relay::repo::sqlite_migration[0m[2m:[0m All migration scripts completed successfully.  Welcome to v18.
+[2m2026-09-01T03:49:09.761675Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m db writer created
+[2m2026-09-01T03:49:09.762144Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m control message listener started
+[2m2026-09-01T03:49:09.783994Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m new client connection (cid: e88d89e7, ip: "127.0.0.1")
+[2m2026-09-01T03:49:09.784004Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m cid: e88d89e7, origin: "<unspecified>", user-agent: "<unspecified>"
+[2m2026-09-01T03:49:09.787449Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m stopping client connection (cid: e88d89e7, ip: "127.0.0.1", sent: 0 events, recv: 0 events, connected: 3.676417ms)
+[2m2026-09-01T03:49:09.856728Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m new client connection (cid: 5d2846db, ip: "127.0.0.1")
+[2m2026-09-01T03:49:09.856738Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m cid: 5d2846db, origin: "<unspecified>", user-agent: "<unspecified>"
+[2m2026-09-01T03:49:09.864997Z[0m [32m INFO[0m [2mnostr_rs_relay::db[0m[2m:[0m persisted event: "60c69df3" (kind: 1) from: "f9308a01" in: 225.667µs (IP: "127.0.0.1")
+[2m2026-09-01T03:49:09.865188Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m stopping client connection (cid: 5d2846db, ip: "127.0.0.1", sent: 1 events, recv: 0 events, connected: 8.471333ms)
+[2m2026-09-01T03:49:10.020766Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m new client connection (cid: 410cc32e, ip: "127.0.0.1")
+[2m2026-09-01T03:49:10.020774Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m cid: 410cc32e, origin: "<unspecified>", user-agent: "<unspecified>"
+[2m2026-09-01T03:49:10.046274Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m client is authenticated: (cid: 410cc32e, pubkey: "79be667e")
+[2m2026-09-01T03:49:10.046622Z[0m [32m INFO[0m [2mnostr_rs_relay::db[0m[2m:[0m persisted event: "47e17e7e" (kind: 3) from: "79be667e" in: 285.375µs (IP: "127.0.0.1")
+[2m2026-09-01T03:49:10.047644Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m stopping client connection (cid: 410cc32e, ip: "127.0.0.1", sent: 1 events, recv: 0 events, connected: 26.884667ms)
+[2m2026-09-01T03:49:10.049482Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m new client connection (cid: 6ee082ea, ip: "127.0.0.1")
+[2m2026-09-01T03:49:10.049485Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m cid: 6ee082ea, origin: "<unspecified>", user-agent: "<unspecified>"
+[2m2026-09-01T03:49:10.049754Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m stopping client connection (cid: 6ee082ea, ip: "127.0.0.1", sent: 0 events, recv: 1 events, connected: 275.375µs)
+[2m2026-09-01T03:49:10.054594Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m new client connection (cid: 38e27b77, ip: "127.0.0.1")
+[2m2026-09-01T03:49:10.054596Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m cid: 38e27b77, origin: "<unspecified>", user-agent: "<unspecified>"
+[2m2026-09-01T03:49:10.054935Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m stopping client connection (cid: 38e27b77, ip: "127.0.0.1", sent: 0 events, recv: 1 events, connected: 344.166µs)
+[2m2026-09-01T03:49:10.154834Z[0m [32m INFO[0m [2mnostr_rs_relay::server[0m[2m:[0m Shutting down webserver due to SIGTERM

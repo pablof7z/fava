@@ -1,0 +1,24 @@
+relay add dead ws://127.0.0.1:1
+account import alice 0000000000000000000000000000000000000000000000000000000000000001
+account import bob 0000000000000000000000000000000000000000000000000000000000000002
+policy set authenticate
+auth pending
+auth state dead as:alice
+auth state dead public
+policy set decline
+policy set defer
+query open pub public 1 dead
+query snapshot pub
+query open mine as:alice 1 dead
+query snapshot mine
+query close pub
+query close mine
+routes
+diagnostics
+receipt list
+account switch bob
+diagnostics
+account clear
+help
+dump
+quit

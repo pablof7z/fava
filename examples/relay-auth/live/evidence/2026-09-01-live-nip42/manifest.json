@@ -1,0 +1,74 @@
+{
+  "files": {
+    "app/stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "app/stdout.log": {
+      "bytes": 17699,
+      "sha256": "0a8fe43c5a5acf5dcbb5ed8a6c19201f27dc970c4fbea0875e5bb22a2c69f24d"
+    },
+    "relays/accept/stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "relays/accept/stdout.log": {
+      "bytes": 27,
+      "sha256": "67a9c2ad38a833257c24c3ba60eeb25cca1913f2bbdace523e26b69540c452cf"
+    },
+    "relays/authenticating/config.toml": {
+      "bytes": 371,
+      "sha256": "32dc9617591303841385e7fb3a9b562b73446403d292ae0edb7ee2c58c2b2471"
+    },
+    "relays/authenticating/stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "relays/authenticating/stdout.log": {
+      "bytes": 4539,
+      "sha256": "c68711b8cf0fa9e5af25ec291370267813afc1d1bd32a914f79cc6f2839b6819"
+    },
+    "relays/refuse/stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "relays/refuse/stdout.log": {
+      "bytes": 27,
+      "sha256": "1aacc3d8509f346d15cd6de337574e436ea244c84f33fcad699545c265a3a2b1"
+    },
+    "relays/reject/stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "relays/reject/stdout.log": {
+      "bytes": 27,
+      "sha256": "343a2a776a4d17c3627627a2246be26e44f97d5cc797159f764dc19781c2305b"
+    },
+    "result.json": {
+      "bytes": 2923,
+      "sha256": "49995b7cbbdc0154d1576ab33643f4c7ae4e09f12fb2dec1939a9b32bbaaddeb"
+    },
+    "run.jsonl": {
+      "bytes": 18692,
+      "sha256": "362c12d301454ed507043be9b40f97ff75169efd77e5b9f427efbb350ae6d6d7"
+    },
+    "teardown-accept.json": {
+      "bytes": 389,
+      "sha256": "d4e7e86062e3b090f3c858b35bc6db69d26f42b4a60c548f4304b3fadf11e5d8"
+    },
+    "teardown-nostr.json": {
+      "bytes": 389,
+      "sha256": "d121d9b17049c5b5b354435324abdd5d48815cedc67bfbc196285bc2f00fa331"
+    },
+    "teardown-refuse.json": {
+      "bytes": 389,
+      "sha256": "0fb53d94dc17723c9ef2f87df649eb788bd3824909800991d8926cee4b58b8a6"
+    },
+    "teardown-reject.json": {
+      "bytes": 389,
+      "sha256": "2f54dbf6634fea41bdc9dafbbc1789f285d5f8ac1a6c12587830d9ebe0d0054b"
+    }
+  },
+  "format": 1,
+  "scenario": "live-nip42.txt"
+}
