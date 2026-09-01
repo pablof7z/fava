@@ -72,7 +72,11 @@ impl App {
         self.reserve_group(&id)?;
         let author = session.selected_account()?.public_key();
         let builder = create_group(&group).map_err(domain_error)?;
-        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
+        let write = self
+            .fava
+            .with_account(author)
+            .publish(builder)
+            .map_err(domain_error)?;
         let result = Self::publication_result(
             "group-created",
             format!("created and selected {id}"),
@@ -156,7 +160,11 @@ impl App {
         let edit = metadata_edit(arguments, prompt)?;
         let author = session.selected_account()?.public_key();
         let builder = edit_metadata(&group, &edit).map_err(domain_error)?;
-        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
+        let write = self
+            .fava
+            .with_account(author)
+            .publish(builder)
+            .map_err(domain_error)?;
         Self::publication_result(
             "group-edited",
             format!("published metadata edit for {}", group.id()),
@@ -183,7 +191,11 @@ impl App {
         let group = self.selected_group()?.clone();
         let author = session.selected_account()?.public_key();
         let builder = invite(&group, &code).map_err(domain_error)?;
-        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
+        let write = self
+            .fava
+            .with_account(author)
+            .publish(builder)
+            .map_err(domain_error)?;
         Self::publication_result(
             "group-invited",
             format!("published invite for {}", group.id()),
@@ -207,13 +219,17 @@ impl App {
         }
         let group = self.selected_group()?.clone();
         let author = session.selected_account()?.public_key();
-        let builder = join_request(&group, arguments.first().map(String::as_str))
-            .map_err(domain_error)?;
+        let builder =
+            join_request(&group, arguments.first().map(String::as_str)).map_err(domain_error)?;
         let builder = match arguments.get(1) {
             Some(reason) => builder.content(reason),
             None => builder,
         };
-        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
+        let write = self
+            .fava
+            .with_account(author)
+            .publish(builder)
+            .map_err(domain_error)?;
         Self::publication_result(
             "group-join-requested",
             format!("published join request for {}", group.id()),
@@ -241,7 +257,11 @@ impl App {
                 let group = self.selected_group()?.clone();
                 let author = session.selected_account()?.public_key();
                 let builder = put_user(&group, &[public_key], &roles).map_err(domain_error)?;
-                let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
+                let write = self
+                    .fava
+                    .with_account(author)
+                    .publish(builder)
+                    .map_err(domain_error)?;
                 Self::publication_result(
                     "group-member-added",
                     format!("published member addition for {}", group.id()),
@@ -261,7 +281,11 @@ impl App {
                 let group = self.selected_group()?.clone();
                 let author = session.selected_account()?.public_key();
                 let builder = remove_user(&group, &[public_key]).map_err(domain_error)?;
-                let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
+                let write = self
+                    .fava
+                    .with_account(author)
+                    .publish(builder)
+                    .map_err(domain_error)?;
                 Self::publication_result(
                     "group-member-removed",
                     format!("published member removal for {}", group.id()),
@@ -279,7 +303,11 @@ impl App {
         let group = self.selected_group()?.clone();
         let author = session.selected_account()?.public_key();
         let builder = leave_group(&group).map_err(domain_error)?;
-        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
+        let write = self
+            .fava
+            .with_account(author)
+            .publish(builder)
+            .map_err(domain_error)?;
         Self::publication_result(
             "group-left",
             format!("published leave request for {}", group.id()),
@@ -312,7 +340,11 @@ impl App {
             })?;
         let author = session.selected_account()?.public_key();
         let builder = delete_group(&group).map_err(domain_error)?;
-        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
+        let write = self
+            .fava
+            .with_account(author)
+            .publish(builder)
+            .map_err(domain_error)?;
         let result = Self::publication_result(
             "group-deleted",
             format!("deleted {id}"),

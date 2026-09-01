@@ -144,7 +144,7 @@ dump
 The first saved-list relay is the explicit publication/query relay for the
 account's kind-10009 list; it is deliberately distinct from the active group's
 NIP-29 host. Saved-list changes use the semantic applier through
-`Fava::to(...).by(...).publish(edit)`, then require bounded
+`Fava::to(...).with_account(...).publish(edit)`, then require bounded
 `all_acknowledged()` evidence. `receipt list` reports Fava's current open
 obligations; `receipt show` reads the exact retained receipt by id. `routes`
 is an inert read-route preview. `diagnostics` reports bounded category counts,

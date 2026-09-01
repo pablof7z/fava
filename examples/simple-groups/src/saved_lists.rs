@@ -273,7 +273,7 @@ impl App {
             .fava
             .to(vec![relay])
             .map_err(domain_error)?
-            .by(author)
+            .with_account(author)
             .publish(edit)
             .map_err(domain_error)?;
         Self::publication_result(

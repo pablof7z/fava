@@ -78,7 +78,11 @@ impl App {
             None => builder,
         };
         let builder = builder.simple_group(&group).map_err(domain_error)?;
-        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
+        let write = self
+            .fava
+            .with_account(author)
+            .publish(builder)
+            .map_err(domain_error)?;
         if expect_rejection {
             Self::expected_rejection_result(
                 "group-event-rejected",
@@ -122,7 +126,11 @@ impl App {
         let group = self.selected_group()?.clone();
         let author = session.selected_account()?.public_key();
         let builder = delete_event(&group, &event_id).map_err(domain_error)?;
-        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
+        let write = self
+            .fava
+            .with_account(author)
+            .publish(builder)
+            .map_err(domain_error)?;
         Self::publication_result(
             "group-event-deleted",
             format!("published event deletion for {}", group.id()),
