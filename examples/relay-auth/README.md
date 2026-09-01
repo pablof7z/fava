@@ -212,9 +212,36 @@ found five more, all confirmed against the exact cited source:
    later. A narrower two-variant answer type would remove both the runtime
    error and the panic path.
 
-None of the seven is app-owned ceremony this shell should quietly absorb;
-all are recorded here with their exact evidence for Fava's owner to decide
-on.
+A second independent review, after the fixes above, found three more:
+
+8. **Fixed.** Under a deferring policy the outstanding-demand set grew
+   without bound. The attempt ceiling counts attempts, and a deferred demand
+   never makes one, so a relay re-challenging on one connection minted a
+   fresh demand every time and only a replaced connection retired them.
+   Deferring now replaces the outstanding ask rather than joining it
+   (`crates/fava-auth/src/authenticator.rs`).
+9. **`RelaySourceState::AuthenticationRequired` names a demand but carries
+   any verdict.** `fava-observe`'s `publish_authentication`
+   (`crates/fava-observe/src/facts.rs`) wraps whatever the owner concluded,
+   `Accepted` included, and `record_state`
+   (`crates/fava-observe/src/registry.rs`) assigns it unconditionally. So a
+   query that connected, authenticated and reached EOSE reports its relay as
+   `AuthenticationRequired { state: Accepted }` -- the happy path reads as a
+   blocked one. The variant carries the right thing under the wrong name;
+   `crates/fava-query/src/evidence.rs`'s doc ("the relay demands NIP-42
+   authentication for this request") is what no longer matches. Renaming a
+   public variant needs the owner's decision.
+10. **`watch_session` silently does nothing for a public relay.**
+   `crates/fava-auth/src/authenticator/session_watch.rs` returns `Ok(())`
+   when the key's access is `Public`, so a caller that built the wrong key
+   gets success and no watch, and `state()`/`authenticated()` afterwards are
+   indistinguishable from "nothing known yet". Taking the relay and the
+   account separately would make the key unbuildable-wrong, but that is a
+   signature change on public API.
+
+Nothing here is app-owned ceremony this shell should quietly absorb. Four
+were fixed in the library; the rest are recorded with their exact evidence
+for Fava's owner to decide on.
 
 ## Live proof
 
