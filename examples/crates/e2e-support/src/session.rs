@@ -275,6 +275,20 @@ impl E2eSession {
         self.selected_account.as_deref()
     }
 
+    /// Resolve one application-owned account alias, whether or not it is
+    /// currently selected.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShellError::UnknownAccount`] when the alias has not been added.
+    pub fn account(&self, alias: &str) -> Result<&Account, ShellError> {
+        self.accounts
+            .get(alias)
+            .ok_or_else(|| ShellError::UnknownAccount {
+                alias: alias.to_owned(),
+            })
+    }
+
     /// Resolve one application-owned relay alias.
     ///
     /// # Errors
