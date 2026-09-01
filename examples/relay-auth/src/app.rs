@@ -26,21 +26,16 @@ pub(crate) struct App {
     observations: BTreeMap<String, Observation>,
     // Sessions this app has already told the `Authenticator` to watch.
     //
-    // `Authenticator::watch_session` is meant to be called once per session
-    // and held: its own doc says the watch "holds its session until the
-    // session itself ends". Calling it again on a still-live connection is
-    // not a no-op, though: `SessionAuthentication::reconnected` -- reached
-    // through `watch_session_inner`'s unconditional `guard.entry(&key).
-    // reconnected(identity.connection)` -- resets state to `None` even when
-    // the generation is unchanged (`state.rs` only guards this for
-    // `resolved`/`challenged`, not `reconnected`). A second watch on an
-    // already-`Accepted`/`Declined`/`Rejected` session silently wipes that
-    // verdict, and a relay that (like this app's own harness relay, and many
-    // real ones) challenges once per connection never sends a second
-    // challenge to repopulate it -- the session is then stuck reporting
-    // `unknown` forever. This set is the app-owned workaround: watch each
-    // key exactly once. See the README for the full write-up; this is a
-    // Fava correctness gap, not settled app-shell ceremony.
+    // `Authenticator::watch_session` is the standing kind: its watch holds the
+    // session until the session itself ends, and asking for one twice gets two
+    // of them. Fava keeps one query-driven watch per key by itself, but not
+    // this one, because asking directly is an explicit request for a watch
+    // that never lets go. Calling it once per key is how this app avoids a
+    // second lease that nothing will ever release.
+    //
+    // A second watch no longer wipes an existing verdict -- that was a real
+    // Fava bug this app surfaced, fixed by guarding `reconnected` on a changed
+    // connection.
     watched_sessions: std::collections::BTreeSet<RelaySessionKey>,
 }
 
@@ -521,9 +516,8 @@ impl App {
                 access: RelayAccess::Authenticated(account),
             };
             if !self.watched_sessions.insert(key.clone()) {
-                // Already watched for the life of this process; see the
-                // field doc on `watched_sessions` for why a second watch is
-                // actively harmful, not merely redundant.
+                // A standing watch is already held for this key; see the
+                // field doc on `watched_sessions`.
                 continue;
             }
             block_on(authenticator.watch_session(key.clone()))
