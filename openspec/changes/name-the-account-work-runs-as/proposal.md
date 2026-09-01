@@ -12,7 +12,7 @@ The ground has already shifted underneath it. `authorless-event-builder` landed:
 
 - **BREAKING** Replace `Fava::by(author)` with `Fava::with_account(public_key)`, which names the account work runs as: the relay-session access authority for both reads and writes, and the author of a payload that carries none.
 - **BREAKING** Delete `AuthorlessPayload`. `with_account(alice).publish(builder.by(bob))` publishes Bob's event over Alice's connection, which is the case the marker existed to reject.
-- **BREAKING** Remove `Query::with_relay_access` from the public surface. One verb names the account, for reads and writes alike, rather than one verb per path.
+- One verb names the account for reads and writes alike: a selection opens a query as well as publishing. `Query::with_relay_access` stays, because a router uses it to forward the authority its request was handed (`crates/fava-router-outbox/src/lib.rs:51`) and routers are a replaceable boundary that works through public contracts. It is a router's mechanism, not an application's verb.
 - Resolve the author of a payload that carries none in one stated order: the payload's own author, then the selected account, then `Session::current_account()`. A payload with no author and no account to fall back on is refused before acceptance rather than accepted and stranded.
 - Keep the two facts separate in the types, not merely in the docs: the selected account reaches the relay session key, and the payload's author reaches the event. Nothing copies one into the other.
 

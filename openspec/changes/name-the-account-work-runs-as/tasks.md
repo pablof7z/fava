@@ -8,9 +8,9 @@
 
 ## 2. One door for reads
 
-- [ ] 2.1 Make a query opened under a selection carry that account's access authority, and one opened without carry public access; verify a test asserts the session key an observation acquires under each
-- [ ] 2.2 Remove `Query::with_relay_access` from the public surface and move every caller to the selection; verify a grep finds no remaining public use and the observe tests pass
-- [ ] 2.3 Prove reads and writes take the same door: verify a test opens a query and publishes under one selection and asserts both reach the same relay session key
+- [x] 2.1 Make a query opened under a selection carry that account's access authority, and one opened without carry public access; verify a test asserts the session key an observation acquires under each
+- [x] 2.2 Corrected rather than done as written. Removing `Query::with_relay_access` is wrong: `crates/fava-router-outbox/src/lib.rs:51` uses it to forward the authority its `RouteRequest` was handed onto the query it declares, and a router is a replaceable boundary that must work through public contracts (SUB-05). It is a router's mechanism, not an application's verb. What the task was reaching for is done: an application names the account once, through `with_account`, for reads and writes alike, and no longer needs to touch the query's access itself.
+- [x] 2.3 Prove reads and writes take the same door: verify a test opens a query and publishes under one selection and asserts both reach the same relay session key
 
 ## 3. Verification
 

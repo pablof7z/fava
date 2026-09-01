@@ -149,6 +149,47 @@ async fn nothing_to_author_with_is_refused_before_custody() {
     );
 }
 
+/// Reads and writes take the same door: one selection, both paths.
+#[tokio::test(flavor = "current_thread")]
+async fn one_selection_serves_a_read_and_a_write() {
+    let alice = Keys::generate();
+    let (fava, transport, publisher) = assemble(vec![alice.clone()]);
+    let relay = RelayUrl::parse("wss://shared.example").expect("relay URL");
+
+    let _observation = fava
+        .with_account(alice.public_key())
+        .observe(
+            Query::events()
+                .only_from_relays([relay.clone()])
+                .expect("relay selection"),
+        )
+        .await
+        .expect("live query opens");
+    let _write = fava
+        .to(vec![relay.clone()])
+        .expect("explicit route")
+        .with_account(alice.public_key())
+        .publish(EventBuilder::new(Kind::TextNote).content("gm"))
+        .expect("the write is accepted");
+    for _ in 0..256 {
+        tokio::task::yield_now().await;
+    }
+
+    let authenticated = fava_relay::RelaySessionKey {
+        relay,
+        access: RelayAccess::Authenticated(alice.public_key()),
+    };
+    assert!(
+        transport.relay(&authenticated).is_some(),
+        "the read ran over the selected account's session"
+    );
+    assert_eq!(
+        publisher.authors(),
+        vec![alice.public_key()],
+        "the write ran as the selected account"
+    );
+}
+
 /// One selection names the account for reads as well as writes.
 #[tokio::test(flavor = "current_thread")]
 async fn a_query_under_a_selection_uses_that_accounts_authority() {

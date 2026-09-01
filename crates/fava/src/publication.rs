@@ -129,6 +129,29 @@ pub struct PublishAs<'a> {
 }
 
 impl PublishAs<'_> {
+    /// Open a live query under this account.
+    ///
+    /// The selection names the relay authority the read runs over, which is the
+    /// same fact it names for a write. An application therefore takes one door
+    /// for both.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - the declarative query to open
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::ObserveError`] when the query is invalid or the
+    /// configured local sources cannot establish one coherent initial view.
+    pub async fn observe(
+        self,
+        query: fava_query::Query,
+    ) -> Result<crate::Observation, crate::ObserveError> {
+        self.fava
+            .observe(query.with_relay_access(fava_relay::RelayAccess::Authenticated(self.account)))
+            .await
+    }
+
     /// Narrow this edit publication to an exact bounded relay sequence.
     ///
     /// # Arguments
