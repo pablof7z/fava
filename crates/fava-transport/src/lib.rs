@@ -26,7 +26,10 @@ mod session;
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
+
+use tokio::sync::broadcast;
 
 pub use error::TransportError;
 use fava_relay::RelaySessionKey;
@@ -43,7 +46,7 @@ pub use routed::{
 pub use router::{Mailbox, Router, Unrouted};
 pub use session::{
     Connection, HandoffCorrelation, OpenedSubscription, RelayConnection, RelaySession,
-    RelaySessionIdentity, SUBSCRIPTION_ID_BYTES, subscription_id,
+    RelaySessionIdentity, SUBSCRIPTION_ID_BYTES, publish_authentication_requests, subscription_id,
 };
 
 /// Future yielding an acquired lease on the current session for one key.
@@ -84,6 +87,19 @@ pub trait Transport: Send + Sync {
     /// Current holder count for one key, or `None` when no session is
     /// registered. This is the observable proof that acquire-or-reuse happened.
     fn holders(&self, key: &RelaySessionKey) -> Option<NonZeroUsize>;
+
+    /// Every session whose relay has just asked it to authenticate.
+    ///
+    /// The component that answers a challenge holds no connections and opens
+    /// none; the components that hold them cannot see it. So the transport,
+    /// which is what records the request, says when one arrives and hands over
+    /// the session it arrived on.
+    ///
+    /// One stream for the whole transport rather than one per connection: a
+    /// connection nobody challenged is not this stream's business. Each
+    /// request is its own event, including a relay asking again, because a
+    /// request nobody hears is a relay left unanswered.
+    fn authentication_requests(&self) -> broadcast::Receiver<Arc<dyn RelaySession>>;
 
     /// Stop accepting acquisitions, close every registered session within
     /// `deadline`, and join owned resources.

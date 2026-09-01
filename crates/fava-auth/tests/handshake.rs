@@ -32,8 +32,24 @@ async fn one_approved_challenge_sends_exactly_one_auth_frame() {
 
     assert_eq!(
         auth_frames(&rig.relay()).len(),
+        1,
+        "a relay repeating its challenge has not asked a second question"
+    );
+}
+
+#[tokio::test]
+async fn a_new_challenge_is_answered_even_on_the_same_connection() {
+    let rig = Rig::approving().await;
+
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
+    rig.settle().await;
+    rig.relay().push_frame(&challenge_frame("nonce-2"));
+    rig.settle().await;
+
+    assert_eq!(
+        auth_frames(&rig.relay()).len(),
         2,
-        "each challenge is answered once; the relay decides how often to ask"
+        "a different challenge is a different question"
     );
 }
 
@@ -134,8 +150,9 @@ async fn an_oversized_challenge_is_refused_without_signing() {
 async fn an_endless_re_challenge_stops_at_the_bound() {
     let rig = Rig::approving().await;
 
-    for _ in 0..(SessionAuthentication::MAX_ATTEMPTS + 4) {
-        rig.relay().push_frame(&challenge_frame("nonce"));
+    for nonce in 0..(SessionAuthentication::MAX_ATTEMPTS + 4) {
+        rig.relay()
+            .push_frame(&challenge_frame(&format!("nonce-{nonce}")));
         rig.settle().await;
     }
 

@@ -7,7 +7,7 @@
 
 ## 2. The demand is a state
 
-- [ ] 2.1 Move the relay's `AUTH` frame from `Router::read_challenges` into an authentication state carrying the challenge; verify a challenge queued before a reconnect cannot be recorded against the connection that replaces it, which is the bug this closes
+- [x] 2.1 Move the relay's `AUTH` frame from `Router::read_challenges` into an authentication state carrying the challenge; verify a challenge queued before a reconnect cannot be recorded against the connection that replaces it, which is the bug this closes
 - [ ] 2.2 Add the session verb that records a refusal without sending a frame; verify a test distinguishes refused from undecided and asserts no frame reached the relay
 - [ ] 2.3 Delete `Router::read_challenges`, the challenges field, the `Correlation::Challenge` arm, and `RelaySessionExt::challenges`; verify a grep for each name is empty and the workspace builds
 - [ ] 2.4 Confirm a repeated identical challenge wakes no watcher; verify a test pushes the same challenge three times and asserts one wake
@@ -23,7 +23,8 @@
 
 ## 4. The owner decides and answers, nothing more
 
-- [ ] 4.1 Replace `watch_session` and `watch_session_soon` with attending a connection the caller already holds, and delete the lease, `open_request`, `SESSION_DEADLINE`, the frame bounds, `LAST_HOLDER_CHECK`, `LONE_CHECKS_BEFORE_RELEASE`, the `watching` set, the release loop, `WatchError` and `live_session`; verify `fava-auth` no longer depends on `Transport` and a grep for each name is empty
+- [x] 4.0 Add `Transport::authentication_requests`, a broadcast of the sessions whose relay has just asked, so the one component that answers hears about a demand without holding, opening, or enumerating connections; verify a test asserts a challenge on one connection reaches a subscriber and a connection nobody challenged does not
+- [ ] 4.1 Replace `watch_session` and `watch_session_soon` with attending the session handed to it by that signal, and delete the lease, `open_request`, `SESSION_DEADLINE`, the frame bounds, `LAST_HOLDER_CHECK`, `LONE_CHECKS_BEFORE_RELEASE`, the `watching` set, the release loop, `WatchError` and `live_session`; verify `fava-auth` no longer depends on `Transport` and a grep for each name is empty
 - [ ] 4.2 Delete `Fava::watch_authenticated_relays`, `transport_for_auth`, and `BuildError::MissingAuthenticationTransport`; verify an engine with a policy and no transport builds
 - [ ] 4.3 Let the policy name the account it authenticates as; verify a test's policy authenticates as an account the connection was not opened for
 - [ ] 4.4 Delete the deferred-demand ledger, `AuthenticationDemandId` and `PendingAuthentication`, answering by connection instead; verify the deferred-then-answered test passes and the session entry is the only record of an outstanding ask

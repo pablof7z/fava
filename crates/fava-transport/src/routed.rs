@@ -419,6 +419,12 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
     fn answer(&self, event: nostr::event::Event) -> PublishFuture<'_> {
         Box::pin(async move {
             let id = event.id;
+            // The demand has been taken up. Saying so here is what stops a
+            // second reader from answering a challenge already answered.
+            let as_of = event.pubkey;
+            self.router().moved(|connection| {
+                connection.authentication = crate::Authentication::Authenticating { as_of };
+            });
             let mailbox = self.router().await_acknowledgement(id);
             match self.encoded(&fava_wire::ClientMessage::auth(event)).await {
                 crate::HandoffOutcome::HandedOff { .. } => Ok(Box::new(RoutedAcknowledgement::new(

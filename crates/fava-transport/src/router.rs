@@ -16,7 +16,7 @@ use fava_wire::{RelayMessage, SubscriptionId};
 use crate::BoundedText;
 use crate::routed::{Correlation, SessionEnded, Settlement, SubscriptionItem, correlation};
 use crate::session::Connection;
-use fava_relay::Connectivity;
+use fava_relay::{Authentication, Connectivity};
 use nostr::event::EventId;
 use tokio::sync::Notify;
 
@@ -328,20 +328,14 @@ impl Router {
                 let RelayMessage::Auth { challenge } = &message else {
                     return;
                 };
-                let readers: Vec<_> = self
-                    .challenges
-                    .lock()
-                    .expect("router is not poisoned")
-                    .iter()
-                    .map(Arc::clone)
-                    .collect();
-                if readers.is_empty() {
-                    self.unrouted.unclaimed.fetch_add(1, Ordering::SeqCst);
-                    return;
-                }
-                for mailbox in readers {
-                    mailbox.offer(challenge.as_ref().to_owned());
-                }
+                // A demand is what the connection now is, not a message
+                // addressed to somebody. Stated here it cannot outlive the
+                // connection it arrived on, and a relay repeating itself is
+                // not a change.
+                let challenge = challenge.as_ref().to_owned();
+                self.moved(|connection| {
+                    connection.authentication = Authentication::Requested { challenge };
+                });
             }
             Correlation::Unclaimed => {
                 self.unrouted.unclaimed.fetch_add(1, Ordering::SeqCst);

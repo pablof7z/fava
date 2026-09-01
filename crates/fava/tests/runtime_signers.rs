@@ -385,6 +385,13 @@ impl Transport for NoopTransport {
         })
     }
 
+    fn authentication_requests(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<std::sync::Arc<dyn fava_transport::RelaySession>> {
+        // This double never carries a relay's demand.
+        tokio::sync::broadcast::Sender::new(1).subscribe()
+    }
+
     fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
         None
     }

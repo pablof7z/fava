@@ -30,6 +30,12 @@ This replaces access-as-identity and is strictly more expressive: the old keying
 
 **The policy names the account.** The account was read off the session key, which only worked because the key named one. Asking the application is not a workaround for losing that: deciding whether to authenticate and deciding as whom are one decision, and the application is already making half of it.
 
+**The transport says when a relay asks.** The component that answers cannot hold connections, and the components that do hold them cannot see it — that boundary is the point. So the transport, which is what sets the state, publishes the sessions whose relay has just asked. One broadcast for the whole engine rather than one channel per connection: the answerer never sees a connection nobody challenged, and reads the verdict off the session it was handed.
+
+*Alternatives.* Publishing every connection as it opens makes the answerer watch each one to find the few that matter. Asking the transport for existing connections periodically is the poll again, which is the thing being removed. Having the holders hand sessions over is the dependency the boundary exists to prevent.
+
+A broadcast rather than a watch, because each request is its own event: a coalesced one is a relay whose demand nobody ever answers.
+
 **Nothing carries authentication facts sideways.** `AuthenticationOutcomes` exists so two readers can learn a conclusion without depending on the crate that reached it. Both readers already hold the connection, so the trait's job disappears rather than moving. Its removal also ends the arrangement where an observation's authentication state is republished from nine unrelated completion handlers and overwrites the fact just published beside it.
 
 ## Risks / Trade-offs

@@ -407,3 +407,42 @@ async fn shutdown_closes_every_registered_session() {
         TransportError::ShuttingDown
     );
 }
+
+/// The transport says when a relay asks, and says nothing otherwise.
+#[tokio::test(flavor = "current_thread")]
+async fn a_relay_asking_to_authenticate_reaches_a_listener() {
+    let transport = FakeTransport::new();
+    let mut requests = fava_transport::Transport::authentication_requests(&transport);
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
+    let session = std::sync::Arc::clone(lease.session());
+    let relay = transport.relay(&key()).expect("relay is registered");
+
+    // A connection nobody challenged is not this stream's business.
+    relay.push_frame(b"[\"NOTICE\",\"nothing to do with authentication\"]");
+    for _ in 0..32 {
+        tokio::task::yield_now().await;
+    }
+    assert!(
+        requests.try_recv().is_err(),
+        "a connection the relay never asked is not published"
+    );
+
+    relay.push_frame(b"[\"AUTH\",\"nonce-1\"]");
+    let asked = requests
+        .recv()
+        .await
+        .expect("the request reaches a listener");
+    assert!(
+        std::sync::Arc::ptr_eq(&asked, &session),
+        "the session handed over is the one the relay asked"
+    );
+    assert!(matches!(
+        fava_transport::RelaySessionExt::connection(&asked)
+            .borrow()
+            .authentication,
+        fava_transport::Authentication::Requested { .. }
+    ));
+}

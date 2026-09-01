@@ -247,3 +247,41 @@ impl Connection {
             && self.authentication.can_serve(authority)
     }
 }
+
+/// Publish `session` on `requests` each time its relay asks it to authenticate.
+///
+/// A transport implementation spawns this once per session it opens. It is
+/// here rather than in each implementation because the rule is the contract's:
+/// one event per request, a repeated identical challenge is not a new request,
+/// and a replaced connection asks again from nothing.
+///
+/// Holds only a weak reference, so a session with no lease holders is still
+/// dropped and this ends with it.
+pub async fn publish_authentication_requests(
+    session: &std::sync::Arc<dyn RelaySession>,
+    requests: tokio::sync::broadcast::Sender<std::sync::Arc<dyn RelaySession>>,
+) {
+    let weak = std::sync::Arc::downgrade(session);
+    let mut connection = crate::RelaySessionExt::connection(session);
+    let mut asked: Option<String> = None;
+    let mut seen = connection.borrow_and_update().identity.clone();
+    loop {
+        let Some(session) = weak.upgrade() else {
+            return;
+        };
+        let current = connection.borrow_and_update().clone();
+        if current.identity != seen {
+            seen = current.identity.clone();
+            asked = None;
+        }
+        if let fava_relay::Authentication::Requested { challenge } = &current.authentication
+            && asked.as_ref() != Some(challenge)
+        {
+            asked = Some(challenge.clone());
+            let _ = requests.send(session);
+        }
+        if connection.changed().await.is_err() {
+            return;
+        }
+    }
+}

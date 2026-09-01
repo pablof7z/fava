@@ -22,7 +22,7 @@ use fava_transport::{
     RelaySessionIdentity, RelaySessionLease, ReleaseFuture, ReleaseOutcome, Transport,
     TransportError, TransportShutdownFuture,
 };
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 use crate::driver::establish;
 use crate::session::{SessionShared, WebSocketRelaySession};
@@ -33,16 +33,35 @@ pub struct WebSocketTransport {
     registry: Arc<Registry>,
 }
 
-#[derive(Default)]
+/// How many unheard authentication requests the stream holds before the
+/// oldest is dropped. One per relay in flight at once is generous; a lagging
+/// subscriber has stopped answering, which is its own problem.
+const REQUEST_BACKLOG: usize = 64;
+
 struct Registry {
     entries: Mutex<BTreeMap<RelaySessionKey, Entry>>,
     shutting_down: AtomicBool,
     entropy: AtomicU64,
     generations: Arc<AtomicU64>,
+    /// Sessions whose relay has asked them to authenticate.
+    requests: broadcast::Sender<Arc<dyn RelaySession>>,
     /// Transport-wide source of wire subscription identifiers. Never reset by a
     /// reconnect or a re-acquired session, so a reopened request can never wear
     /// a closed request's identity (GOALS:426, QUERY-010).
     subscriptions: Arc<AtomicU64>,
+}
+
+impl Default for Registry {
+    fn default() -> Self {
+        Self {
+            entries: Mutex::default(),
+            shutting_down: AtomicBool::default(),
+            entropy: AtomicU64::default(),
+            generations: Arc::default(),
+            requests: broadcast::Sender::new(REQUEST_BACKLOG),
+            subscriptions: Arc::default(),
+        }
+    }
 }
 
 /// One live relay session and how many leases are still outstanding on it.
@@ -142,12 +161,23 @@ impl Transport for WebSocketTransport {
                 },
             );
             drop(entries);
+            // The relay may ask this connection to authenticate at any point,
+            // including before anything is sent on it.
+            let watched: Arc<dyn RelaySession> = Arc::clone(&session) as Arc<dyn RelaySession>;
+            let requests = self.registry.requests.clone();
+            tokio::spawn(async move {
+                fava_transport::publish_authentication_requests(&watched, requests).await;
+            });
             Ok(RelaySessionLease::new(
                 session,
                 Arc::clone(&self.registry) as Arc<dyn LeaseRelease>,
                 identity,
             ))
         })
+    }
+
+    fn authentication_requests(&self) -> broadcast::Receiver<Arc<dyn RelaySession>> {
+        self.registry.requests.subscribe()
     }
 
     fn holders(&self, key: &RelaySessionKey) -> Option<NonZeroUsize> {

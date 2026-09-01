@@ -118,10 +118,9 @@ impl Authenticator {
             .map_err(WatchError::Acquire)?;
         let identity = lease.acquired_identity().clone();
         let session = Arc::clone(lease.session());
-        // This owner holds no subscription and publishes nothing, so it reads
-        // the two facts it actually needs: the relay's challenges, and whether
-        // its connection was replaced.
-        let challenges = fava_transport::RelaySessionExt::challenges(&session);
+        // This owner holds no subscription and publishes nothing. Everything
+        // it needs is on the connection: whether the relay has asked, and
+        // whether the connection it asked on is still the one in front of us.
         let mut connection = fava_transport::RelaySessionExt::connection(&session);
 
         {
@@ -149,8 +148,10 @@ impl Authenticator {
                 // alone, and one sample can land in that window.
                 let mut alone_for = 0_u32;
                 let mut seen = connection.borrow_and_update().identity.clone();
+                // One challenge is answered once. A wake that finds the same
+                // demand still outstanding has learned nothing new.
+                let mut answered: Option<String> = None;
                 loop {
-                    let asked = challenges.notified();
                     if release_when_alone {
                         match transport.holders(&watched).map(NonZeroUsize::get) {
                             Some(holders) if holders > 1 => alone_for = 0,
@@ -164,21 +165,20 @@ impl Authenticator {
                             None => break,
                         }
                     }
-                    while let Some(text) = challenges.take() {
-                        owner.challenged(&session, &text).await;
+                    let current = connection.borrow_and_update().clone();
+                    if current.identity != seen {
+                        owner.connection_reset(&current.identity);
+                        seen = current.identity.clone();
+                        answered = None;
                     }
+                    if let fava_relay::Authentication::Requested { challenge } =
+                        &current.authentication
+                        && answered.as_ref() != Some(challenge)
                     {
-                        let current = connection.borrow_and_update().identity.clone();
-                        if current != seen {
-                            owner.connection_reset(&current);
-                            seen = current;
-                        }
-                    }
-                    if challenges.is_closed() {
-                        break;
+                        answered = Some(challenge.clone());
+                        owner.challenged(&session, challenge).await;
                     }
                     tokio::select! {
-                        () = asked => {}
                         changed = connection.changed() => {
                             if changed.is_err() {
                                 break;
