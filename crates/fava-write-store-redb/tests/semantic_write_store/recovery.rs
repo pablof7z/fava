@@ -816,3 +816,48 @@ fn set(row: &mut Value, pointer: &str, value: Value) {
     *row.pointer_mut(pointer)
         .unwrap_or_else(|| panic!("persisted row lacks {pointer}")) = value;
 }
+
+/// A write resumes under the authority it was accepted with, read back from the
+/// store rather than defaulted by whatever process reopened it.
+///
+/// This is the failure the authority exists to prevent: a write accepted over
+/// one account's authenticated session, parked, and then resumed by a process
+/// that has no selection, going out as public work.
+#[test]
+fn a_stored_write_keeps_its_authority_across_a_reopen() {
+    let account = Keys::generate().public_key();
+    let relay = RelayUrl::parse("wss://authenticated.example").unwrap();
+    let path = unique_path("authority-across-reopen");
+
+    let receipt_id = {
+        let store = RedbWriteStore::open(&path).unwrap();
+        let keys = Keys::generate();
+        let intent = WriteIntent::event(
+            revision(keys.public_key(), 1, "gm"),
+            WriteRouting::Explicit(vec![relay.clone()]),
+        )
+        .unwrap()
+        .under(RelayAccess::Authenticated(account));
+        store.accept(intent).unwrap().receipt_id
+    };
+
+    // A different process, with no account selected, reopens the store.
+    let reopened = RedbWriteStore::open(&path).unwrap();
+    let receipt = reopened
+        .receipt(receipt_id)
+        .unwrap()
+        .expect("the write survives the reopen");
+
+    assert_eq!(
+        receipt.access,
+        RelayAccess::Authenticated(account),
+        "the authority came from the store, not from the reopening process"
+    );
+    assert!(
+        receipt
+            .desired_destinations
+            .iter()
+            .all(|session| session.access == RelayAccess::Authenticated(account)),
+        "its destinations are still sessions under that authority"
+    );
+}

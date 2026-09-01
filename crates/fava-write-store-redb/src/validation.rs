@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU64;
 
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::RelaySessionKey;
 use fava_state::event_is_newer;
 use fava_write::{
     EventValue, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, RevisionId,
@@ -70,7 +70,10 @@ fn validate_routing(receipt: &Receipt) -> Result<(), WriteStoreError> {
         .cloned()
         .map(|relay| RelaySessionKey {
             relay,
-            access: RelayAccess::Public,
+            // A lane's authority is the one the write was accepted under, not
+            // public: an authenticated write's destinations are sessions under
+            // its own account.
+            access: receipt.access.clone(),
         })
         .collect();
     let retained: BTreeSet<_> = receipt

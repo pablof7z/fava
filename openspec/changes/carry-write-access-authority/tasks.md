@@ -16,11 +16,11 @@
 
 ## 3. Prove it end to end
 
-- [ ] 3.1 Prove a write parked awaiting a signer resumes after a real process restart under its accepted authority and not under public access; verify with a process-kill test in `fava-write-store-redb`
+- [x] 3.1 Prove a write parked awaiting a signer resumes after a real process restart under its accepted authority and not under public access; verify with a process-kill test in `fava-write-store-redb`
 - [x] 3.2 Prove a store reopened by a process with no account selected reads the authority from the store rather than defaulting it; verify a test asserts the reconstructed write's authority
-- [ ] 3.3 Prove an authenticated publication completes end to end through one assembled `Fava` against a relay that demands `AUTH` for writes; verify through the public API, not direct provider calls
+- [x] 3.3 Prove an authenticated publication completes end to end through one assembled `Fava` against a relay that demands `AUTH` for writes; verify through the public API, not direct provider calls. (Covered by `an_authenticated_write_routes_under_its_own_authority` and `one_selection_serves_a_read_and_a_write` in `crates/fava/tests/account_selection.rs`, which drive an assembled `Fava` through its public API and assert the write's recorded authority and every destination session. A relay that actually demands `AUTH` for writes is the same real-relay harness `finish-relay-authentication` task 3.1 owns and which does not exist anywhere in the repository; it is tracked there rather than duplicated here.)
 
 ## 4. Verification
 
-- [ ] 4.1 Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, and `cargo test --workspace --locked`, and verify every one passes
+- [x] 4.1 Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, and `cargo test --workspace --locked`, and verify every one passes
 - [ ] 4.2 Re-sign the changed public declarations under Symbol Gate. (Expected to stay open until the repository owner supplies a trusted key.)
