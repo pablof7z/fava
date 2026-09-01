@@ -24,9 +24,9 @@
 
 ## 4. Retire the superseded change
 
-- [ ] 4.1 Delete `openspec/changes/own-relay-authentication`, whose design describes the replaced transport and whose remaining account-selection and write-access tasks are unbundled; verify nothing else references it
-- [ ] 4.2 Propose the account-selection change — `Fava::with_account` replacing `by`, `AuthorlessPayload` deleted, `Query::with_relay_access` removed — so the unbundled work is recorded rather than lost; verify the change exists and validates
-- [ ] 4.3 Propose the write-access-authority change — `RelayAccess` through `WriteIntent`, `Receipt`, and `RouteRequest::Write`, `RouteRequest::access()` no longer hardcoding `RelayAccess::Public`, and the redb schema bump from 4 to 5; verify the change exists and validates
+- [x] 4.1 Delete `openspec/changes/own-relay-authentication`, whose design describes the replaced transport and whose remaining account-selection and write-access tasks are unbundled; verify nothing else references it
+- [x] 4.2 Propose the account-selection change — `Fava::with_account` replacing `by`, `AuthorlessPayload` deleted, `Query::with_relay_access` removed — so the unbundled work is recorded rather than lost; verify the change exists and validates
+- [x] 4.3 Propose the write-access-authority change — `RelayAccess` through `WriteIntent`, `Receipt`, and `RouteRequest::Write`, `RouteRequest::access()` no longer hardcoding `RelayAccess::Public`, and the redb schema bump from 4 to 5; verify the change exists and validates
 
 ## 5. Verification
 
