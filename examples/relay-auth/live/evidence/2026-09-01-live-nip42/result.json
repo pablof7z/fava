@@ -60,23 +60,23 @@
     }
   ],
   "captures": {
-    "accept-event": "aa86fded0dbb595c01e2baabe9c2fac5e091a941fc294ef77b24984d8e782837",
+    "accept-event": "c27e2a6fd4fb3e9f6381fce8d9e82b398cdb96f90d4df303830f2f9d1facf34a",
     "accept-write": "2",
-    "cross-event": "c6159770c69c271e033ece321348f6a6153be3829d96087a37f1f076117b6c97",
+    "cross-event": "1cdb716cf581e9e88729cf9f6f71117417ec82916f7cc836eb2f200fed43b5bf",
     "cross-write": "7",
     "decline-write": "4",
-    "defer-event": "5d1e7ddafc9f50963d07d35a74fb2f7020ebe0102a77271329c3b58abaf030fc",
+    "defer-event": "09e0aa60efc98a1345c2a16b386522f3c9676672527e67486787fafca7caa309",
     "defer-write": "8",
     "failed-write": "3",
     "pending-id": "1",
-    "pub-event": "ba0e0b0184fe4d8d8ad99d80962fb8b768edfe559941086c2ef1ea84d1b118f4",
+    "pub-event": "be1146852f355521f7dc461e1403a9cbcb4b114c0a7bc4b7e3f63e2eb751e0de",
     "pub-write": "1",
     "refuse-write": "6",
     "reject-write": "5"
   },
   "fixtures": {
     "app": "relay-auth 0.1.0",
-    "app_sha256": "e78a59311f92bacc659828bab0c601a8bc1df38e721cba6037999f3cb966ad12",
+    "app_sha256": "c4b65eda525cea352e98e75d4e9e6ba65a8a9418e63b3df4ba1779edad544061",
     "authenticating_relay": "nostr-rs-relay 0.8.12",
     "authenticating_relay_sha256": "772530158c5562ccafabd4d93aa2ac3a686b2203cbeec1ce313791b4e1fc28b9",
     "enforcing_relay": "examples/crates/e2e-support/live/nip42_relay.py (harness-owned)",
@@ -84,9 +84,9 @@
     "scenario_sha256": "03682de39be8b5126305d0cd8886e1b00914f466bf79b243558e234bc000c86d"
   },
   "relays": {
-    "accept": "ws://127.0.0.1:57605",
-    "nostr": "ws://127.0.0.1:57604",
-    "refuse": "ws://127.0.0.1:57607",
-    "reject": "ws://127.0.0.1:57606"
+    "accept": "ws://127.0.0.1:58423",
+    "nostr": "ws://127.0.0.1:58422",
+    "refuse": "ws://127.0.0.1:58425",
+    "reject": "ws://127.0.0.1:58424"
   }
 }

@@ -529,18 +529,21 @@ impl App {
             block_on(authenticator.watch_session(key.clone()))
                 .map_err(|error| ShellError::Domain(error.to_string()))?;
             // `watch_session` resolves once the lease is acquired, not once
-            // the relay's own challenge frame has actually arrived and been
-            // processed; a write attempted immediately can race that frame
-            // and see no session state yet. Fava's public API offers no
-            // "watch and wait for the first challenge" combinator, so this
-            // bounded poll on the real condition (state leaving `None`) is
-            // the app-owned workaround; see README for the write-up.
+            // the relay's own challenge frame has arrived and been processed;
+            // a write attempted immediately can race that frame and see no
+            // session state yet. The owner wakes its watchers whenever
+            // anything about authentication changes, so wait on that rather
+            // than asking repeatedly.
+            let mut changed = authenticator.subscribe();
             block_on(async {
-                let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-                while authenticator.state(&key).is_none() && tokio::time::Instant::now() < deadline
-                {
-                    tokio::time::sleep(Duration::from_millis(20)).await;
-                }
+                let _ = tokio::time::timeout(Duration::from_secs(5), async {
+                    while authenticator.state(&key).is_none() {
+                        if changed.changed().await.is_err() {
+                            break;
+                        }
+                    }
+                })
+                .await;
             });
         }
         Ok(())

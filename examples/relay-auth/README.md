@@ -178,11 +178,11 @@ quietly patched over:
 An independent DX review of this app (see `.pi/e2e-builder` for the process)
 found five more, all confirmed against the exact cited source:
 
-3. **`ensure_watched`'s bounded poll exists because `Authenticator` exposes
-   no per-session change signal.** `Authenticator::subscribe()` fires when
-   the *deferred-demand set* changes, not when one session's `state()`
-   transitions. Waiting for a first challenge to arrive has no event to
-   `.await`; polling is the only public option.
+3. **Fixed.** `Authenticator::subscribe()` used to fire only when the
+   deferred-demand set changed, so a session reaching `Attempted` or
+   `Accepted` woke nobody and `ensure_watched` had to poll. It now fires
+   whenever anything the owner knows about authentication changes, and
+   `ensure_watched` waits on it.
 4. **`receipt_wait` duplicates logic Fava already has, one layer down.**
    `fava_publication::Publication::wait_until` -- exactly the bounded
    broadcast-with-lag-handling loop `receipt_wait` reimplements -- exists but

@@ -277,3 +277,30 @@ async fn a_second_watch_on_a_live_session_keeps_its_verdict() {
     );
     assert!(rig.authenticator().authenticated(rig.key()));
 }
+
+#[tokio::test]
+async fn a_session_reaching_a_verdict_wakes_a_watcher() {
+    let rig = Rig::approving().await;
+    let mut changed = rig.authenticator().subscribe();
+    changed.mark_unchanged();
+
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
+    rig.settle().await;
+    assert!(
+        changed.has_changed().unwrap_or(false),
+        "answering the challenge is a change worth waking for"
+    );
+    changed.mark_unchanged();
+
+    let id = rig.last_auth_event_id();
+    rig.relay().push_frame(&ok_frame(&id, true, ""));
+    rig.settle().await;
+
+    // Without this the only way to learn a session finished authenticating is
+    // to keep asking it.
+    assert!(
+        changed.has_changed().unwrap_or(false),
+        "the relay accepting the answer is a change worth waking for"
+    );
+    assert_eq!(rig.state(), Some(AuthenticationState::Accepted));
+}

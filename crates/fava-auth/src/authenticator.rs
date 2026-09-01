@@ -126,10 +126,14 @@ impl Authenticator {
             .collect()
     }
 
-    /// Signal fired whenever the set of deferred demands changes.
+    /// Signal fired whenever anything this owner knows about authentication
+    /// changes.
     ///
-    /// A demand appears when a policy defers, and disappears when it is
-    /// answered or its connection is replaced.
+    /// That is a session reaching a new state, and a deferred demand
+    /// appearing, being answered, or losing the connection it belonged to.
+    /// The signal carries no detail: read [`Self::state`] or [`Self::pending`]
+    /// after it fires. It may fire without either having changed, so treat it
+    /// as a reason to look rather than as the change itself.
     #[must_use]
     pub fn subscribe(&self) -> watch::Receiver<u64> {
         self.inner.pending_changed.subscribe()
@@ -167,12 +171,18 @@ impl Authenticator {
         identity: &RelaySessionIdentity,
         state: AuthenticationState,
     ) -> bool {
-        let mut guard = self.lock();
-        let entry = guard.entry(&identity.key);
-        if entry.generation() != Some(identity.connection) {
-            return false;
+        {
+            let mut guard = self.lock();
+            let entry = guard.entry(&identity.key);
+            if entry.generation() != Some(identity.connection) {
+                return false;
+            }
+            entry.resolved(identity.connection, state);
         }
-        entry.resolved(identity.connection, state);
+        // A relay accepting an answer is as much a change as a person being
+        // asked for one. Without this, the only way to learn a session
+        // finished authenticating is to keep asking.
+        self.signal();
         true
     }
 
