@@ -15,7 +15,7 @@
 
 ## 3. Matching by reachability
 
-- [ ] 3.1 Reduce `RelaySessionKey` to the relay alone and delete `RelayAccess` from every key it appears in; verify the workspace builds and no key type carries an account
+- [ ] 3.1 Delete `RelaySessionKey` and `RelayAccess`, keying by `RelayUrl` directly — once access is a connection's state the struct is a newtype over the URL with no invariant of its own, and nothing else in the workspace wraps a URL for it to be confused with; verify the workspace builds and a grep for both names is empty
 - [ ] 3.2 Give work a stated requirement — no authentication, or authentication as one account — carried where access used to be; verify a write and a query each state one and a test reads it back
 - [ ] 3.3 Implement the matching rule: a connection serves work when it can still reach the required state, and one is opened when none can; verify tests cover an unauthenticated connection serving work that will authenticate, a connection authenticated as one account refusing work for another, and anonymous work refusing an authenticated connection
 - [ ] 3.4 Delete the four struct-to-map-key serde adapters and the two identical routing-to-destination zips in the memory and redb stores; verify a grep for each is empty
@@ -26,8 +26,8 @@
 - [x] 4.0 Add `Transport::authentication_requests`, a broadcast of the sessions whose relay has just asked, so the one component that answers hears about a demand without holding, opening, or enumerating connections; verify a test asserts a challenge on one connection reaches a subscriber and a connection nobody challenged does not
 - [x] 4.1 Replace `watch_session` and `watch_session_soon` with attending the session handed to it by that signal, and delete the lease, `open_request`, `SESSION_DEADLINE`, the frame bounds, `LAST_HOLDER_CHECK`, `LONE_CHECKS_BEFORE_RELEASE`, the `watching` set, the release loop, `WatchError` and `live_session`; verify `fava-auth` no longer depends on `Transport` and a grep for each name is empty
 - [x] 4.2 Delete `Fava::watch_authenticated_relays`, `transport_for_auth`, and `BuildError::MissingAuthenticationTransport`; verify an engine with a policy and no transport builds
-- [x] 4.3 Let the policy name the account it authenticates as; verify a test's policy authenticates as an account the connection was not opened for
-- [x] 4.4 Delete the deferred-demand ledger, `AuthenticationDemandId` and `PendingAuthentication`, answering by connection instead; verify the deferred-then-answered test passes and the session entry is the only record of an outstanding ask
+- [ ] 4.3 Let the policy name the account it authenticates as; verify a test's policy authenticates as an account the connection was not opened for
+- [ ] 4.4 Delete the deferred-demand ledger, `AuthenticationDemandId` and `PendingAuthentication`, answering by connection instead; verify the deferred-then-answered test passes and the session entry is the only record of an outstanding ask
 - [x] 4.5 Delete `SessionAuthentication`'s copy of the connection counter and the stale-generation comparisons it served; verify the existing proof that a stale answer resolves nothing still passes
 
 ## 5. Waiting on the connection
