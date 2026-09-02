@@ -13,6 +13,7 @@ use fava_transport_testkit::{
     require_bounded_outbound_refusal,
 };
 use futures_util::{SinkExt, StreamExt};
+use nostr::event::FinalizeEvent;
 use nostr::filter::Filter;
 use nostr::types::RelayUrl;
 use tokio::net::TcpListener;
@@ -437,9 +438,11 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
     let mut connection = fava_transport::RelaySessionExt::connection(&session);
     server.await.expect("server joins");
 
-    // A plain `Disconnected` fires first, while a reconnect may still come:
-    // wait specifically for the *exhausted* budget, `spent: Some(_)`, which is
-    // the one transition after which nothing more will ever be published.
+    // The only transition published for this generation is the exhausted
+    // budget, `spent: Some(_)`: nothing is written while a reconnect is still
+    // possible, so a handle waiting through the drop learns this reason
+    // rather than a transient one written and superseded before the budget
+    // was known to be spent.
     let state = until(&mut connection, |state| {
         matches!(
             state.connectivity,
@@ -454,5 +457,59 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
     assert!(
         connection.changed().await.is_err(),
         "an exhausted budget ends the connection rather than leaving a reader waiting"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_exhausted_reconnect_budget_reaches_a_publisher_still_waiting() {
+    let (listener, key) = listener().await;
+    let server = tokio::spawn(async move {
+        // The relay reads the EVENT so the handoff genuinely left, then drops
+        // the connection without an `OK` and stops listening: every reconnect
+        // attempt fails and the budget runs out while the acknowledgement is
+        // still open.
+        let (stream, _) = listener.accept().await.expect("first connection");
+        let mut socket = accept_async(stream).await.expect("WebSocket accepts");
+        socket
+            .next()
+            .await
+            .expect("client sends the EVENT frame")
+            .expect("frame reads");
+        socket
+            .close(None)
+            .await
+            .expect("relay closes generation one");
+    });
+
+    let transport = WebSocketTransport::new();
+    let mut request = request(key);
+    request.reconnect_attempts = Some(frames(2));
+    request.deadlines.establish = Duration::from_millis(200);
+    let lease = transport
+        .acquire_session(request)
+        .await
+        .expect("session opens");
+    let session = std::sync::Arc::clone(lease.session());
+
+    let keys = nostr::key::Keys::generate();
+    let event = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "gm")
+        .finalize(&keys)
+        .expect("event signs");
+    let mut acknowledgement = fava_transport::RelaySessionExt::publish(&session, event)
+        .await
+        .expect("the EVENT hands off");
+
+    server.await.expect("server joins");
+
+    let settlement = acknowledgement.settled().await;
+    assert!(
+        matches!(
+            settlement,
+            fava_transport::Settlement::Ended(
+                fava_transport::SessionEnded::ReconnectExhausted { .. }
+            )
+        ),
+        "a publisher still waiting when the budget runs out should see the \
+         exhausted budget, not the transient drop that preceded it: got {settlement:?}"
     );
 }

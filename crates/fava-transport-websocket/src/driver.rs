@@ -56,15 +56,17 @@ pub(crate) async fn drive(
         let (sink, source) = socket.split();
         let reason = pump(&shared, &mut outbound, sink, source).await;
         drain_unsent(&mut outbound, &shared, &reason);
-        shared.router.moved(|connection| {
-            connection.connectivity = fava_transport::Connectivity::Disconnected {
-                detail: BoundedText::new(format!("{reason:?}")),
-                spent: None,
-            };
-        });
         if shared.closed.load(Ordering::SeqCst) {
             break;
         }
+        // Nothing is written to the router until the reconnect either lands
+        // or exhausts: a write here would be provisional, and `moved` cannot
+        // tell a provisional ending from a real one -- it drains every
+        // waiting handle on any transition into `Disconnected`, once, and a
+        // second transition reaches an empty table (`Router::end_connection`
+        // is `mem::take`). Writing `reason` now and the true outcome after
+        // would tell a handle the wrong one and the exhausted budget the
+        // other one, reaching nobody.
         match reconnect(&shared, &mut backoff).await {
             Ok((next, generation)) => {
                 socket = next;
@@ -85,6 +87,9 @@ pub(crate) async fn drive(
                 // The budget is spent. Disconnected, and staying there: the
                 // router's close drops the sender, so a waiter is told the
                 // connection will never reach anything rather than waiting.
+                // This is the one write for this ending, so a handle that
+                // was still waiting learns the exhausted budget rather than
+                // the transient drop that preceded it.
                 shared.router.moved(|connection| {
                     connection.connectivity = fava_transport::Connectivity::Disconnected {
                         detail: BoundedText::new(format!("{final_reason:?}")),

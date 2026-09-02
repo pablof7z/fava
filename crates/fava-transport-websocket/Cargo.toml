@@ -17,6 +17,7 @@ tokio-tungstenite.workspace = true
 [dev-dependencies]
 fava-transport-testkit.workspace = true
 futures-util.workspace = true
+nostr = { workspace = true, features = ["os-rng"] }
 tokio = { workspace = true, features = ["macros", "net", "rt", "rt-multi-thread", "sync", "time"] }
 
 [lints]
