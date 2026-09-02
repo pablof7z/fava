@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Every gate, over every workspace in the repository.
+#
+# `cargo test --workspace` covers the root workspace only. The examples, the
+# shared example crate and the falsifiers are separate workspaces, so a change
+# that breaks one of them passes the root gates and lands anyway. That has
+# happened three times.
+#
+# A timeout counts as a failure. A test that never returns is a broken test,
+# and a pipeline that hides it behind a grep reports green on a hang.
+
+set -u -o pipefail
+
+TIMEOUT=${GATES_TIMEOUT:-1800}
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+cd "$ROOT" || exit 1
+
+WORKSPACES=(
+  .
+  examples/account
+  examples/relay-auth
+  examples/simple-groups
+  examples/crates/e2e-support
+  falsifiers/external-null-cache
+  falsifiers/external-semantic-capability
+)
+
+failed=()
+
+run() { # run <label> <command...>
+  local label=$1; shift
+  printf '%-58s' "$label"
+  local log; log=$(mktemp)
+  if timeout "$TIMEOUT" "$@" >"$log" 2>&1; then
+    echo "ok"
+  else
+    local status=$?
+    if [ "$status" -eq 124 ]; then
+      echo "TIMED OUT after ${TIMEOUT}s — a test that never returns is a failure"
+    else
+      echo "FAILED ($status)"
+    fi
+    tail -30 "$log" | sed 's/^/    /'
+    failed+=("$label")
+  fi
+  rm -f "$log"
+}
+
+echo "== formatting, once for the whole tree"
+run "cargo fmt --all -- --check" cargo fmt --all -- --check
+
+for ws in "${WORKSPACES[@]}"; do
+  echo "== $ws"
+  run "  clippy" cargo clippy --manifest-path "$ws/Cargo.toml" --all-targets --locked -- -D warnings
+  run "  test"   cargo test   --manifest-path "$ws/Cargo.toml" --all-targets --locked
+  run "  doc"    cargo test   --manifest-path "$ws/Cargo.toml" --doc --locked
+done
+
+echo
+if [ ${#failed[@]} -eq 0 ]; then
+  echo "all gates pass across ${#WORKSPACES[@]} workspaces"
+  exit 0
+fi
+echo "${#failed[@]} gate(s) failed:"
+printf '  %s\n' "${failed[@]}"
+exit 1
