@@ -1,9 +1,9 @@
 //! Relay routing from Nostr reference hints and admitted event evidence.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use fava_query::{EventRecord, Query, QuerySnapshot};
+use fava_query::{Query, QuerySnapshot};
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
@@ -14,102 +14,13 @@ use nostr::types::RelayUrl;
 /// Router contributing relays justified by Nostr references and observations.
 pub struct HintRouter {
     name: String,
-    evidence: Arc<Mutex<BTreeMap<EventId, BTreeSet<RelayUrl>>>>,
 }
 
 impl HintRouter {
     /// Construct one named hint policy.
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            evidence: Arc::new(Mutex::new(BTreeMap::new())),
-        }
-    }
-
-    /// Remember actual relay evidence for one admitted event record.
-    pub fn remember(&self, record: &EventRecord) {
-        self.evidence
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .entry(record.id())
-            .or_default()
-            .extend(
-                record
-                    .relay_occurrences()
-                    .occurrences()
-                    .map(|occurrence| occurrence.session.clone()),
-            );
-    }
-
-    fn contribution(&self, request: &RouteRequest) -> RouteContribution {
-        let mut by_target = BTreeMap::<RouteTarget, BTreeSet<RelayUrl>>::new();
-        if let Some(event) = request.event() {
-            for tag in event.tags() {
-                let values = tag.as_slice();
-                if values.first().map(String::as_str) != Some("e") {
-                    continue;
-                }
-                let Some(Ok(event_id)) = values.get(1).map(|value| EventId::parse(value)) else {
-                    continue;
-                };
-                let Some(Ok(relay)) = values
-                    .get(2)
-                    .filter(|value| !value.is_empty())
-                    .map(|value| RelayUrl::parse(value))
-                else {
-                    continue;
-                };
-                by_target
-                    .entry(RouteTarget::ReferencedEvent(event_id))
-                    .or_default()
-                    .insert(relay);
-            }
-        }
-        let evidence = self
-            .evidence
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        for target in request.targets() {
-            let RouteTarget::ReferencedEvent(event_id) = target else {
-                continue;
-            };
-            if let Some(known) = evidence.get(&event_id) {
-                by_target
-                    .entry(RouteTarget::ReferencedEvent(event_id))
-                    .or_default()
-                    .extend(known.iter().cloned());
-            }
-        }
-        drop(evidence);
-
-        let mut destinations = Vec::new();
-        let mut coverage = BTreeMap::new();
-        for target in request
-            .targets()
-            .into_iter()
-            .filter(|target| matches!(target, RouteTarget::ReferencedEvent(_)))
-        {
-            let sessions = by_target.remove(&target).unwrap_or_default();
-            if sessions.is_empty() {
-                coverage.insert(target, CoverageState::SettledAbsent);
-            } else {
-                coverage.insert(target.clone(), CoverageState::Covered(sessions.clone()));
-                destinations.extend(sessions.into_iter().map(|session| {
-                    RouteDestination::new(
-                        session,
-                        BTreeSet::from([target.clone()]),
-                        "Nostr reference hint or admitted relay evidence",
-                    )
-                }));
-            }
-        }
-        RouteContribution {
-            destinations,
-            coverage,
-            unresolved: BTreeSet::new(),
-            shortfalls: Vec::new(),
-        }
+        Self { name: name.into() }
     }
 }
 
@@ -120,10 +31,17 @@ impl Router for HintRouter {
 
     fn queries(
         &self,
-        _request: &RouteRequest,
+        request: &RouteRequest,
         _upstream: &RoutePlan,
     ) -> Result<Vec<Query>, RouterError> {
-        Ok(Vec::new())
+        let referenced = referenced_events(request);
+        if referenced.is_empty() {
+            return Ok(Vec::new());
+        }
+        Query::events()
+            .ids(referenced)
+            .map_err(|error| RouterError::Refused(error.to_string()))
+            .map(|query| vec![query.cache_only()])
     }
 
     fn preview(
@@ -132,12 +50,7 @@ impl Router for HintRouter {
         _upstream: &RoutePlan,
         inputs: &[QuerySnapshot],
     ) -> Result<RouteContribution, RouterError> {
-        if !inputs.is_empty() {
-            return Err(RouterError::Refused(
-                "hint router accepts no query inputs".to_owned(),
-            ));
-        }
-        Ok(self.contribution(request))
+        project(request, inputs)
     }
 
     fn open(
@@ -146,18 +59,13 @@ impl Router for HintRouter {
         _upstream: Arc<RoutePlan>,
         inputs: Vec<QuerySnapshot>,
     ) -> Result<Box<dyn RouterSession>, RouterError> {
-        if !inputs.is_empty() {
-            return Err(RouterError::Refused(
-                "hint router accepts no query inputs".to_owned(),
-            ));
-        }
-        Ok(Box::new(HintSession {
-            current: self.contribution(&request),
-        }))
+        let current = project(&request, &inputs)?;
+        Ok(Box::new(HintSession { request, current }))
     }
 }
 
 struct HintSession {
+    request: RouteRequest,
     current: RouteContribution,
 }
 
@@ -171,13 +79,98 @@ impl RouterSession for HintSession {
         _upstream: Arc<RoutePlan>,
         inputs: Vec<QuerySnapshot>,
     ) -> Result<RouteContribution, RouterError> {
-        if !inputs.is_empty() {
-            return Err(RouterError::Refused(
-                "hint router accepts no query inputs".to_owned(),
-            ));
-        }
-        Ok(self.current())
+        let next = project(&self.request, &inputs)?;
+        self.current = next.clone();
+        Ok(next)
     }
 
     fn close(&mut self) {}
+}
+
+fn referenced_events(request: &RouteRequest) -> BTreeSet<EventId> {
+    request
+        .targets()
+        .into_iter()
+        .filter_map(|target| match target {
+            RouteTarget::ReferencedEvent(event_id) => Some(event_id),
+            _ => None,
+        })
+        .collect()
+}
+
+fn project(
+    request: &RouteRequest,
+    inputs: &[QuerySnapshot],
+) -> Result<RouteContribution, RouterError> {
+    if inputs.len() > 1 {
+        return Err(RouterError::Refused(
+            "hint router declares at most one query".to_owned(),
+        ));
+    }
+    let mut by_target = BTreeMap::<RouteTarget, BTreeSet<RelayUrl>>::new();
+    if let Some(event) = request.event() {
+        for tag in event.tags() {
+            let values = tag.as_slice();
+            if values.first().map(String::as_str) != Some("e") {
+                continue;
+            }
+            let Some(Ok(event_id)) = values.get(1).map(|value| EventId::parse(value)) else {
+                continue;
+            };
+            let Some(Ok(relay)) = values
+                .get(2)
+                .filter(|value| !value.is_empty())
+                .map(|value| RelayUrl::parse(value))
+            else {
+                continue;
+            };
+            by_target
+                .entry(RouteTarget::ReferencedEvent(event_id))
+                .or_default()
+                .insert(relay);
+        }
+    }
+    for record in inputs
+        .first()
+        .into_iter()
+        .flat_map(|snapshot| snapshot.events.iter())
+    {
+        by_target
+            .entry(RouteTarget::ReferencedEvent(record.id()))
+            .or_default()
+            .extend(
+                record
+                    .relay_occurrences()
+                    .occurrences()
+                    .map(|occurrence| occurrence.session.clone()),
+            );
+    }
+
+    let mut destinations = Vec::new();
+    let mut coverage = BTreeMap::new();
+    for target in request
+        .targets()
+        .into_iter()
+        .filter(|target| matches!(target, RouteTarget::ReferencedEvent(_)))
+    {
+        let sessions = by_target.remove(&target).unwrap_or_default();
+        if sessions.is_empty() {
+            coverage.insert(target, CoverageState::SettledAbsent);
+        } else {
+            coverage.insert(target.clone(), CoverageState::Covered(sessions.clone()));
+            destinations.extend(sessions.into_iter().map(|session| {
+                RouteDestination::new(
+                    session,
+                    BTreeSet::from([target.clone()]),
+                    "Nostr reference hint or admitted relay evidence",
+                )
+            }));
+        }
+    }
+    Ok(RouteContribution {
+        destinations,
+        coverage,
+        unresolved: BTreeSet::new(),
+        shortfalls: Vec::new(),
+    })
 }

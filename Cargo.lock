@@ -624,7 +624,6 @@ dependencies = [
  "fava-state",
  "fava-write",
  "nostr",
- "tokio",
 ]
 
 [[package]]
