@@ -16,7 +16,7 @@ use fava_wire::{RelayMessage, SubscriptionId};
 use crate::BoundedText;
 use crate::routed::{Correlation, SessionEnded, Settlement, SubscriptionItem, correlation};
 use crate::session::Connection;
-use fava_relay::{Authentication, Connectivity};
+use fava_relay::{Connectivity, Progress};
 use nostr::event::EventId;
 use tokio::sync::Notify;
 
@@ -405,7 +405,7 @@ impl Router {
                 // not a change.
                 let challenge = challenge.as_ref().to_owned();
                 self.moved(|connection| {
-                    connection.authentication = Authentication::Requested { challenge };
+                    connection.authentication.progress = Progress::Requested { challenge };
                 });
             }
             Correlation::Unclaimed => {

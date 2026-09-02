@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use fava_relay::BoundedText;
 use fava_runtime::{CancellationToken, Runtime, TaskName};
 use fava_transport::RelaySessionIdentity;
+use nostr::key::PublicKey;
 use tokio::sync::watch;
 
 use crate::challenge::Challenge;
@@ -149,7 +150,7 @@ impl Authenticator {
     }
 
     /// Record a new state for one generation and publish it.
-    /// Write a verdict onto the connection it belongs to.
+    /// Write how the challenge in front of one connection is going.
     ///
     /// The connection is where this is read from, so it is where it is kept.
     /// A verdict for a connection that has been replaced is dropped: it
@@ -158,17 +159,35 @@ impl Authenticator {
         &self,
         identity: &RelaySessionIdentity,
         session: &Arc<dyn fava_transport::RelaySession>,
-        state: fava_relay::Authentication,
+        progress: fava_relay::Progress,
     ) -> bool {
         if session.identity() != *identity {
             return false;
         }
-        if matches!(state, fava_relay::Authentication::Authenticating { .. }) {
+        if matches!(progress, fava_relay::Progress::Answering { .. }) {
             let mut guard = self.lock();
             let spent = guard.attempts.entry(identity.clone()).or_default();
             *spent = spent.saturating_add(1);
         }
-        fava_transport::RelaySessionExt::record_authentication(session, state);
+        fava_transport::RelaySessionExt::record_progress(session, progress);
+        self.signal();
+        true
+    }
+
+    /// Record that the relay accepted this connection as `account`.
+    ///
+    /// This is the only thing that sets what the relay knows, and nothing
+    /// clears it while the connection lives.
+    pub(crate) fn record_accepted(
+        &self,
+        identity: &RelaySessionIdentity,
+        session: &Arc<dyn fava_transport::RelaySession>,
+        account: PublicKey,
+    ) -> bool {
+        if session.identity() != *identity {
+            return false;
+        }
+        fava_transport::RelaySessionExt::record_accepted(session, account);
         self.signal();
         true
     }
@@ -227,7 +246,7 @@ impl Authenticator {
             self.record(
                 &identity,
                 session,
-                fava_relay::Authentication::Failed {
+                fava_relay::Progress::Unanswerable {
                     reason: BoundedText::new(format!(
                         "relay re-challenged past the {MAX_ATTEMPTS} attempt bound"
                     )),
@@ -238,7 +257,7 @@ impl Authenticator {
 
         match self.inner.policy.decide(&demand) {
             AuthenticationDecision::Decline => {
-                self.record(&identity, session, fava_relay::Authentication::Declined);
+                self.record(&identity, session, fava_relay::Progress::Declined);
                 None
             }
             AuthenticationDecision::Defer => Some(self.defer(&demand, session)),

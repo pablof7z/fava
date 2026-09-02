@@ -352,11 +352,17 @@ pub trait RelaySessionExt {
     /// a lease holder that owns no wire key still needs it.
     fn connection(&self) -> tokio::sync::watch::Receiver<crate::Connection>;
 
-    /// Record how far authentication has got on this connection.
+    /// Record how the challenge in front of this connection is going.
     ///
     /// Only the one component that answers challenges calls this. Everything
     /// else reads it, and a connection is where it is read from.
-    fn record_authentication(&self, state: crate::Authentication);
+    fn record_progress(&self, progress: crate::Progress);
+
+    /// Record that the relay accepted this connection as `account`.
+    ///
+    /// The only thing that sets what the relay knows. Nothing clears it while
+    /// the connection lives.
+    fn record_accepted(&self, account: nostr::key::PublicKey);
 
     /// Read the relay's authentication challenges.
     ///
@@ -429,7 +435,7 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
             // second reader from answering a challenge already answered.
             let as_of = event.pubkey;
             self.router().moved(|connection| {
-                connection.authentication = crate::Authentication::Authenticating { as_of };
+                connection.authentication.progress = crate::Progress::Answering { as_of };
             });
             let mailbox = self.router().await_acknowledgement(id);
             match self.encoded(&fava_wire::ClientMessage::auth(event)).await {
@@ -447,9 +453,16 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
         })
     }
 
-    fn record_authentication(&self, state: crate::Authentication) {
+    fn record_progress(&self, progress: crate::Progress) {
         self.router().moved(|connection| {
-            connection.authentication = state;
+            connection.authentication.progress = progress;
+        });
+    }
+
+    fn record_accepted(&self, account: nostr::key::PublicKey) {
+        self.router().moved(|connection| {
+            connection.authentication.established = Some(account);
+            connection.authentication.progress = crate::Progress::Idle;
         });
     }
 

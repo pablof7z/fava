@@ -144,7 +144,10 @@ fn a_dropped_connection_serves_no_work_it_previously_could() {
     let live = fava_transport::Connection {
         identity: identity.clone(),
         connectivity: fava_relay::Connectivity::Connected,
-        authentication: fava_relay::Authentication::Authenticated { as_of: alice },
+        authentication: fava_relay::Authentication {
+            established: Some(alice),
+            progress: fava_relay::Progress::Idle,
+        },
     };
     let want = fava_relay::Authority::As(alice);
     assert!(

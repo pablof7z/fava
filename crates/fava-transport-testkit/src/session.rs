@@ -149,7 +149,7 @@ impl FakeSession {
             *connection = fava_transport::Connection {
                 identity,
                 connectivity: fava_transport::Connectivity::Connected,
-                authentication: fava_transport::Authentication::None,
+                authentication: fava_transport::Authentication::unoffered(),
             };
         });
     }

@@ -163,6 +163,16 @@ impl Rig {
     }
 
     /// How far authentication has got, read from the connection that holds it.
+    /// How the challenge in front of the connection is going.
+    pub fn progress(&self) -> fava_relay::Progress {
+        self.state().progress
+    }
+
+    /// The account the relay has accepted on the connection, if any.
+    pub fn established(&self) -> Option<nostr::key::PublicKey> {
+        self.state().established
+    }
+
     pub fn state(&self) -> fava_relay::Authentication {
         fava_transport::RelaySessionExt::connection(&self.session())
             .borrow()

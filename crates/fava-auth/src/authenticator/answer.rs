@@ -68,11 +68,7 @@ impl Authenticator {
 
         match decision {
             AuthenticationDecision::Decline => {
-                self.record(
-                    &demand.session,
-                    &session,
-                    fava_relay::Authentication::Declined,
-                );
+                self.record(&demand.session, &session, fava_relay::Progress::Declined);
             }
             AuthenticationDecision::Authenticate { as_of } => {
                 authenticate(self, &demand, as_of, &session).await;
@@ -100,7 +96,7 @@ pub(super) async fn authenticate(
             authenticator.record(
                 identity,
                 session,
-                fava_relay::Authentication::Failed {
+                fava_relay::Progress::Unanswerable {
                     reason: BoundedText::new(error.to_string()),
                 },
             );
@@ -113,7 +109,7 @@ pub(super) async fn authenticate(
         authenticator.record(
             identity,
             session,
-            fava_relay::Authentication::Failed {
+            fava_relay::Progress::Unanswerable {
                 reason: BoundedText::new("no signer is attached for this account"),
             },
         );
@@ -125,7 +121,7 @@ pub(super) async fn authenticate(
         authenticator.record(
             identity,
             session,
-            fava_relay::Authentication::Failed {
+            fava_relay::Progress::Unanswerable {
                 reason: BoundedText::new("the signer was detached before the response was signed"),
             },
         );
@@ -138,7 +134,7 @@ pub(super) async fn authenticate(
             authenticator.record(
                 identity,
                 session,
-                fava_relay::Authentication::Failed {
+                fava_relay::Progress::Unanswerable {
                     reason: BoundedText::new(error.to_string()),
                 },
             );
@@ -152,7 +148,7 @@ pub(super) async fn authenticate(
             authenticator.record(
                 identity,
                 session,
-                fava_relay::Authentication::Failed {
+                fava_relay::Progress::Unanswerable {
                     reason: BoundedText::new(format!("{refused:?}")),
                 },
             );
@@ -162,7 +158,7 @@ pub(super) async fn authenticate(
     authenticator.record(
         identity,
         session,
-        fava_relay::Authentication::Authenticating { as_of: account },
+        fava_relay::Progress::Answering { as_of: account },
     );
 
     // Await the verdict off to the side. Answering a challenge must not block
@@ -180,10 +176,11 @@ pub(super) async fn authenticate(
             // chose to say so with; its own words carry the difference.
             let state = match acknowledged.settled().await {
                 fava_transport::Settlement::Accepted { .. } => {
-                    fava_relay::Authentication::Authenticated { as_of: account }
+                    owner.record_accepted(&identity, &session, account);
+                    return;
                 }
                 fava_transport::Settlement::Rejected { message } => {
-                    fava_relay::Authentication::Failed { reason: message }
+                    fava_relay::Progress::Refused { reason: message }
                 }
                 // The connection that carried the proof is gone, so the proof
                 // is void. The next connection challenges again.

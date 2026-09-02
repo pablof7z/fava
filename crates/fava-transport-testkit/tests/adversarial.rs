@@ -454,7 +454,8 @@ async fn a_relay_asking_to_authenticate_reaches_a_listener() {
     assert!(matches!(
         fava_transport::RelaySessionExt::connection(&asked)
             .borrow()
-            .authentication,
-        fava_transport::Authentication::Requested { .. }
+            .authentication
+            .progress,
+        fava_transport::Progress::Requested { .. }
     ));
 }

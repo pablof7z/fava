@@ -33,7 +33,7 @@ use nostr::types::RelayUrl;
 use tokio::sync::broadcast;
 
 pub use error::TransportError;
-pub use fava_relay::{Authentication, Authority, BoundedText, Connectivity};
+pub use fava_relay::{Authentication, Authority, BoundedText, Connectivity, Progress};
 pub use fava_wire::SubscriptionId;
 pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportFailure};
 pub use lease::{LeaseRelease, RelaySessionLease};

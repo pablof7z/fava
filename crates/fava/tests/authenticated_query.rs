@@ -112,12 +112,13 @@ impl Rig {
     }
 
     /// How far authentication has got, read from the connection that holds it.
-    fn authentication(&self) -> Option<fava_relay::Authentication> {
+    fn authentication(&self) -> Option<fava_relay::Progress> {
         let session = self.transport.session(&self.relay, &self.authority())?;
         Some(
             fava_transport::RelaySessionExt::connection(&session)
                 .borrow()
                 .authentication
+                .progress
                 .clone(),
         )
     }
@@ -193,7 +194,7 @@ async fn an_assembled_engine_answers_a_challenge_through_its_public_api() {
     );
     assert_eq!(
         rig.authentication(),
-        Some(fava_relay::Authentication::Authenticating { as_of: rig.account }),
+        Some(fava_relay::Progress::Answering { as_of: rig.account }),
         "the owner records that it answered"
     );
 }
@@ -240,10 +241,7 @@ async fn a_declining_policy_signs_nothing() {
     settle().await;
 
     assert!(auth_frames(&peer).is_empty(), "a decline sends no frame");
-    assert_eq!(
-        rig.authentication(),
-        Some(fava_relay::Authentication::Declined)
-    );
+    assert_eq!(rig.authentication(), Some(fava_relay::Progress::Declined));
 }
 
 /// A deferred challenge is enumerable, signals its arrival, and is answered out
@@ -380,7 +378,7 @@ async fn an_observation_reports_the_relays_demand_from_the_owners_conclusion() {
     );
     assert_eq!(
         rig.authentication(),
-        Some(fava_relay::Authentication::Declined),
+        Some(fava_relay::Progress::Declined),
         "and the connection says why it was never authenticated"
     );
 }
@@ -424,7 +422,7 @@ async fn auth_denied_for_one_access_context_leaves_another_running() {
 
     assert_eq!(
         rig.authentication(),
-        Some(fava_relay::Authentication::Declined),
+        Some(fava_relay::Progress::Declined),
         "the authenticated context was denied"
     );
     assert!(

@@ -152,8 +152,9 @@ async fn nostr_rs_relay_challenge_and_kind_22242_response_are_exact_wire_frames(
         matches!(
             fava_transport::RelaySessionExt::connection(lease.session())
                 .borrow()
-                .authentication,
-            fava_relay::Authentication::Authenticating { .. }
+                .authentication
+                .progress,
+            fava_relay::Progress::Answering { .. }
         ),
         "the connection records the real attempt"
     );

@@ -6,7 +6,7 @@ use fava::{Fava, Query};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{QueryEvidence, RelaySourceState};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{Authentication, Authority};
+use fava_relay::Authority;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{RelaySessionExt, Transport};
 use fava_transport_testkit::{FakeRelay, FakeTransport};
@@ -60,10 +60,7 @@ async fn query_access_survives_facade_planner_transport_observation_lifecycle() 
     let private_session = transport
         .session(&relay, &Authority::As(alice))
         .expect("the watch acquired this session");
-    RelaySessionExt::record_authentication(
-        &private_session,
-        Authentication::Authenticated { as_of: alice },
-    );
+    RelaySessionExt::record_accepted(&private_session, alice);
 
     let public = fava
         .observe(public_query)

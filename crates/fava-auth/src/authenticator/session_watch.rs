@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use fava_relay::{Authentication, BoundedText};
+use fava_relay::{BoundedText, Progress};
 use fava_transport::{RelaySession, Transport};
 
 use super::{Authenticator, WATCH_TASK};
@@ -46,7 +46,7 @@ impl Authenticator {
         let connection = fava_transport::RelaySessionExt::connection(session)
             .borrow()
             .clone();
-        let Authentication::Requested { challenge } = &connection.authentication else {
+        let Progress::Requested { challenge } = &connection.authentication.progress else {
             // It has moved on since the transport published it. Whatever it
             // moved to, this is no longer a question.
             return;
@@ -60,7 +60,7 @@ impl Authenticator {
                 self.record(
                     &identity,
                     session,
-                    Authentication::Failed {
+                    Progress::Unanswerable {
                         reason: BoundedText::new(error.to_string()),
                     },
                 );

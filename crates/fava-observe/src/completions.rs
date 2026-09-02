@@ -374,13 +374,13 @@ impl Engine {
     fn current_authority(&self, relay: &RelayUrl, generation: Round) -> Authority {
         self.slot(relay, generation)
             .and_then(|slot| slot.session.as_ref())
-            .map_or(
-                Authority::Unauthenticated,
-                |session| match RelaySessionExt::connection(session).borrow().authentication {
-                    fava_relay::Authentication::Authenticated { as_of } => Authority::As(as_of),
-                    _ => Authority::Unauthenticated,
-                },
-            )
+            .map_or(Authority::Unauthenticated, |session| {
+                RelaySessionExt::connection(session)
+                    .borrow()
+                    .authentication
+                    .established
+                    .map_or(Authority::Unauthenticated, Authority::As)
+            })
     }
 
     /// One event the relay attributed to one installed subscription.

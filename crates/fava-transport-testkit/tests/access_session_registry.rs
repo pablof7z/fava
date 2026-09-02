@@ -4,7 +4,7 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use fava_relay::{Authentication, Authority};
+use fava_relay::Authority;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySessionExt, Transport,
     TransportBounds, TransportDeadlines,
@@ -70,10 +70,7 @@ async fn an_authenticated_connection_cannot_become_anyone_elses()
     let alice_lease = transport
         .acquire_session(request(relay.clone(), Authority::As(alice)))
         .await?;
-    RelaySessionExt::record_authentication(
-        alice_lease.session(),
-        Authentication::Authenticated { as_of: alice },
-    );
+    RelaySessionExt::record_accepted(alice_lease.session(), alice);
 
     let bob_lease = transport
         .acquire_session(request(relay.clone(), Authority::As(bob)))
@@ -111,10 +108,7 @@ async fn same_correlation_completions_remain_scoped_to_exact_relay_and_generatio
     let alice_lease = transport
         .acquire_session(request(relay.clone(), Authority::As(alice)))
         .await?;
-    RelaySessionExt::record_authentication(
-        alice_lease.session(),
-        Authentication::Authenticated { as_of: alice },
-    );
+    RelaySessionExt::record_accepted(alice_lease.session(), alice);
     let anonymous_lease = transport
         .acquire_session(request(relay.clone(), Authority::Unauthenticated))
         .await?;

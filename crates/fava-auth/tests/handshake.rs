@@ -3,7 +3,7 @@
 mod support;
 
 use fava_auth::{AnswerOutcome, AuthenticationDecision, MAX_ATTEMPTS};
-use fava_relay::Authentication;
+use fava_relay::Progress;
 use support::{Rig, auth_frames, challenge_frame, ok_frame};
 
 #[tokio::test]
@@ -18,7 +18,7 @@ async fn a_challenge_is_answered_with_no_publication_in_flight() {
         1,
         "the owner's own lease sees an unsolicited challenge"
     );
-    assert!(matches!(rig.state(), Authentication::Authenticating { .. }));
+    assert!(matches!(rig.progress(), Progress::Answering { .. }));
 }
 
 #[tokio::test]
@@ -63,8 +63,8 @@ async fn an_accepted_response_authenticates_the_session() {
     rig.relay().push_frame(&ok_frame(&id, true, ""));
     rig.settle().await;
 
-    assert!(matches!(rig.state(), Authentication::Authenticated { .. }));
-    assert!(matches!(rig.state(), Authentication::Authenticated { .. }));
+    assert!(rig.established().is_some());
+    assert!(rig.established().is_some());
 }
 
 #[tokio::test]
@@ -78,11 +78,11 @@ async fn a_restricted_reply_is_not_a_rejection() {
         .push_frame(&ok_frame(&id, false, "restricted: not a member"));
     rig.settle().await;
 
-    let Authentication::Failed { reason: message } = rig.state() else {
+    let Progress::Refused { reason: message } = rig.progress() else {
         panic!("a restricted reply is authenticated-but-refused, not rejected");
     };
     assert_eq!(message.as_str(), "restricted: not a member");
-    assert!(!matches!(rig.state(), Authentication::Authenticated { .. }));
+    assert!(rig.established().is_none());
 }
 
 #[tokio::test]
@@ -96,7 +96,7 @@ async fn a_rejected_response_keeps_the_relays_own_text() {
         .push_frame(&ok_frame(&id, false, "error: bad signature"));
     rig.settle().await;
 
-    let Authentication::Failed { reason: message } = rig.state() else {
+    let Progress::Refused { reason: message } = rig.progress() else {
         panic!("a non-restricted refusal is a rejection");
     };
     assert_eq!(message.as_str(), "error: bad signature");
@@ -113,7 +113,7 @@ async fn a_declining_policy_signs_nothing() {
         auth_frames(&rig.relay()).is_empty(),
         "a declined challenge never reaches the wire"
     );
-    assert!(matches!(rig.state(), Authentication::Declined));
+    assert!(matches!(rig.progress(), Progress::Declined));
 }
 
 #[tokio::test]
@@ -124,7 +124,7 @@ async fn no_attached_signer_fails_without_sending() {
     rig.settle().await;
 
     assert!(auth_frames(&rig.relay()).is_empty());
-    let Authentication::Failed { reason } = rig.state() else {
+    let Progress::Unanswerable { reason } = rig.progress() else {
         panic!("a missing signer fails this attempt");
     };
     assert!(reason.as_str().contains("no signer"));
@@ -140,7 +140,7 @@ async fn an_oversized_challenge_is_refused_without_signing() {
     rig.settle().await;
 
     assert!(auth_frames(&rig.relay()).is_empty());
-    let Authentication::Failed { reason } = rig.state() else {
+    let Progress::Unanswerable { reason } = rig.progress() else {
         panic!("an oversized challenge fails rather than being truncated");
     };
     assert!(reason.as_str().contains("maximum"));
@@ -161,7 +161,7 @@ async fn an_endless_re_challenge_stops_at_the_bound() {
         MAX_ATTEMPTS as usize,
         "a relay cannot drive unbounded signing"
     );
-    let Authentication::Failed { reason } = rig.state() else {
+    let Progress::Unanswerable { reason } = rig.progress() else {
         panic!("the bound is reported, not silently ignored");
     };
     assert!(reason.as_str().contains("attempt bound"));
@@ -179,7 +179,7 @@ async fn a_deferred_challenge_waits_for_a_person_then_authenticates() {
         auth_frames(&rig.relay()).is_empty(),
         "nothing is signed until the person answers"
     );
-    assert!(matches!(rig.state(), Authentication::Requested { .. }));
+    assert!(matches!(rig.progress(), Progress::Requested { .. }));
     assert!(changed.has_changed().unwrap_or(false), "the signal fired");
 
     let pending = rig.authenticator().pending();
@@ -221,7 +221,7 @@ async fn a_person_may_refuse_a_deferred_challenge() {
 
     assert_eq!(outcome, AnswerOutcome::Applied);
     assert!(auth_frames(&rig.relay()).is_empty());
-    assert!(matches!(rig.state(), Authentication::Declined));
+    assert!(matches!(rig.progress(), Progress::Declined));
 }
 
 #[tokio::test]
@@ -266,13 +266,13 @@ async fn a_reconnected_session_begins_unauthenticated() {
     let id = rig.last_auth_event_id();
     rig.relay().push_frame(&ok_frame(&id, true, ""));
     rig.settle().await;
-    assert!(matches!(rig.state(), Authentication::Authenticated { .. }));
+    assert!(rig.established().is_some());
 
     rig.relay().reconnect();
     rig.settle().await;
 
     assert!(
-        !matches!(rig.state(), Authentication::Authenticated { .. }),
+        rig.established().is_none(),
         "a replaced connection is not the one that authenticated"
     );
 }
@@ -301,7 +301,7 @@ async fn a_session_reaching_a_verdict_wakes_a_watcher() {
         changed.has_changed().unwrap_or(false),
         "the relay accepting the answer is a change worth waking for"
     );
-    assert!(matches!(rig.state(), Authentication::Authenticated { .. }));
+    assert!(rig.established().is_some());
 }
 
 #[tokio::test]
@@ -322,5 +322,5 @@ async fn a_relay_that_re_challenges_asks_a_person_once() {
         1,
         "a re-challenge replaces the outstanding ask, got {pending:?}"
     );
-    assert!(matches!(rig.state(), Authentication::Requested { .. }));
+    assert!(matches!(rig.progress(), Progress::Requested { .. }));
 }

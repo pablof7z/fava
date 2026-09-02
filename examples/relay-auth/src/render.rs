@@ -129,7 +129,7 @@ pub(crate) fn state_result(
 fn state_fields(state: Option<Authentication>) -> (&'static str, String, u64) {
     match state {
         None => ("unknown", String::new(), 0),
-        Some(Authentication::None) => ("none", String::new(), 0),
+        Some(Authentication::unoffered()) => ("none", String::new(), 0),
         Some(Authentication::Requested { .. }) => ("requested", String::new(), 0),
         Some(Authentication::Authenticating { .. }) => ("authenticating", String::new(), 0),
         Some(Authentication::Authenticated { .. }) => ("authenticated", String::new(), 0),

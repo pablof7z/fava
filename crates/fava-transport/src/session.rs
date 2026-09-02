@@ -215,7 +215,7 @@ mod tests {
 /// The two states are independent questions. Connectivity is whether a socket
 /// exists; authentication is how far NIP-42 has got on the socket that does.
 /// A replacement connection carries a new `identity` and begins at
-/// [`Authentication::None`], because nothing proved to the relay outlives the
+/// [`Authentication::unoffered()`], because nothing proved to the relay outlives the
 /// connection that proved it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Connection {
@@ -234,7 +234,7 @@ impl Connection {
         Self {
             identity,
             connectivity: fava_relay::Connectivity::Connecting,
-            authentication: fava_relay::Authentication::None,
+            authentication: fava_relay::Authentication::unoffered(),
         }
     }
 
@@ -282,7 +282,7 @@ pub async fn publish_authentication_requests(
             seen = current.identity.clone();
             asked = None;
         }
-        if let fava_relay::Authentication::Requested { challenge } = &current.authentication
+        if let fava_relay::Progress::Requested { challenge } = &current.authentication.progress
             && asked.as_ref() != Some(challenge)
         {
             asked = Some(challenge.clone());

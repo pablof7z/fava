@@ -58,7 +58,7 @@ fn relay_fact(
             closed: None,
         }],
         reconnect_attempts: 0,
-        authentication: fava_relay::Authentication::None,
+        authentication: fava_relay::Authentication::unoffered(),
     }
 }
 
@@ -225,7 +225,7 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
                 closed: Some(BoundedText::new(&hostile)),
             }],
             reconnect_attempts: 1,
-            authentication: fava_relay::Authentication::None,
+            authentication: fava_relay::Authentication::unoffered(),
         });
     }
 
@@ -258,7 +258,7 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
         holders: 0,
         subscriptions: Vec::new(),
         reconnect_attempts: 0,
-        authentication: fava_relay::Authentication::None,
+        authentication: fava_relay::Authentication::unoffered(),
     });
     let replaced = diagnostics.snapshot();
     assert_eq!(replaced.relays.len(), 2);
@@ -281,7 +281,7 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
         holders: 1,
         subscriptions: Vec::new(),
         reconnect_attempts: 0,
-        authentication: fava_relay::Authentication::None,
+        authentication: fava_relay::Authentication::unoffered(),
     });
     let with_second_connection = diagnostics.snapshot();
     let same_session: Vec<_> = with_second_connection

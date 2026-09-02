@@ -18,7 +18,7 @@ use crate::slot::Slot;
 pub(crate) fn slot_authentication(slot: &Slot) -> Authentication {
     slot.session
         .as_ref()
-        .map_or(Authentication::None, |session| {
+        .map_or(Authentication::unoffered(), |session| {
             RelaySessionExt::connection(session)
                 .borrow()
                 .authentication
@@ -74,7 +74,7 @@ pub(crate) fn refused_plan(session: &RelayUrl, detail: BoundedText) -> RelayDiag
         holders: 0,
         subscriptions: Vec::new(),
         reconnect_attempts: 0,
-        authentication: Authentication::None,
+        authentication: Authentication::unoffered(),
     }
 }
 

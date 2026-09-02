@@ -5,7 +5,7 @@
 mod support;
 
 use fava_query::{Query, RelaySourceState};
-use fava_relay::{Authentication, Authority};
+use fava_relay::Authority;
 use fava_transport::RelaySessionExt;
 use fava_wire::RelayMessage;
 use nostr::event::{EventBuilder, FinalizeEvent, Kind};
@@ -55,10 +55,7 @@ async fn setup() -> Result<Setup, Box<dyn std::error::Error>> {
         .transport
         .session(&url, &Authority::As(alice))
         .expect("the watch acquired this session");
-    RelaySessionExt::record_authentication(
-        &private_session,
-        Authentication::Authenticated { as_of: alice },
-    );
+    RelaySessionExt::record_accepted(&private_session, alice);
 
     let public = assembly.observer.open(
         Query::events()

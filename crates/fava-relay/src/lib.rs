@@ -84,62 +84,91 @@ pub enum Connectivity {
 
 /// How far NIP-42 authentication has got on one relay connection.
 ///
-/// This belongs to a connection, not to a relay: a replacement connection
-/// starts at [`Authentication::None`], because nothing proved to the relay
-/// survives the connection that proved it.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Authentication {
-    /// The relay has not asked, and nothing has been offered.
-    None,
+/// Two questions, kept apart because they have different answers. What the
+/// relay has accepted here is one; how the challenge in front of us is going
+/// is the other. Held together they force a reader to decide, for every
+/// outcome, whether the relay learned anything from it — and the answer is
+/// only ever visible in `established`.
+///
+/// This belongs to a connection, not to a relay: a replacement starts having
+/// proved nothing, because nothing proved to the relay survives the connection
+/// that proved it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Authentication {
+    /// The account the relay has accepted on this connection.
+    ///
+    /// Set only by acceptance, and never cleared while the connection lives.
+    /// A relay that has greeted someone by name does not forget, so neither
+    /// does this.
+    pub established: Option<PublicKey>,
+    /// How the challenge in front of us is going.
+    pub progress: Progress,
+}
+
+/// How the challenge in front of one connection is going.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum Progress {
+    /// The relay has not asked, or its last question is finished with.
+    #[default]
+    Idle,
     /// The relay asked. Nobody has decided what to do about it.
     Requested {
         /// The relay's challenge, verbatim.
         challenge: String,
     },
     /// An answer is on the wire; the relay has not ruled on it.
-    Authenticating {
+    Answering {
         /// The account the answer was signed as.
         as_of: PublicKey,
     },
-    /// The relay accepted the answer.
-    Authenticated {
-        /// The account the relay accepted.
-        as_of: PublicKey,
-    },
-    /// The application refused to answer. Distinct from not having decided.
+    /// The application refused to answer this one. Distinct from not having
+    /// decided, and distinct from being unable.
     Declined,
-    /// The answer was refused, or could not be given.
-    Failed {
-        /// The relay's own words, or the exact reason no answer was possible.
+    /// The relay refused the answer, in its own words.
+    Refused {
+        /// Verbatim, bounded relay text.
+        reason: BoundedText,
+    },
+    /// No answer could be produced: no account, no signer, a challenge too
+    /// long to hold. The relay was told nothing, so it learned nothing.
+    Unanswerable {
+        /// Exact bounded reason.
         reason: BoundedText,
     },
 }
 
 impl Authentication {
+    /// A connection that has offered nothing and been asked nothing.
+    #[must_use]
+    pub const fn unoffered() -> Self {
+        Self {
+            established: None,
+            progress: Progress::Idle,
+        }
+    }
+
     /// Whether a connection in this state can still serve work needing
     /// `authority`.
     ///
-    /// The question is reachability, not equality. A connection nobody has
-    /// authenticated can still become anyone's, so it serves everything. One
-    /// already accepted as an account can never become another's, and can
-    /// never become anonymous again — the relay has already been told.
+    /// Anonymous work asks one question: does the relay know who is holding
+    /// this connection. Only acceptance makes it, so failing to answer and
+    /// being refused both leave a connection anonymous — the relay learned
+    /// nothing either way.
+    ///
+    /// Work naming an account asks whether this connection can still become
+    /// theirs. One already accepted as someone else cannot; one with an answer
+    /// in flight for someone else cannot until that settles. Everything else
+    /// can, including a connection whose last challenge was declined or
+    /// refused, because the next challenge is a new question.
     #[must_use]
     pub fn can_serve(&self, authority: &Authority) -> bool {
-        match authority {
-            // A connection carries anonymous work only while the relay still
-            // has no idea who is holding it. Once asked, an answer may go out
-            // before the work does; once refused on our side, it never will.
-            Authority::Unauthenticated => matches!(self, Self::None | Self::Declined),
-            Authority::As(want) => match self {
-                // Nothing offered yet, or asked and not yet answered: this
-                // connection can still become theirs.
-                Self::None | Self::Requested { .. } => true,
-                // Committed to one account, whether or not the relay has ruled.
-                Self::Authenticating { as_of } | Self::Authenticated { as_of } => as_of == want,
-                // Refused by us, or refused by the relay. Either way it will
-                // not authenticate as anyone on this connection.
-                Self::Declined | Self::Failed { .. } => false,
-            },
+        match (authority, self.established) {
+            (Authority::Unauthenticated, established) => established.is_none(),
+            (Authority::As(want), Some(established)) => established == *want,
+            (Authority::As(want), None) => !matches!(
+                self.progress,
+                Progress::Answering { as_of } if as_of != *want
+            ),
         }
     }
 }
@@ -216,102 +245,99 @@ mod tests {
 
 #[cfg(test)]
 mod connection_tests {
-    use super::{Authentication, Authority, BoundedText, Connectivity};
-    use nostr::key::Keys;
+    fn key(seed: u8) -> nostr::key::PublicKey {
+        let mut bytes = [0_u8; 32];
+        bytes[31] = seed;
+        nostr::key::Keys::new(nostr::key::SecretKey::from_slice(&bytes).expect("secret key"))
+            .public_key()
+    }
 
-    /// Every pair of state and requirement, decided one way and stated once.
+    use super::{Authentication, Authority, BoundedText, Connectivity, Progress};
+
+    /// What the relay knows decides anonymous work; nothing else does.
     #[test]
-    fn a_connection_serves_exactly_the_work_it_can_still_reach() {
-        let alice = Keys::generate().public_key();
-        let bob = Keys::generate().public_key();
+    fn only_acceptance_stops_a_connection_carrying_anonymous_work() {
+        let alice = key(1);
         let anon = Authority::Unauthenticated;
-        let as_alice = Authority::As(alice);
-        let as_bob = Authority::As(bob);
 
-        let cases: [(Authentication, &Authority, bool, &str); 13] = [
-            (Authentication::None, &anon, true, "nothing offered yet"),
-            (Authentication::None, &as_alice, true, "nothing offered yet"),
-            (
-                Authentication::Requested {
-                    challenge: "n".to_owned(),
-                },
-                &as_alice,
-                true,
-                "asked, not yet answered",
-            ),
-            (
-                Authentication::Requested {
-                    challenge: "n".to_owned(),
-                },
-                &anon,
-                false,
-                "the answer may go out first",
-            ),
-            (
-                Authentication::Authenticating { as_of: alice },
-                &as_alice,
-                true,
-                "same account",
-            ),
-            (
-                Authentication::Authenticating { as_of: alice },
-                &as_bob,
-                false,
-                "another account",
-            ),
-            (
-                Authentication::Authenticating { as_of: alice },
-                &anon,
-                false,
-                "already named",
-            ),
-            (
-                Authentication::Authenticated { as_of: alice },
-                &as_alice,
-                true,
-                "same account",
-            ),
-            (
-                Authentication::Authenticated { as_of: alice },
-                &as_bob,
-                false,
-                "another account",
-            ),
-            (
-                Authentication::Authenticated { as_of: alice },
-                &anon,
-                false,
-                "already named",
-            ),
-            (
-                Authentication::Declined,
-                &anon,
-                true,
-                "will never say who it is",
-            ),
-            (
-                Authentication::Declined,
-                &as_alice,
-                false,
-                "refused for this relay",
-            ),
-            (
-                Authentication::Failed {
-                    reason: BoundedText::new("no"),
-                },
-                &anon,
-                false,
-                "the relay knows who tried",
-            ),
-        ];
-
-        for (state, authority, expected, why) in cases {
-            assert_eq!(
-                state.can_serve(authority),
-                expected,
-                "{state:?} serving {authority:?}: {why}"
+        // The relay learned nothing from any of these, so it does not know
+        // who is holding the connection, so anonymous work may ride it.
+        for progress in [
+            Progress::Idle,
+            Progress::Declined,
+            Progress::Refused {
+                reason: BoundedText::new("restricted: not on the list"),
+            },
+            Progress::Unanswerable {
+                reason: BoundedText::new("no signer is attached for this account"),
+            },
+        ] {
+            let connection = Authentication {
+                established: None,
+                progress: progress.clone(),
+            };
+            assert!(
+                connection.can_serve(&anon),
+                "the relay was told nothing, so {progress:?} is still anonymous"
             );
         }
+
+        // Once it has been told, it has been told, whatever happens next.
+        for progress in [
+            Progress::Idle,
+            Progress::Requested {
+                challenge: "n".to_owned(),
+            },
+            Progress::Declined,
+        ] {
+            let connection = Authentication {
+                established: Some(alice),
+                progress: progress.clone(),
+            };
+            assert!(
+                !connection.can_serve(&anon),
+                "the relay knows this connection as alice; {progress:?} does not undo that"
+            );
+        }
+    }
+
+    /// Work naming an account asks whether this connection can still become
+    /// theirs.
+    #[test]
+    fn a_connection_serves_the_account_it_can_still_reach() {
+        let alice = key(1);
+        let bob = key(2);
+
+        let nothing_yet = Authentication::default();
+        assert!(nothing_yet.can_serve(&Authority::As(alice)));
+        assert!(nothing_yet.can_serve(&Authority::As(bob)));
+
+        let answering_alice = Authentication {
+            established: None,
+            progress: Progress::Answering { as_of: alice },
+        };
+        assert!(answering_alice.can_serve(&Authority::As(alice)));
+        assert!(
+            !answering_alice.can_serve(&Authority::As(bob)),
+            "an answer already on the wire names who this connection is becoming"
+        );
+
+        let is_alice = Authentication {
+            established: Some(alice),
+            progress: Progress::Idle,
+        };
+        assert!(is_alice.can_serve(&Authority::As(alice)));
+        assert!(!is_alice.can_serve(&Authority::As(bob)));
+
+        // The next challenge is a new question, so a refused one does not
+        // close the connection to the account that was refused.
+        let refused = Authentication {
+            established: None,
+            progress: Progress::Refused {
+                reason: BoundedText::new("error: try again"),
+            },
+        };
+        assert!(refused.can_serve(&Authority::As(alice)));
     }
 
     #[test]
