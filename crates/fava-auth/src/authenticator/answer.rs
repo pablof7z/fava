@@ -3,31 +3,26 @@
 use std::sync::Arc;
 
 use fava_relay::BoundedText;
-use fava_transport::RelaySession;
+use fava_transport::{RelaySession, RelaySessionExt, RelaySessionIdentity};
 use fava_write::PublicKey;
 use thiserror::Error;
 use tokio::sync::watch;
 
 use super::Authenticator;
-use crate::demand::{AuthenticationDemand, AuthenticationDemandId};
+use crate::challenge::Challenge;
+use crate::demand::AuthenticationDemand;
 use crate::event::auth_event;
 use crate::policy::AuthenticationDecision;
-
-/// What became of a person's answer.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AnswerOutcome {
-    /// The answer applied and the handshake proceeded.
-    Applied,
-    /// The connection this demand belonged to was replaced. Nothing was
-    /// signed and no session was authenticated.
-    NoLongerApplicable,
-}
 
 /// Why an answer could not be applied.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum AnswerError {
-    /// No demand with this identity is awaiting an answer.
-    #[error("no demand awaits this answer")]
+    /// `connection` names no session currently awaiting an answer -- either
+    /// none ever asked, or it did and has since moved on: answered already,
+    /// replaced by a reconnect, or gone. A connection is the only record of
+    /// its own demand, so neither is distinguishable from the other any
+    /// more.
+    #[error("no connection is awaiting an answer for this identity")]
     Unknown,
     /// A person's answer must be a decision, not another deferral.
     #[error("a deferred demand cannot be answered by deferring again")]
@@ -35,35 +30,60 @@ pub enum AnswerError {
 }
 
 impl Authenticator {
-    /// Apply a person's answer to one deferred demand.
+    /// Apply a person's answer to whatever `connection` is currently asking.
     ///
     /// # Errors
     ///
-    /// Returns [`AnswerError`] when no such demand awaits, or when the answer
-    /// is itself a deferral.
+    /// Returns [`AnswerError::Unknown`] when `connection` is not currently
+    /// waiting to be answered, and [`AnswerError::DeferredAgain`] when the
+    /// answer is itself a deferral.
     pub async fn answer(
         &self,
-        id: AuthenticationDemandId,
+        connection: &RelaySessionIdentity,
         decision: AuthenticationDecision,
-    ) -> Result<AnswerOutcome, AnswerError> {
+    ) -> Result<(), AnswerError> {
         if matches!(decision, AuthenticationDecision::Defer) {
             return Err(AnswerError::DeferredAgain);
         }
 
-        let (demand, session) = {
-            let mut guard = self.lock();
-            guard.deferred.remove(&id).ok_or(AnswerError::Unknown)?
-        };
-        self.signal();
+        let session = self
+            .inner()
+            .transport
+            .get()
+            .into_iter()
+            .flat_map(|transport| transport.awaiting_authentication())
+            .find(|session| session.identity() == *connection)
+            .ok_or(AnswerError::Unknown)?;
 
-        // An answer belongs to the connection it was shown for. Ask that
-        // connection, rather than comparing against a copy of its identity
-        // kept here: a connection that is gone, or replaced, answers nothing.
-        let live = session
-            .upgrade()
-            .filter(|session| session.identity() == demand.session);
-        let Some(session) = live else {
-            return Ok(AnswerOutcome::NoLongerApplicable);
+        // The connection is the only record of its demand; read the
+        // challenge it is currently asking rather than one captured earlier,
+        // which a re-challenge could already have superseded.
+        let progress = RelaySessionExt::connection(&session)
+            .borrow()
+            .authentication
+            .progress
+            .clone();
+        let fava_relay::Progress::Requested { challenge } = progress else {
+            // It was in the list a moment ago and has moved on since:
+            // answered already, or superseded. Nothing left to apply this
+            // answer to.
+            return Err(AnswerError::Unknown);
+        };
+        let demand = AuthenticationDemand {
+            session: connection.clone(),
+            challenge: match Challenge::new(&challenge) {
+                Ok(challenge) => challenge,
+                Err(error) => {
+                    self.record(
+                        connection,
+                        &session,
+                        fava_relay::Progress::Unanswerable {
+                            reason: BoundedText::new(error.to_string()),
+                        },
+                    );
+                    return Ok(());
+                }
+            },
         };
 
         match decision {
@@ -75,7 +95,7 @@ impl Authenticator {
             }
             AuthenticationDecision::Defer => unreachable!("refused above"),
         }
-        Ok(AnswerOutcome::Applied)
+        Ok(())
     }
 }
 

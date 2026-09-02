@@ -20,6 +20,9 @@ impl Authenticator {
     ///
     /// Returns [`WatchError`] when the runtime refuses to register the task.
     pub fn answer_requests(&self, transport: &Arc<dyn Transport>) -> Result<(), WatchError> {
+        // `pending` reads connections straight off this handle; kept for
+        // that lookup only, never to dial or hold one.
+        let _ = self.inner().transport.set(Arc::clone(transport));
         let mut asked = transport.authentication_requests();
         let waiting = Arc::clone(transport);
         let owner = self.clone();
@@ -83,7 +86,7 @@ impl Authenticator {
         let identity = connection.identity.clone();
         match Challenge::new(challenge) {
             Ok(challenge) => {
-                let _ = self.resolve(identity, challenge, session).await;
+                self.resolve(identity, challenge, session).await;
             }
             Err(error) => {
                 self.record(

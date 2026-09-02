@@ -2,7 +2,7 @@
 
 mod support;
 
-use fava_auth::{AnswerOutcome, AuthenticationDecision, MAX_ATTEMPTS};
+use fava_auth::{AnswerError, AuthenticationDecision, MAX_ATTEMPTS};
 use fava_relay::Progress;
 use nostr::event::FinalizeEvent;
 use support::{Rig, auth_frames, challenge_frame, ok_frame};
@@ -185,12 +185,11 @@ async fn a_deferred_challenge_waits_for_a_person_then_authenticates() {
 
     let pending = rig.authenticator().pending();
     assert_eq!(pending.len(), 1, "the application can enumerate every ask");
-    assert_eq!(&pending[0].session.relay, rig.relay_url());
+    assert_eq!(&pending[0].relay, rig.relay_url());
 
-    let outcome = rig
-        .authenticator()
+    rig.authenticator()
         .answer(
-            pending[0].id,
+            &pending[0],
             AuthenticationDecision::Authenticate {
                 as_of: rig.account(),
             },
@@ -198,7 +197,6 @@ async fn a_deferred_challenge_waits_for_a_person_then_authenticates() {
         .await
         .expect("the demand awaits this answer");
 
-    assert_eq!(outcome, AnswerOutcome::Applied);
     rig.settle().await;
     assert_eq!(auth_frames(&rig.relay()).len(), 1);
     assert!(
@@ -214,13 +212,11 @@ async fn a_person_may_refuse_a_deferred_challenge() {
     rig.settle().await;
 
     let pending = rig.authenticator().pending();
-    let outcome = rig
-        .authenticator()
-        .answer(pending[0].id, AuthenticationDecision::Decline)
+    rig.authenticator()
+        .answer(&pending[0], AuthenticationDecision::Decline)
         .await
         .expect("the demand awaits this answer");
 
-    assert_eq!(outcome, AnswerOutcome::Applied);
     assert!(auth_frames(&rig.relay()).is_empty());
     assert!(matches!(rig.progress(), Progress::Declined));
 }
@@ -245,15 +241,18 @@ async fn a_reconnect_drops_an_outstanding_demand_and_a_stale_answer_does_nothing
     let outcome = rig
         .authenticator()
         .answer(
-            pending[0].id,
+            &pending[0],
             AuthenticationDecision::Authenticate {
                 as_of: rig.account(),
             },
         )
         .await;
 
+    // The connection this identity named is gone; no other record of the
+    // demand survives it, so a stale answer is indistinguishable from one
+    // that was never asked at all.
     assert!(
-        matches!(outcome, Ok(AnswerOutcome::NoLongerApplicable)),
+        matches!(outcome, Err(AnswerError::Unknown)),
         "an answer to a replaced connection applies to nothing, got {outcome:?}"
     );
     assert!(auth_frames(&rig.relay()).is_empty());

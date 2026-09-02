@@ -1416,6 +1416,7 @@ dependencies = [
  "fava-query-standard",
  "fava-relay",
  "fava-subscriptions-no-grouping",
+ "fava-transport",
  "fava-transport-websocket",
  "fava-write-store-memory",
  "nostr",

@@ -48,9 +48,11 @@ policy set defer
 publish as:alice 3 "alice deferred on nostr" nostr
 capture defer-write receipt_id
 auth pending
-capture pending-id first_id
+capture pending-relay first_relay
+auth pending
+capture pending-connection first_connection
 auth state nostr as:alice
-auth answer ${pending-id} authenticate:alice
+auth answer ${pending-relay} ${pending-connection} authenticate:alice
 receipt wait ${defer-write}
 capture defer-event event_id
 auth state nostr as:alice

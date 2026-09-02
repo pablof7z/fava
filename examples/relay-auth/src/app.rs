@@ -7,13 +7,14 @@ use std::time::Duration;
 
 use e2e_support::{CommandResult, E2eSession, ResultValue, ShellError};
 use fava::{EventBuilder, Fava, Observation, Query};
-use fava_auth::{AnswerOutcome, Authenticator};
+use fava_auth::Authenticator;
+use fava_transport::RelaySessionIdentity;
 
 use crate::render::{
     AUTH_ANSWER_USAGE, AUTH_STATE_USAGE, AUTH_USAGE, AccessSpec, POLICY_USAGE, PUBLISH_USAGE,
-    QUERY_OPEN_USAGE, QUERY_WAIT_USAGE, answer_domain, block_on, decision_label,
-    domain, help, parse_access, parse_decision, parse_demand_id, parse_kind, parse_receipt_id,
-    receipt_result, required, resolve_access, resolve_relays, snapshot_result, state_result,
+    QUERY_OPEN_USAGE, QUERY_WAIT_USAGE, answer_domain, block_on, decision_label, domain, help,
+    parse_access, parse_connection, parse_decision, parse_kind, parse_receipt_id, receipt_result,
+    required, resolve_access, resolve_relays, snapshot_result, state_result,
 };
 use crate::support::SwitchablePolicy;
 
@@ -55,9 +56,10 @@ impl App {
             [command] if command == "auth" => Err(ShellError::Usage { usage: AUTH_USAGE }),
             [command, action] if command == "auth" && action == "pending" => self.auth_pending(),
             [command, action, arguments @ ..] if command == "auth" && action == "answer" => {
-                let id = required(arguments, 0, "demand-id", AUTH_ANSWER_USAGE, prompt)?;
-                let decision = required(arguments, 1, "decision", AUTH_ANSWER_USAGE, prompt)?;
-                self.auth_answer(session, &id, &decision)
+                let relay_url = required(arguments, 0, "relay-url", AUTH_ANSWER_USAGE, prompt)?;
+                let connection = required(arguments, 1, "connection", AUTH_ANSWER_USAGE, prompt)?;
+                let decision = required(arguments, 2, "decision", AUTH_ANSWER_USAGE, prompt)?;
+                self.auth_answer(session, &relay_url, &connection, &decision)
             }
             [command, action, arguments @ ..] if command == "auth" && action == "state" => {
                 let relay = required(arguments, 0, "relay-alias", AUTH_STATE_USAGE, prompt)?;
@@ -160,27 +162,32 @@ impl App {
     fn auth_pending(&self) -> Result<CommandResult, ShellError> {
         let authenticator = self.authenticator()?;
         let pending = authenticator.pending();
-        let ids = pending
-            .iter()
-            .map(|demand| ResultValue::from(demand.id.get().get()));
         let relays = pending
             .iter()
-            .map(|demand| ResultValue::text(demand.session.relay.to_string()));
+            .map(|connection| ResultValue::text(connection.relay.to_string()));
         let connections = pending
             .iter()
-            .map(|demand| ResultValue::from(demand.session.connection.get()));
-        // A bounded scalar convenience alongside `ids`: a scenario that knows
-        // exactly one demand is pending can `capture` this directly, since
-        // `capture` only accepts scalar fields and cannot read an array
-        // element. Zero when nothing is pending.
-        let first_id = pending.first().map_or(0, |demand| demand.id.get().get());
+            .map(|connection| ResultValue::from(connection.connection.get()));
+        // A demand is answered by the connection it arrived on, not a minted
+        // id, so there is nothing to enumerate but the relay and connection
+        // themselves. These two scalars are a convenience alongside the
+        // arrays above: a scenario that knows exactly one demand is pending
+        // can `capture` them directly, since `capture` only accepts scalar
+        // fields and cannot read an array element. Empty and zero when
+        // nothing is pending.
+        let first_relay = pending
+            .first()
+            .map_or_else(String::new, |connection| connection.relay.to_string());
+        let first_connection = pending
+            .first()
+            .map_or(0, |connection| connection.connection.get());
         CommandResult::success(
             "auth-pending",
             format!("{} demand(s) awaiting a person", pending.len()),
         )
         .with_field("count", pending.len())?
-        .with_field("first_id", first_id)?
-        .with_field("ids", ResultValue::array(ids))?
+        .with_field("first_relay", first_relay)?
+        .with_field("first_connection", first_connection)?
         .with_field("relays", ResultValue::array(relays))?
         .with_field("connections", ResultValue::array(connections))
     }
@@ -188,25 +195,31 @@ impl App {
     fn auth_answer(
         &self,
         session: &E2eSession,
-        id: &str,
+        relay_url: &str,
+        connection: &str,
         decision: &str,
     ) -> Result<CommandResult, ShellError> {
-        let id = parse_demand_id(id)?;
+        // A demand is answered by naming the connection it arrived on, not
+        // an id this application mints: `auth pending`'s `relays` field is
+        // this exact relay URL, not a local alias, because the connection
+        // this answers has no alias of its own -- only `pending` and
+        // `answer` need to agree on it.
+        let relay = fava::RelayUrl::parse(relay_url).map_err(|_| ShellError::Usage {
+            usage: AUTH_ANSWER_USAGE,
+        })?;
+        let connection = parse_connection(connection)?;
+        let identity = RelaySessionIdentity { relay, connection };
         let decision = parse_decision(session, decision)?;
         let authenticator = self.authenticator()?;
-        let outcome =
-            block_on(authenticator.answer(id, decision)).map_err(|error| answer_domain(&error))?;
-        let label = match outcome {
-            AnswerOutcome::Applied => "applied",
-            AnswerOutcome::NoLongerApplicable => "no-longer-applicable",
-        };
+        block_on(authenticator.answer(&identity, decision))
+            .map_err(|error| answer_domain(&error))?;
         CommandResult::success(
             "auth-answered",
-            format!("demand {} {label}", id.get().get()),
+            format!("{relay_url} connection {} answered", connection.get()),
         )
-        .with_field("id", id.get().get())?
-        .with_field("decision", decision_label(decision))?
-        .with_field("outcome", label)
+        .with_field("relay", relay_url)?
+        .with_field("connection", connection.get())?
+        .with_field("decision", decision_label(decision))
     }
 
     /// What one relay connection has proved for the named authority.

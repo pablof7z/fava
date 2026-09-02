@@ -16,6 +16,7 @@ fava-publisher-nip01 = { path = "../../crates/fava-publisher-nip01" }
 fava-query-standard = { path = "../../crates/fava-query-standard" }
 fava-relay = { path = "../../crates/fava-relay" }
 fava-subscriptions-no-grouping = { path = "../../crates/fava-subscriptions-no-grouping" }
+fava-transport = { path = "../../crates/fava-transport" }
 fava-transport-websocket = { path = "../../crates/fava-transport-websocket" }
 fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }
 nostr = { version = "=0.45.3", default-features = false, features = ["os-rng", "std"] }

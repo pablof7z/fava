@@ -6,9 +6,9 @@
 
 use e2e_support::{CommandResult, E2eSession, ResultValue, ShellError};
 use fava::{Kind, PublicKey, QuerySnapshot, Receipt, ReceiptId, RelayDeliveryOutcome};
-use fava_auth::{AnswerError, AuthenticationDecision, AuthenticationDemandId};
-use fava_relay::{Authentication, Authority, BoundedText};
-use std::num::NonZeroU64;
+use fava_auth::{AnswerError, AuthenticationDecision};
+use fava_relay::{Authentication, Authority, BoundedText, Progress};
+use fava_transport::RelayConnection;
 
 /// Which relay-access lane a command names: the unauthenticated public lane,
 /// or one authenticated session, named by its local account alias.
@@ -20,7 +20,7 @@ pub(crate) enum AccessSpec {
 pub(crate) const POLICY_USAGE: &str = "policy set <authenticate:<account-alias>|decline|defer>";
 pub(crate) const AUTH_USAGE: &str = "auth <pending|answer|state> ...";
 pub(crate) const AUTH_ANSWER_USAGE: &str =
-    "auth answer <demand-id> <authenticate:<account-alias>|decline>";
+    "auth answer <relay-url> <connection> <authenticate:<account-alias>|decline>";
 pub(crate) const AUTH_STATE_USAGE: &str = "auth state <relay-alias> <public|as:<account-alias>>";
 pub(crate) const QUERY_OPEN_USAGE: &str =
     "query open <name> <public|as:<account>> <kind> <relay> [relay ...]";
@@ -94,12 +94,16 @@ pub(crate) fn decision_label(decision: AuthenticationDecision) -> String {
     }
 }
 
-pub(crate) fn parse_demand_id(value: &str) -> Result<AuthenticationDemandId, ShellError> {
+/// Parse the connection generation a person names alongside a relay URL.
+///
+/// A demand is answered by the connection it arrived on, not a minted id: the
+/// application already showed both halves of that identity together, as
+/// `auth pending`'s parallel `relays` and `connections` fields.
+pub(crate) fn parse_connection(value: &str) -> Result<RelayConnection, ShellError> {
     value
         .parse::<u64>()
         .ok()
-        .and_then(NonZeroU64::new)
-        .map(AuthenticationDemandId::from_nonzero)
+        .and_then(RelayConnection::new)
         .ok_or(ShellError::Usage {
             usage: AUTH_ANSWER_USAGE,
         })
@@ -127,14 +131,22 @@ pub(crate) fn state_result(
 }
 
 fn state_fields(state: Option<Authentication>) -> (&'static str, String, u64) {
-    match state {
-        None => ("unknown", String::new(), 0),
-        Some(Authentication::unoffered()) => ("none", String::new(), 0),
-        Some(Authentication::Requested { .. }) => ("requested", String::new(), 0),
-        Some(Authentication::Authenticating { .. }) => ("authenticating", String::new(), 0),
-        Some(Authentication::Authenticated { .. }) => ("authenticated", String::new(), 0),
-        Some(Authentication::Declined) => ("declined", String::new(), 0),
-        Some(Authentication::Failed { reason }) => bounded_text("failed", &reason),
+    let Some(state) = state else {
+        return ("unknown", String::new(), 0);
+    };
+    // What the relay has accepted is sticky for the life of the connection:
+    // once it knows, it knows, whatever the challenge in front of it is
+    // doing now.
+    if state.established.is_some() {
+        return ("authenticated", String::new(), 0);
+    }
+    match state.progress {
+        Progress::Idle => ("none", String::new(), 0),
+        Progress::Requested { .. } => ("requested", String::new(), 0),
+        Progress::Answering { .. } => ("authenticating", String::new(), 0),
+        Progress::Declined => ("declined", String::new(), 0),
+        Progress::Refused { reason } => bounded_text("refused", &reason),
+        Progress::Unanswerable { reason } => bounded_text("unanswerable", &reason),
     }
 }
 
@@ -270,7 +282,7 @@ pub(crate) fn help() -> CommandResult {
                     "relay add|list|remove",
                     "policy set <authenticate:<account-alias>|decline|defer>",
                     "auth pending",
-                    "auth answer <demand-id> <authenticate:<account-alias>|decline>",
+                    "auth answer <relay-url> <connection> <authenticate:<account-alias>|decline>",
                     "auth state <relay> <public|as:<account>>",
                     "query open <name> <public|as:<account>> <kind> <relay>...",
                     "query snapshot|wait|close <name> ...",

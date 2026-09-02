@@ -27,7 +27,7 @@
 - [x] 4.1 Replace `watch_session` and `watch_session_soon` with attending the session handed to it by that signal, and delete the lease, `open_request`, `SESSION_DEADLINE`, the frame bounds, `LAST_HOLDER_CHECK`, `LONE_CHECKS_BEFORE_RELEASE`, the `watching` set, the release loop, `WatchError` and `live_session`; verify `fava-auth` no longer depends on `Transport` and a grep for each name is empty
 - [x] 4.2 Delete `Fava::watch_authenticated_relays`, `transport_for_auth`, and `BuildError::MissingAuthenticationTransport`; verify an engine with a policy and no transport builds
 - [x] 4.3 Let the policy name the account it authenticates as; verify a test's policy authenticates as an account the connection was not opened for
-- [ ] 4.4 Delete the deferred-demand ledger, `AuthenticationDemandId` and `PendingAuthentication`, answering by connection instead; verify the deferred-then-answered test passes and the session entry is the only record of an outstanding ask
+- [x] 4.4 Delete the deferred-demand ledger, `AuthenticationDemandId` and `PendingAuthentication`, answering by connection instead; verify the deferred-then-answered test passes and the session entry is the only record of an outstanding ask
 - [x] 4.5 Delete `SessionAuthentication`'s copy of the connection counter and the stale-generation comparisons it served; verify the existing proof that a stale answer resolves nothing still passes
 
 ## 5. Waiting on the connection

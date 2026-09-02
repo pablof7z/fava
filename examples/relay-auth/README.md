@@ -23,7 +23,7 @@ account new|import|add-pubkey|list|switch|replace|remove|clear
 relay add|list|remove
 policy set <authenticate:<account-alias>|decline|defer>
 auth pending
-auth answer <demand-id> <authenticate:<account-alias>|decline>
+auth answer <relay-url> <connection> <authenticate:<account-alias>|decline>
 auth state <relay> <public|as:<account>>
 query open <name> <public|as:<account>> <kind> <relay>...
 query snapshot|wait|close <name> ...
@@ -69,7 +69,9 @@ already decided is revisited: this changes what the *next* challenge gets.
 ## Answering for a person
 
 `policy set defer` makes every future challenge on this engine wait for a
-person. `auth pending` lists what's waiting; `auth answer <id> authenticate`
+person. `auth pending` lists what's waiting, by the relay and connection it
+arrived on -- there is no separate id, because the connection is the only
+record of its own demand. `auth answer <relay-url> <connection> authenticate`
 (or `decline`) resolves it. `publish` itself returns immediately once a
 write is durably accepted (see below for why); `receipt wait <id>` blocks,
 with an explicit bound, until routing settles.

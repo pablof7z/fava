@@ -18,8 +18,8 @@ mod demand;
 mod event;
 mod policy;
 
-pub use authenticator::{AnswerError, AnswerOutcome, Authenticator, MAX_ATTEMPTS, WatchError};
+pub use authenticator::{AnswerError, Authenticator, MAX_ATTEMPTS, WatchError};
 pub use challenge::{Challenge, ChallengeError};
-pub use demand::{AuthenticationDemand, AuthenticationDemandId, PendingAuthentication};
+pub use demand::AuthenticationDemand;
 pub use event::auth_event;
 pub use policy::{AuthenticationDecision, AuthenticationPolicy};

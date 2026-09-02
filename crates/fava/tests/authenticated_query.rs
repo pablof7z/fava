@@ -270,11 +270,11 @@ async fn a_deferred_challenge_reaches_the_application_and_is_answered_out_of_ban
 
     let pending = authentication.pending();
     assert_eq!(pending.len(), 1, "exactly one demand awaits a person");
-    assert_eq!(pending[0].session.relay, rig.relay);
+    assert_eq!(pending[0].relay, rig.relay);
 
     authentication
         .answer(
-            pending[0].id,
+            &pending[0],
             AuthenticationDecision::Authenticate { as_of: rig.account },
         )
         .await

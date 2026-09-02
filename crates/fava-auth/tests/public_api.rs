@@ -1,12 +1,8 @@
 //! External compile-surface proof for the authentication-owned API.
 
 use std::collections::BTreeSet;
-use std::num::NonZeroU64;
 
-use fava_auth::{
-    AuthenticationDecision, AuthenticationDemand, AuthenticationDemandId, AuthenticationPolicy,
-    Challenge, PendingAuthentication,
-};
+use fava_auth::{AuthenticationDecision, AuthenticationDemand, AuthenticationPolicy, Challenge};
 use fava_transport::{RelayConnection, RelaySessionIdentity};
 use nostr::key::{Keys, PublicKey};
 use nostr::types::RelayUrl;
@@ -85,23 +81,15 @@ fn a_stateful_policy_and_a_bare_closure_are_both_policies() {
 }
 
 #[test]
-fn a_deferred_demand_carries_a_stable_identity_and_its_generation() {
-    let demand = demand("wss://relay.example.com", 3);
-    let id = AuthenticationDemandId::from_nonzero(NonZeroU64::new(1).expect("non-zero"));
+fn a_demand_is_answered_by_the_connection_it_arrived_on_not_a_minted_identity() {
+    let first = demand("wss://relay.example.com", 3);
+    let reconnected = demand("wss://relay.example.com", 4);
 
-    let pending = PendingAuthentication {
-        id,
-        session: demand.session.clone(),
-    };
-
-    assert_eq!(pending.id, id, "an answer names the exact demand");
-    assert_eq!(
-        pending.session.connection, demand.session.connection,
-        "an answer given after this generation is replaced resolves nothing"
-    );
+    // `demand.session` is a `RelaySessionIdentity`: the same value `pending`
+    // returns and `answer` takes. Nothing else names a demand.
+    assert_eq!(first.session.relay, reconnected.session.relay, "same relay");
     assert_ne!(
-        id,
-        AuthenticationDemandId::from_nonzero(NonZeroU64::new(2).expect("non-zero")),
-        "identities are distinct"
+        first.session, reconnected.session,
+        "a later generation is a different connection, and answers nothing signed for the earlier one"
     );
 }

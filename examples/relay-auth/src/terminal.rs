@@ -287,7 +287,7 @@ fn completions(context: &str) -> &'static [&'static str] {
         "policy set" => &["authenticate", "decline", "defer"],
         "auth" => &["pending", "answer", "state"],
         "query" => &["open", "snapshot", "wait", "close"],
-        "auth answer" | "auth state" | "query open" | "publish" => &["public"],
+        "auth state" | "query open" | "publish" => &["public"],
         "receipt" => &["list", "show", "wait"],
         _ => &[
             "account",
@@ -327,7 +327,7 @@ fn hint(line: &str) -> Option<&'static str> {
         "policy" => Some(" set <authenticate|decline|defer>"),
         "policy set" => Some(" <authenticate|decline|defer>"),
         "auth" => Some(" <pending|answer|state> ..."),
-        "auth answer" => Some(" <demand-id> <authenticate|decline>"),
+        "auth answer" => Some(" <relay-url> <connection> <authenticate|decline>"),
         "auth state" => Some(" <relay-alias> <public|as:<account>>"),
         "query" => Some(" <open|snapshot|wait|close> ..."),
         "query open" => Some(" <name> <public|as:<account>> <kind> <relay> [relay ...]"),

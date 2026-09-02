@@ -1,17 +1,16 @@
 //! The lifecycle owner: one authenticated session, watched and answered.
 
 use std::collections::BTreeMap;
-use std::num::NonZeroU64;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use fava_relay::BoundedText;
 use fava_runtime::{CancellationToken, Runtime, TaskName};
-use fava_transport::{RelaySession, RelaySessionIdentity};
+use fava_transport::{RelaySession, RelaySessionIdentity, Transport};
 use nostr::key::PublicKey;
 use tokio::sync::watch;
 
 use crate::challenge::Challenge;
-use crate::demand::{AuthenticationDemand, AuthenticationDemandId, PendingAuthentication};
+use crate::demand::AuthenticationDemand;
 use crate::policy::{AuthenticationDecision, AuthenticationPolicy};
 /// How many answers one connection may be driven to send.
 ///
@@ -22,7 +21,7 @@ pub const MAX_ATTEMPTS: u32 = 8;
 mod answer;
 mod session_watch;
 
-pub use answer::{AnswerError, AnswerOutcome};
+pub use answer::AnswerError;
 pub use session_watch::WatchError;
 
 /// Task name for one session's authentication watch.
@@ -46,6 +45,12 @@ pub(crate) struct Inner {
     pub(crate) runtime: Runtime,
     pub(crate) state: Mutex<State>,
     pub(crate) pending_changed: watch::Sender<u64>,
+    /// Read-only handle onto the transport `answer_requests` was given.
+    ///
+    /// This owner opens no connection and holds none; it only asks the
+    /// transport, once set, which connections are currently waiting to be
+    /// answered. Set at most once, by [`Authenticator::answer_requests`].
+    pub(crate) transport: OnceLock<Arc<dyn Transport>>,
 }
 
 /// A demand or attempt count, held weakly so a connection nobody is using any
@@ -72,50 +77,25 @@ pub(crate) struct State {
     /// none, so nothing resets a live entry -- `prune_stale` instead removes
     /// the entries a replacement or a drop leaves behind.
     pub(crate) attempts: BTreeMap<RelaySessionIdentity, Held<u32>>,
-    /// Demands a person still owes an answer, and the connection each one
-    /// belongs to.
-    pub(crate) deferred: BTreeMap<AuthenticationDemandId, Held<AuthenticationDemand>>,
     /// Demands lost to a broadcast overflow: a relay asked, and this owner's
     /// subscription fell behind before it read that ask. Nothing names the
     /// specific connection lost, so this counts what happened rather than
     /// pretending it did not.
     pub(crate) lagged: u64,
-    next_id: u64,
     revision: u64,
 }
 
 impl State {
-    fn mint_id(&mut self) -> AuthenticationDemandId {
-        self.next_id = self.next_id.saturating_add(1);
-        AuthenticationDemandId::from_nonzero(
-            NonZeroU64::new(self.next_id).expect("the counter starts at one"),
-        )
-    }
-
-    /// Drop every deferred demand already outstanding for this exact session
-    /// and connection.
-    pub(crate) fn drop_deferred_for(&mut self, session: &RelaySessionIdentity) {
-        self.deferred
-            .retain(|_, (demand, _)| &demand.session != session);
-    }
-
-    /// Drop every attempt count and deferred demand whose connection has
-    /// been replaced or is gone.
+    /// Drop every attempt count whose connection has been replaced or is
+    /// gone.
     ///
-    /// Both are keyed by the identity they were recorded under, which a
-    /// reconnect leaves behind: the session a `Weak` points at is still
-    /// alive, but wears a new identity, and nothing signs, answers, or
-    /// re-attempts for the old one again. [`Self::pending`][pending] already
-    /// tells a live entry from a dead one this way; this is the same check,
-    /// applied so the dead entry is actually removed rather than only hidden
-    /// from that read.
-    ///
-    /// [pending]: Authenticator::pending
+    /// It is keyed by the identity it was recorded under, which a reconnect
+    /// leaves behind: the session a `Weak` points at is still alive, but
+    /// wears a new identity, and nothing signs, answers, or re-attempts for
+    /// the old one again.
     pub(crate) fn prune_stale(&mut self) {
         self.attempts
             .retain(|identity, (_, session)| identity_still_live(identity, session));
-        self.deferred
-            .retain(|_, (demand, session)| identity_still_live(&demand.session, session));
     }
 }
 
@@ -137,25 +117,29 @@ impl Authenticator {
                 runtime,
                 state: Mutex::new(State::default()),
                 pending_changed: watch::channel(0).0,
+                transport: OnceLock::new(),
             }),
         }
     }
 
-    /// Demands currently awaiting a person's answer.
+    /// Connections currently waiting to be answered.
+    ///
+    /// A connection asked and not yet answered is
+    /// [`fava_relay::Progress::Requested`], and that is the only record of
+    /// the ask -- read straight off the transport rather than a copy kept
+    /// here. Empty before [`Self::answer_requests`] has been called.
     #[must_use]
-    pub fn pending(&self) -> Vec<PendingAuthentication> {
-        let state = self.lock();
-        state
-            .deferred
-            .iter()
-            // A question asked on a connection that has been replaced, or is
-            // gone, is not waiting on anybody.
-            .filter(|(_, (demand, session))| identity_still_live(&demand.session, session))
-            .map(|(id, (demand, _))| PendingAuthentication {
-                id: *id,
-                session: demand.session.clone(),
+    pub fn pending(&self) -> Vec<RelaySessionIdentity> {
+        self.inner
+            .transport
+            .get()
+            .map_or_else(Vec::new, |transport| {
+                transport
+                    .awaiting_authentication()
+                    .iter()
+                    .map(|session| session.identity())
+                    .collect()
             })
-            .collect()
     }
 
     /// Demands lost because this owner's watch fell behind the relays it
@@ -185,11 +169,11 @@ impl Authenticator {
     /// Signal fired whenever anything this owner knows about authentication
     /// changes.
     ///
-    /// That is a session reaching a new state, and a deferred demand
-    /// appearing, being answered, or losing the connection it belonged to.
-    /// The signal carries no detail: read [`Self::state`] or [`Self::pending`]
-    /// after it fires. It may fire without either having changed, so treat it
-    /// as a reason to look rather than as the change itself.
+    /// That is a session reaching a new state, and a policy deferring a
+    /// challenge to a person. The signal carries no detail: read
+    /// [`Self::pending`] after it fires. It may fire without that having
+    /// changed, so treat it as a reason to look rather than as the change
+    /// itself.
     #[must_use]
     pub fn subscribe(&self) -> watch::Receiver<u64> {
         self.inner.pending_changed.subscribe()
@@ -252,32 +236,6 @@ impl Authenticator {
         true
     }
 
-    /// Retain a demand a policy deferred, and signal the change.
-    ///
-    /// One connection is one conversation. A relay repeating its challenge has
-    /// not asked a second question, and nobody can answer one it has already
-    /// superseded, so the outstanding ask is replaced rather than joined.
-    /// Without this a relay that re-challenges under a deferring policy grows
-    /// the set without bound: the attempt ceiling counts attempts, and a
-    /// deferred demand never makes one.
-    pub(crate) fn defer(
-        &self,
-        demand: &AuthenticationDemand,
-        session: &std::sync::Arc<dyn fava_transport::RelaySession>,
-    ) -> AuthenticationDemandId {
-        let mut guard = self.lock();
-        guard.drop_deferred_for(&demand.session);
-        let id = guard.mint_id();
-        guard
-            .deferred
-            .insert(id, (demand.clone(), std::sync::Arc::downgrade(session)));
-        drop(guard);
-        // Nothing has been signed and nothing sent. The connection stays where
-        // the relay left it: asked, and not yet answered.
-        self.signal();
-        id
-    }
-
     pub(crate) fn signal(&self) {
         let next = {
             let mut guard = self.lock();
@@ -292,14 +250,12 @@ impl Authenticator {
     }
 
     /// Decide one challenge and act on the decision.
-    ///
-    /// Returns the identity of a demand that was deferred to a person.
     pub(crate) async fn resolve(
         &self,
         identity: RelaySessionIdentity,
         challenge: Challenge,
         session: &Arc<dyn fava_transport::RelaySession>,
-    ) -> Option<AuthenticationDemandId> {
+    ) {
         let demand = AuthenticationDemand {
             session: identity.clone(),
             challenge,
@@ -321,18 +277,23 @@ impl Authenticator {
                     )),
                 },
             );
-            return None;
+            return;
         }
 
         match self.inner.policy.decide(&demand) {
             AuthenticationDecision::Decline => {
                 self.record(&identity, session, fava_relay::Progress::Declined);
-                None
             }
-            AuthenticationDecision::Defer => Some(self.defer(&demand, session)),
+            AuthenticationDecision::Defer => {
+                // The connection already carries this demand: the transport
+                // set its progress to `Requested` before this owner ever saw
+                // it, and `pending` reads that directly. Nothing here needs
+                // to remember it a second time -- only wake whoever is
+                // waiting on `subscribe` to go look.
+                self.signal();
+            }
             AuthenticationDecision::Authenticate { as_of } => {
                 answer::authenticate(self, &demand, as_of, session).await;
-                None
             }
         }
     }
@@ -345,7 +306,6 @@ impl Authenticator {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -353,7 +313,7 @@ mod tests {
     use fava_transport_testkit::FakeTransport;
     use nostr::types::RelayUrl;
 
-    use super::{AuthenticationDemand, AuthenticationDemandId, Challenge, MAX_ATTEMPTS, State};
+    use super::{MAX_ATTEMPTS, State};
 
     fn nonzero(value: usize) -> std::num::NonZeroUsize {
         std::num::NonZeroUsize::new(value).expect("constant is non-zero")
@@ -389,10 +349,10 @@ mod tests {
         (transport, lease)
     }
 
-    // ARCH-6b.9: an attempt count and a deferred demand are both keyed by the
-    // identity they were recorded under. A reconnect leaves that identity
-    // behind without ever visiting it again, so nothing but an active prune
-    // stops either map from growing once per connection, forever.
+    // ARCH-6b.9: an attempt count is keyed by the identity it was recorded
+    // under. A reconnect leaves that identity behind without ever visiting it
+    // again, so nothing but an active prune stops the map from growing once
+    // per connection, forever.
     #[tokio::test]
     async fn prune_stale_drops_entries_left_behind_by_a_reconnect() {
         let (transport, lease) = open_session().await;
@@ -403,29 +363,14 @@ mod tests {
         state
             .attempts
             .insert(identity.clone(), (MAX_ATTEMPTS, Arc::downgrade(&session)));
-        state.deferred.insert(
-            AuthenticationDemandId::from_nonzero(NonZeroU64::new(1).expect("non-zero")),
-            (
-                AuthenticationDemand {
-                    session: identity.clone(),
-                    challenge: Challenge::new("nonce").expect("bounded challenge"),
-                },
-                Arc::downgrade(&session),
-            ),
-        );
 
         // The connection this identity names is still the live one: pruning
-        // must not touch either entry.
+        // must not touch it.
         state.prune_stale();
         assert_eq!(
             state.attempts.len(),
             1,
             "a live connection's count survives"
-        );
-        assert_eq!(
-            state.deferred.len(),
-            1,
-            "a live connection's demand survives"
         );
 
         // Reconnect: the same session object now wears a different identity.
@@ -445,10 +390,6 @@ mod tests {
             state.attempts.is_empty(),
             "an attempt count for a replaced connection is not kept forever"
         );
-        assert!(
-            state.deferred.is_empty(),
-            "a demand for a replaced connection is not kept forever"
-        );
     }
 
     // The other half of ARCH-6b.9: a connection that is dropped entirely,
@@ -462,17 +403,7 @@ mod tests {
         let mut state = State::default();
         state
             .attempts
-            .insert(identity.clone(), (1, Arc::downgrade(&session)));
-        state.deferred.insert(
-            AuthenticationDemandId::from_nonzero(NonZeroU64::new(1).expect("non-zero")),
-            (
-                AuthenticationDemand {
-                    session: identity,
-                    challenge: Challenge::new("nonce").expect("bounded challenge"),
-                },
-                Arc::downgrade(&session),
-            ),
-        );
+            .insert(identity, (1, Arc::downgrade(&session)));
         // Every strong handle goes away, the lease included: nothing holds
         // this connection any more.
         drop(session);
@@ -483,6 +414,5 @@ mod tests {
             state.attempts.is_empty(),
             "an attempt count outlives no session"
         );
-        assert!(state.deferred.is_empty(), "a demand outlives no session");
     }
 }

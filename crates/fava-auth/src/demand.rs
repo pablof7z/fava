@@ -1,6 +1,4 @@
-//! One relay demand that a session authenticate, and its deferred form.
-
-use std::num::NonZeroU64;
+//! One relay demand that a session authenticate.
 
 use fava_transport::RelaySessionIdentity;
 
@@ -12,41 +10,15 @@ use crate::challenge::Challenge;
 /// challenge arrived on. A verdict never applies to a later generation. The
 /// account to authenticate as is not here: the policy names it as part of
 /// deciding to authenticate at all.
+///
+/// A demand a policy defers to a person is not a separate, longer-lived
+/// value: the connection named by `session` carries it for as long as it is
+/// outstanding (`fava_relay::Progress::Requested`), and answering it names
+/// that same connection. Nothing here mints an identity of its own.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthenticationDemand {
     /// Relay and transport generation the challenge arrived on.
     pub session: RelaySessionIdentity,
     /// Current challenge for that generation.
     pub challenge: Challenge,
-}
-
-/// Stable identity of one demand awaiting a person's answer.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct AuthenticationDemandId(NonZeroU64);
-
-impl AuthenticationDemandId {
-    /// Build an identity from a non-zero counter value.
-    #[must_use]
-    pub const fn from_nonzero(value: NonZeroU64) -> Self {
-        Self(value)
-    }
-
-    /// Exact identity value.
-    #[must_use]
-    pub const fn get(self) -> NonZeroU64 {
-        self.0
-    }
-}
-
-/// One demand a policy deferred to a person, still awaiting an answer.
-///
-/// The challenge itself is not exposed: an application decides on the relay
-/// and the account, and echoing an opaque relay nonce into a user interface
-/// tells nobody anything.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PendingAuthentication {
-    /// Stable identity for answering this exact demand.
-    pub id: AuthenticationDemandId,
-    /// Relay and generation the demand belongs to.
-    pub session: RelaySessionIdentity,
 }

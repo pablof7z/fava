@@ -244,7 +244,7 @@ def capture_rows(rows: list[dict[str, Any]]) -> dict[str, str]:
         captures[name] = value
     required = {
         "pub-event", "accept-event", "failed-write", "decline-write", "reject-write",
-        "refuse-write", "cross-event", "defer-event", "pending-id",
+        "refuse-write", "cross-event", "defer-event", "pending-relay", "pending-connection",
     }
     if not required.issubset(captures):
         raise HarnessError(f"missing app captures: expected at least {required}, got {set(captures)}")

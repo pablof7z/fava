@@ -54,7 +54,8 @@ fn replay_exercises_policy_auth_and_query_grammar() {
     assert!(rows.iter().all(|row| row["status"] == "ok"));
     let pending = &rows[4]["fields"];
     assert_eq!(pending["count"], 0);
-    assert_eq!(pending["first_id"], 0);
+    assert_eq!(pending["first_relay"], "");
+    assert_eq!(pending["first_connection"], 0);
     assert_eq!(rows[5]["fields"]["state"], "unknown");
     assert_eq!(rows[5]["fields"]["access"], "as:alice");
     assert_eq!(rows[6]["fields"]["access"], "public");
@@ -122,8 +123,11 @@ fn replay_omission_refuses_without_consuming_the_next_command() {
 }
 
 #[test]
-fn unknown_demand_id_is_a_typed_domain_refusal_not_a_crash() {
-    let output = run("auth answer 9 decline\nquit\n");
+fn unanswered_connection_is_a_typed_domain_refusal_not_a_crash() {
+    // No session was ever opened against this relay, so no connection
+    // anywhere names generation 1: there is nothing for `auth answer` to
+    // find.
+    let output = run("auth answer ws://127.0.0.1:9 1 decline\nquit\n");
     assert!(!output.status.success());
     let rows = rows(&output);
     assert_eq!(rows[0]["kind"], "domain-failed");
@@ -131,7 +135,7 @@ fn unknown_demand_id_is_a_typed_domain_refusal_not_a_crash() {
         rows[0]["summary"]
             .as_str()
             .unwrap()
-            .contains("no demand awaits this answer")
+            .contains("no connection is awaiting an answer")
     );
 }
 
