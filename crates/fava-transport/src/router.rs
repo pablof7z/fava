@@ -271,7 +271,12 @@ impl Router {
             let Some(sender) = &cell.sender else {
                 return;
             };
-            sender.send_modify(|connection| {
+            // Notify only when something actually moved. A relay repeating
+            // itself has not changed this connection, and waking every
+            // watcher to tell them nothing would make a repetition
+            // indistinguishable from news.
+            sender.send_if_modified(|connection| {
+                let before = connection.clone();
                 let was = connection.identity.clone();
                 let live = matches!(connection.connectivity, Connectivity::Connected);
                 next(connection);
@@ -292,6 +297,7 @@ impl Router {
                     }),
                     _ => None,
                 };
+                *connection != before
             });
             let current = sender.borrow().clone();
             let terminal = matches!(

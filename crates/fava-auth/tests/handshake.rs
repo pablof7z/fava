@@ -171,7 +171,7 @@ async fn an_endless_re_challenge_stops_at_the_bound() {
 #[tokio::test]
 async fn a_deferred_challenge_waits_for_a_person_then_authenticates() {
     let rig = Rig::deferring().await;
-    let changed = rig.authenticator().subscribe();
+    let changed = fava_transport::RelaySessionExt::connection(&rig.session());
 
     rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
@@ -280,7 +280,7 @@ async fn a_reconnected_session_begins_unauthenticated() {
 #[tokio::test]
 async fn a_session_reaching_a_verdict_wakes_a_watcher() {
     let rig = Rig::approving().await;
-    let mut changed = rig.authenticator().subscribe();
+    let mut changed = fava_transport::RelaySessionExt::connection(&rig.session());
     changed.mark_unchanged();
 
     rig.relay().push_frame(&challenge_frame("nonce-1"));
@@ -357,7 +357,8 @@ async fn an_answer_signed_for_a_connection_that_is_gone_reaches_no_relay() {
 #[tokio::test]
 async fn a_relay_repeating_itself_is_not_a_new_question() {
     let rig = Rig::deferring().await;
-    let mut changed = rig.authenticator().subscribe();
+    let mut changed = fava_transport::RelaySessionExt::connection(&rig.session());
+    changed.mark_unchanged();
 
     rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;

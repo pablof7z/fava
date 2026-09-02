@@ -22,14 +22,22 @@ const OPERATION_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub(crate) struct App {
     fava: Fava,
+    /// The transport this application built, kept so it can hear when a relay
+    /// asks to be authenticated.
+    transport: Arc<fava_transport_websocket::WebSocketTransport>,
     policy: Arc<SwitchablePolicy>,
     observations: BTreeMap<String, Observation>,
 }
 
 impl App {
-    pub(crate) fn new(fava: Fava, policy: Arc<SwitchablePolicy>) -> Self {
+    pub(crate) fn new(
+        fava: Fava,
+        transport: Arc<fava_transport_websocket::WebSocketTransport>,
+        policy: Arc<SwitchablePolicy>,
+    ) -> Self {
         Self {
             fava,
+            transport,
             policy,
             observations: BTreeMap::new(),
         }
@@ -55,6 +63,7 @@ impl App {
             }
             [command] if command == "auth" => Err(ShellError::Usage { usage: AUTH_USAGE }),
             [command, action] if command == "auth" && action == "pending" => self.auth_pending(),
+            [command, action] if command == "auth" && action == "wait" => self.auth_wait(),
             [command, action, arguments @ ..] if command == "auth" && action == "answer" => {
                 let relay_url = required(arguments, 0, "relay-url", AUTH_ANSWER_USAGE, prompt)?;
                 let connection = required(arguments, 1, "connection", AUTH_ANSWER_USAGE, prompt)?;
@@ -157,6 +166,37 @@ impl App {
             format!("policy now {}", decision_label(decision)),
         )
         .with_field("decision", decision_label(decision))
+    }
+
+    /// Wait until at least one relay is waiting to be answered.
+    ///
+    /// A demand exists because some work wanted a relay, and that work is
+    /// accepted before its connection is open. A scenario that publishes and
+    /// then asks what is pending is racing the connection, so it asks this
+    /// instead. Same shape as `query wait` and `receipt wait`.
+    fn auth_wait(&self) -> Result<CommandResult, ShellError> {
+        let authenticator = self.authenticator()?.clone();
+        // The transport says when a relay asks. Subscribing before looking is
+        // what makes this free of a race: a demand that arrives while the
+        // first look is in flight is still waiting on the receiver.
+        let mut asked =
+            fava_transport::Transport::authentication_requests(self.transport.as_ref());
+        block_on(async {
+            tokio::time::timeout(OPERATION_TIMEOUT, async {
+                while authenticator.pending().is_empty() {
+                    if asked.recv().await.is_err() {
+                        break;
+                    }
+                }
+            })
+            .await
+            .map_err(|_| {
+                ShellError::Domain(
+                    "no relay asked to be authenticated within the bound".to_owned(),
+                )
+            })
+        })?;
+        self.auth_pending()
     }
 
     fn auth_pending(&self) -> Result<CommandResult, ShellError> {

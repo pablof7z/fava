@@ -27,12 +27,12 @@ async fn main() -> AppResult<()> {
     // the engine starts under `Decline`, and `policy set` changes the answer
     // every later challenge on this process gets.
     let policy = Arc::new(SwitchablePolicy::new(AuthenticationDecision::Decline));
-    let fava = support::assemble(Arc::clone(&policy))?;
+    let (fava, transport) = support::assemble(Arc::clone(&policy))?;
     let mut session = E2eSession::new(
         Limits::new(8, 8, 16, 32, 1_024, 4_096, 24, 32, 32)?,
         fava.clone(),
     );
-    let mut app = App::new(fava, policy);
+    let mut app = App::new(fava, transport, policy);
     let mut output = stdout().lock();
 
     if let Some(path) = options.script {

@@ -196,7 +196,7 @@ pub(super) async fn authenticate(
             // chose to say so with; its own words carry the difference.
             let state = match acknowledged.settled().await {
                 fava_transport::Settlement::Accepted { .. } => {
-                    owner.record_accepted(&identity, &session, account);
+                    Authenticator::record_accepted(&identity, &session, account);
                     return;
                 }
                 fava_transport::Settlement::Rejected { message } => {

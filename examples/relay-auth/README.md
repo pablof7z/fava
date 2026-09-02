@@ -22,7 +22,7 @@ cargo build --manifest-path examples/relay-auth/Cargo.toml
 account new|import|add-pubkey|list|switch|replace|remove|clear
 relay add|list|remove
 policy set <authenticate:<account-alias>|decline|defer>
-auth pending
+auth wait
 auth answer <relay-url> <connection> <authenticate:<account-alias>|decline>
 auth state <relay> <public|as:<account>>
 query open <name> <public|as:<account>> <kind> <relay>...

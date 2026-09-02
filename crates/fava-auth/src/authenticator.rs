@@ -7,7 +7,6 @@ use fava_relay::BoundedText;
 use fava_runtime::{CancellationToken, Runtime, TaskName};
 use fava_transport::{RelaySession, RelaySessionIdentity, Transport};
 use nostr::key::PublicKey;
-use tokio::sync::watch;
 
 use crate::challenge::Challenge;
 use crate::demand::AuthenticationDemand;
@@ -44,7 +43,6 @@ pub(crate) struct Inner {
     pub(crate) policy: Arc<dyn AuthenticationPolicy>,
     pub(crate) runtime: Runtime,
     pub(crate) state: Mutex<State>,
-    pub(crate) pending_changed: watch::Sender<u64>,
     /// Read-only handle onto the transport `answer_requests` was given.
     ///
     /// This owner opens no connection and holds none; it only asks the
@@ -82,7 +80,6 @@ pub(crate) struct State {
     /// specific connection lost, so this counts what happened rather than
     /// pretending it did not.
     pub(crate) lagged: u64,
-    revision: u64,
 }
 
 impl State {
@@ -116,7 +113,6 @@ impl Authenticator {
                 policy,
                 runtime,
                 state: Mutex::new(State::default()),
-                pending_changed: watch::channel(0).0,
                 transport: OnceLock::new(),
             }),
         }
@@ -163,22 +159,11 @@ impl Authenticator {
             let mut guard = self.lock();
             guard.lagged = guard.lagged.saturating_add(skipped);
         }
-        self.signal();
     }
 
     /// Signal fired whenever anything this owner knows about authentication
     /// changes.
     ///
-    /// That is a session reaching a new state, and a policy deferring a
-    /// challenge to a person. The signal carries no detail: read
-    /// [`Self::pending`] after it fires. It may fire without that having
-    /// changed, so treat it as a reason to look rather than as the change
-    /// itself.
-    #[must_use]
-    pub fn subscribe(&self) -> watch::Receiver<u64> {
-        self.inner.pending_changed.subscribe()
-    }
-
     pub(crate) fn lock(&self) -> std::sync::MutexGuard<'_, State> {
         self.inner
             .state
@@ -207,6 +192,10 @@ impl Authenticator {
         }
         if matches!(progress, fava_relay::Progress::Answering { .. }) {
             let mut guard = self.lock();
+            // Retire what is counted against connections that are gone. This
+            // is the only place anything is added, so it is the only place
+            // anything needs removing.
+            guard.prune_stale();
             let (spent, _) = guard
                 .attempts
                 .entry(identity.clone())
@@ -214,7 +203,6 @@ impl Authenticator {
             *spent = spent.saturating_add(1);
         }
         fava_transport::RelaySessionExt::record_progress(session, progress);
-        self.signal();
         true
     }
 
@@ -223,7 +211,6 @@ impl Authenticator {
     /// This is the only thing that sets what the relay knows, and nothing
     /// clears it while the connection lives.
     pub(crate) fn record_accepted(
-        &self,
         identity: &RelaySessionIdentity,
         session: &Arc<dyn fava_transport::RelaySession>,
         account: PublicKey,
@@ -232,21 +219,7 @@ impl Authenticator {
             return false;
         }
         fava_transport::RelaySessionExt::record_accepted(session, account);
-        self.signal();
         true
-    }
-
-    pub(crate) fn signal(&self) {
-        let next = {
-            let mut guard = self.lock();
-            // Every state change is a chance to notice a connection that has
-            // been replaced or dropped since the last one, and stop keeping
-            // what it left behind.
-            guard.prune_stale();
-            guard.revision = guard.revision.saturating_add(1);
-            guard.revision
-        };
-        let _ = self.inner.pending_changed.send(next);
     }
 
     /// Decide one challenge and act on the decision.
@@ -290,7 +263,6 @@ impl Authenticator {
                 // it, and `pending` reads that directly. Nothing here needs
                 // to remember it a second time -- only wake whoever is
                 // waiting on `subscribe` to go look.
-                self.signal();
             }
             AuthenticationDecision::Authenticate { as_of } => {
                 answer::authenticate(self, &demand, as_of, session).await;

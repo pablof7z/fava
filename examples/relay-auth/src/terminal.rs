@@ -285,7 +285,7 @@ fn completions(context: &str) -> &'static [&'static str] {
         "relay" => &["add", "list", "remove"],
         "policy" => &["set"],
         "policy set" => &["authenticate", "decline", "defer"],
-        "auth" => &["pending", "answer", "state"],
+        "auth" => &["pending", "wait", "answer", "state"],
         "query" => &["open", "snapshot", "wait", "close"],
         "auth state" | "query open" | "publish" => &["public"],
         "receipt" => &["list", "show", "wait"],

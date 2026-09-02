@@ -257,8 +257,13 @@ async fn a_deferred_challenge_reaches_the_application_and_is_answered_out_of_ban
     settle().await;
 
     let authentication = rig.fava.authentication().expect("a policy was selected");
-    let changes = authentication.subscribe();
     let peer = rig.peer().expect("the session was acquired");
+    let mut changes = fava_transport::RelaySessionExt::connection(
+        &rig.transport
+            .session(&rig.relay, &fava_relay::Authority::As(rig.account))
+            .expect("the session is open"),
+    );
+    changes.mark_unchanged();
     peer.push_frame(&challenge_frame("nonce-one"));
     settle().await;
 
@@ -266,7 +271,10 @@ async fn a_deferred_challenge_reaches_the_application_and_is_answered_out_of_ban
         auth_frames(&peer).is_empty(),
         "a deferred challenge signs nothing until a person answers"
     );
-    assert!(changes.has_changed().unwrap_or(false), "the set changed");
+    assert!(
+        changes.has_changed().unwrap_or(false),
+        "the connection carries the demand"
+    );
 
     let pending = authentication.pending();
     assert_eq!(pending.len(), 1, "exactly one demand awaits a person");

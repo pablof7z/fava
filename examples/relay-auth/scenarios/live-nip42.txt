@@ -47,9 +47,9 @@ query close accept-read
 policy set defer
 publish as:alice 3 "alice deferred on nostr" nostr
 capture defer-write receipt_id
-auth pending
+auth wait
 capture pending-relay first_relay
-auth pending
+auth wait
 capture pending-connection first_connection
 auth state nostr as:alice
 auth answer ${pending-relay} ${pending-connection} authenticate:alice

@@ -46,15 +46,24 @@ impl AuthenticationPolicy for SwitchablePolicy {
     }
 }
 
-pub(crate) fn assemble(policy: Arc<SwitchablePolicy>) -> Result<Fava, fava::BuildError> {
-    Fava::builder()
+/// Assemble an engine, and keep the transport the application handed it.
+///
+/// An application that wants to know when a relay starts asking to be
+/// authenticated subscribes to the transport it built. Nothing needs to
+/// republish that.
+pub(crate) fn assemble(
+    policy: Arc<SwitchablePolicy>,
+) -> Result<(Fava, Arc<WebSocketTransport>), fava::BuildError> {
+    let transport = Arc::new(WebSocketTransport::new());
+    let fava = Fava::builder()
         .event_cache_ephemeral()
         .write_store(Arc::new(MemoryWriteStore::default()))
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .subscription_planner(Arc::new(planner()))
-        .transport(Arc::new(WebSocketTransport::new()))
+        .transport(Arc::clone(&transport))
         .publisher(Arc::new(Nip01Publisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .authentication_policy(policy)
-        .build()
+        .build()?;
+    Ok((fava, transport))
 }
