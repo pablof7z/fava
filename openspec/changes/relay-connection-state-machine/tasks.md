@@ -63,6 +63,10 @@ Eleven findings against the landed commits. Three are already assigned; the rest
 
 - [x] 6b.12 Let a listener that fell behind recover the demands it missed. Answering no longer blocks the loop, so a lag is rare, but a burst of distinct challenges can still outrun it and a lost demand is lost for the life of that connection — the publisher only republishes a *changed* challenge. The component that answers cannot recover on its own: it holds no connections and the transport offers a count of holders, not a list. Give it a way to ask which connections are waiting to be answered, and have it ask after a lag; verify a demand dropped by a lagging listener is still answered, and that nothing polls
 
+## 6c. A falsifier nobody has been running
+
+- [ ] 6c.1 Bring `falsifiers/external-semantic-capability` back to something that compiles, or retire it. Its relay-session fake is missing five methods the session gained when it started speaking NIP-01 — before this change — and two more this change added. It is a separate cargo workspace, so no root gate ever covered it and nobody noticed it rot. Decide whether it still proves something worth keeping; verify by `./scripts/gates` reporting it green, or by its absence from that script
+
 ## 7. Verification
 
 - [ ] 7.1 Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, and `cargo test --workspace --doc --locked`; verify every one passes
