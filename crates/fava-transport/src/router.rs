@@ -114,11 +114,6 @@ pub struct Router {
     acknowledgements: Mutex<BTreeMap<EventId, Vec<Arc<Mailbox<Settlement>>>>>,
     /// Readers of the relay's authentication challenges.
     ///
-    /// The text is carried verbatim, not bounded: the one component that reads
-    /// challenges refuses an oversized one rather than truncating it, and a
-    /// bound applied here would silently defeat that. The frame it arrived in
-    /// is already bounded by `max_frame_bytes`, so this cannot grow unbounded.
-    challenges: Mutex<Vec<Arc<Mailbox<String>>>>,
     /// Where this connection has got to.
     ///
     /// A current value rather than a queue of past ones: a reader arriving
@@ -146,7 +141,6 @@ impl Router {
         Self {
             subscriptions: Mutex::default(),
             acknowledgements: Mutex::default(),
-            challenges: Mutex::default(),
             connection: Mutex::new(ConnectionCell {
                 last: connection.clone(),
                 sender: Some(watch::Sender::new(connection)),
@@ -336,16 +330,6 @@ impl Router {
     ///
     /// # Panics
     ///
-    /// If a prior holder of this session's router lock panicked.
-    pub fn read_challenges(&self, capacity: usize) -> Arc<Mailbox<String>> {
-        let mailbox = Arc::new(Mailbox::new(capacity));
-        self.challenges
-            .lock()
-            .expect("router is not poisoned")
-            .push(Arc::clone(&mailbox));
-        mailbox
-    }
-
     /// Deliver one decoded message to whatever owns its wire key.
     ///
     /// # Panics
@@ -449,14 +433,6 @@ impl Router {
     /// If a prior holder of this session's router lock panicked.
     pub fn close(&self) {
         self.close_connection();
-        for mailbox in self
-            .challenges
-            .lock()
-            .expect("router is not poisoned")
-            .drain(..)
-        {
-            mailbox.close();
-        }
     }
 }
 

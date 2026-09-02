@@ -293,12 +293,6 @@ pub trait RelaySessionExt {
     /// The only thing that sets what the relay knows. Nothing clears it while
     /// the connection lives.
     fn record_accepted(&self, account: nostr::key::PublicKey);
-
-    /// Read the relay's authentication challenges.
-    ///
-    /// A challenge is correlated to nothing a component sent, and exactly one
-    /// component owns it, so it has its own reader rather than a claim.
-    fn challenges(&self) -> std::sync::Arc<crate::Mailbox<String>>;
 }
 
 /// Outcome of opening one subscription: the handle, or why no frame left.
@@ -361,12 +355,34 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
     fn answer(&self, event: nostr::event::Event) -> PublishFuture<'_> {
         Box::pin(async move {
             let id = event.id;
-            // The demand has been taken up. Saying so here is what stops a
-            // second reader from answering a challenge already answered.
+            // An answer belongs to the question it was signed for. Signing can
+            // take as long as a remote signer takes, and in that time the
+            // connection may have been replaced — which resets it to having
+            // been asked nothing. Answering then would put a dead challenge's
+            // proof on a live socket and leave it mid-answer for a question it
+            // never received.
             let as_of = event.pubkey;
+            let mut taken_up = false;
             self.router().moved(|connection| {
-                connection.authentication.progress = crate::Progress::Answering { as_of };
+                if matches!(
+                    connection.authentication.progress,
+                    crate::Progress::Requested { .. }
+                ) {
+                    connection.authentication.progress = crate::Progress::Answering { as_of };
+                    taken_up = true;
+                }
             });
+            if !taken_up {
+                return Err(crate::HandoffOutcome::NotHandedOff {
+                    identity: self.identity(),
+                    correlation: crate::HandoffCorrelation::new(0),
+                    reason: crate::TransportFailure::Disconnected {
+                        detail: crate::BoundedText::new(
+                            "the connection that was asked is gone; this answers a question it never received",
+                        ),
+                    },
+                });
+            }
             let mailbox = self.router().await_acknowledgement(id);
             match self.encoded(&fava_wire::ClientMessage::auth(event)).await {
                 crate::HandoffOutcome::HandedOff { .. } => Ok(Box::new(RoutedAcknowledgement::new(
@@ -394,10 +410,6 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
             connection.authentication.established = Some(account);
             connection.authentication.progress = crate::Progress::Idle;
         });
-    }
-
-    fn challenges(&self) -> std::sync::Arc<crate::Mailbox<String>> {
-        self.router().read_challenges(self.inbound_capacity())
     }
 
     fn connection(&self) -> tokio::sync::watch::Receiver<crate::Connection> {

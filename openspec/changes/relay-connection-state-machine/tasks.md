@@ -3,13 +3,13 @@
 - [x] 1.1 Add `Connectivity`, `Authentication` and `Authority` to `fava-relay`, where work that never depends on the transport can still state what it needs, and the connection value holding both states alongside its identity to `fava-transport`; verify each state is constructible, a test names every one, and a test proves the matching rule for every pair
 - [x] 1.2 Publish them on a `watch` channel per connection, replacing `Router::read_connection` and `connection_changed`; verify a component that begins watching an already-authenticated connection reads that state without waiting for a change
 - [x] 1.3 Make the driver's transitions one write each, replacing the paired `end_connection` plus `connection_changed` calls and the duplicated failure formatting in both the websocket driver and the testkit session; verify the reconnect and exhaustion tests pass unchanged
-- [ ] 1.4 Reset authentication when a connection is replaced, so nothing proved on the previous one carries over; verify a test authenticates, forces a reconnect, and reads no authentication on the replacement
+- [x] 1.4 Reset authentication when a connection is replaced, so nothing proved on the previous one carries over; verify a test authenticates, forces a reconnect, and reads no authentication on the replacement
 
 ## 2. The demand is a state
 
 - [x] 2.1 Move the relay's `AUTH` frame from `Router::read_challenges` into an authentication state carrying the challenge; verify a challenge queued before a reconnect cannot be recorded against the connection that replaces it, which is the bug this closes
 - [x] 2.2 Add the session verb that records a refusal without sending a frame; verify a test distinguishes refused from undecided and asserts no frame reached the relay
-- [ ] 2.3 Delete `Router::read_challenges`, the challenges field, the `Correlation::Challenge` arm, and `RelaySessionExt::challenges`; verify a grep for each name is empty and the workspace builds
+- [x] 2.3 Delete `Router::read_challenges`, the challenges field, the `Correlation::Challenge` arm, and `RelaySessionExt::challenges`; verify a grep for each name is empty and the workspace builds
 - [ ] 2.4 Confirm a repeated identical challenge wakes no watcher; verify a test pushes the same challenge three times and asserts one wake
 - [ ] 2.5 Prove a coalescing channel cannot lose a challenge that matters: a relay re-challenging with a *different* nonce while the decider is between wakes must still be answered against the nonce the relay last sent; verify a test holds the decider, pushes two different nonces, and asserts the answer carries the second — this is the one risk the watch channel introduces
 
@@ -43,16 +43,16 @@
 
 - [x] 6.1 Delete `Router::retained`, `Unrouted` and the `unrouted` counters, `Correlation` and `correlation()`, and the duplicate identity file in the testkit; verify a grep for each name is empty
 - [x] 6.2 (examined and left alone: the closed flags are set synchronously by the caller, so a session refuses further work the instant close is called. Reading connectivity instead defers that refusal until the driver processes the request, and a caller could hand off a frame in between. The flags are not a duplicate of the state; they are the part of it that happens immediately) Replace the four liveness flags and the close notification with the connectivity state; verify the close and shutdown tests pass unchanged
-- [ ] 6.3 Collapse the five hand-rolled drain loops onto the watch channel; verify each of the five sites reads one call and the tests around them pass
+- [x] 6.3 Collapse the five hand-rolled drain loops onto the watch channel; verify each of the five sites reads one call and the tests around them pass
 
 ## 6b. What an independent review found
 
 Eleven findings against the landed commits. Three are already assigned; the rest are here so none is lost.
 
-- [ ] 6b.1 Take a weak reference to the session in the transport's request publisher, at both call sites rather than only inside it; verify a session with no lease holders is dropped, which today it never is, and that the two committed tests asserting a connection ends stop hanging
-- [ ] 6b.2 Drop the connection's sender when the router closes, so a connection that will never reach another state says so; verify the observe listener terminates and the two hanging assertions pass
-- [ ] 6b.3 Write the connectivity when a session closes; verify a closed connection reports disconnected rather than staying connected on the fake and reconnecting forever on the real one, and that it serves no work
-- [ ] 6b.4 Guard the answer's write on the connection it was signed for, the way every other authentication write already is; verify a connection replaced while a signer was working is not left mid-answer for a challenge it never received
+- [x] 6b.1 Take a weak reference to the session in the transport's request publisher, at both call sites rather than only inside it; verify a session with no lease holders is dropped, which today it never is, and that the two committed tests asserting a connection ends stop hanging
+- [x] 6b.2 Drop the connection's sender when the router closes, so a connection that will never reach another state says so; verify the observe listener terminates and the two hanging assertions pass
+- [x] 6b.3 Write the connectivity when a session closes; verify a closed connection reports disconnected rather than staying connected on the fake and reconnecting forever on the real one, and that it serves no work
+- [x] 6b.4 Guard the answer's write on the connection it was signed for, the way every other authentication write already is; verify a connection replaced while a signer was working is not left mid-answer for a challenge it never received
 - [x] 6b.5 Separate what the relay has accepted from how the challenge is going, per the design decision; verify a connection that could not answer still carries anonymous work, and one the relay accepted never carries it again whatever happens to a later challenge
 - [x] 6b.6 Answer each request the transport publishes without the answering loop signing inline, so a slow signer cannot block every other relay and overflow the backlog; verify a request is not lost when a subscriber falls behind, which is the failure the design chose a broadcast to avoid
 - [ ] 6b.7 Give the evidence that says a relay demands authentication a producer again, scoped to the observation it concerns rather than every observation at that relay; verify an observation at a relay demanding authentication carries evidence saying so

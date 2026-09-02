@@ -4,6 +4,7 @@ mod support;
 
 use fava_auth::{AnswerOutcome, AuthenticationDecision, MAX_ATTEMPTS};
 use fava_relay::Progress;
+use nostr::event::FinalizeEvent;
 use support::{Rig, auth_frames, challenge_frame, ok_frame};
 
 #[tokio::test]
@@ -323,4 +324,33 @@ async fn a_relay_that_re_challenges_asks_a_person_once() {
         "a re-challenge replaces the outstanding ask, got {pending:?}"
     );
     assert!(matches!(rig.progress(), Progress::Requested { .. }));
+}
+
+#[tokio::test]
+async fn an_answer_signed_for_a_connection_that_is_gone_reaches_no_relay() {
+    let rig = Rig::approving().await;
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
+    rig.settle().await;
+    assert_eq!(auth_frames(&rig.relay()).len(), 1);
+
+    // The connection is replaced, which resets it to having been asked
+    // nothing. An answer signed for the connection that is gone must not be
+    // put on the one that replaced it.
+    rig.relay().reconnect();
+    rig.settle().await;
+
+    let event = nostr::event::EventBuilder::new(nostr::event::Kind::Authentication, "")
+        .finalize(&nostr::key::Keys::generate())
+        .expect("event signs");
+    let refused = fava_transport::RelaySessionExt::answer(&rig.session(), event).await;
+
+    assert!(
+        refused.is_err(),
+        "a connection that was never asked accepts no answer"
+    );
+    assert_eq!(
+        auth_frames(&rig.relay()).len(),
+        1,
+        "and nothing further reaches the relay"
+    );
 }
