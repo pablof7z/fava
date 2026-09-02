@@ -29,7 +29,6 @@ mod wire;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::num::NonZeroUsize;
 
-use fava_relay::RelaySessionKey;
 use fava_subscriptions::{
     AttributedSubscription, DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision,
     RelayDemand, RelayReadConstraints, ShortfallReason, SubscriptionPlan, SubscriptionPlanError,
@@ -37,6 +36,7 @@ use fava_subscriptions::{
 };
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 
 /// Exact subscription planner that groups compatible unsent demand.
 #[derive(Clone, Copy, Debug, Default)]
@@ -53,7 +53,7 @@ impl StandardSubscriptionPlanner {
 impl SubscriptionPlanner for StandardSubscriptionPlanner {
     fn plan(
         &self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
         demand: &[RelayDemand],
         constraints: &RelayReadConstraints,
         installed: &InstalledSubscriptions,

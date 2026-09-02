@@ -1,14 +1,15 @@
 //! Current facts about the relay sessions Fava holds.
 
 use fava_query::{BoundedText, ObservationId, Round};
-use fava_relay::RelaySessionKey;
+use fava_relay::Authentication;
 use fava_wire::SubscriptionId;
+use nostr::types::RelayUrl;
 
 /// Current state of one relay session Fava holds.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RelayDiagnostic {
-    /// Relay and access authority.
-    pub session: RelaySessionKey,
+    /// Exact relay.
+    pub session: RelayUrl,
     /// Current observation-owned provider-round, when assigned.
     pub generation: Option<Round>,
     /// Whether this connection is establishing, live, reconnecting, out of
@@ -20,6 +21,8 @@ pub struct RelayDiagnostic {
     pub subscriptions: Vec<WireSubscriptionDiagnostic>,
     /// Reconnect attempts made on this key since the last success.
     pub reconnect_attempts: usize,
+    /// How far NIP-42 authentication has got on this exact connection.
+    pub authentication: Authentication,
 }
 
 /// Whether one relay connection is establishing, live, reconnecting, out of

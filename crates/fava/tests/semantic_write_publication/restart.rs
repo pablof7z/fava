@@ -6,7 +6,6 @@ use fava::{EventBuilder, EventEdit, EventValue, Kind, RevisionId, Timestamp};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{Query, QuerySnapshot};
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_state::EventStateMutation;
 use fava_write::WriteIntent;
 use fava_write_store::WriteStore;
@@ -285,11 +284,8 @@ fn contribution(relay: RelayUrl) -> RouteContribution {
     }
 }
 
-fn public_session(relay: RelayUrl) -> RelaySessionKey {
-    RelaySessionKey {
-        relay,
-        access: RelayAccess::Public,
-    }
+fn public_session(relay: RelayUrl) -> RelayUrl {
+    relay
 }
 
 async fn wait_for_route(fava: &fava::Fava, receipt_id: fava::ReceiptId) -> fava::Receipt {

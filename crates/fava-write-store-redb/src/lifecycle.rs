@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_write::{Event, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, WriteRouting};
 use fava_write_store::WriteStoreError;
+use nostr::types::RelayUrl;
 
 use crate::{RedbWriteStore, StoreState};
 
@@ -58,24 +58,13 @@ impl RedbWriteStore {
     }
 }
 
-pub(super) fn destinations(
-    routing: &WriteRouting,
-    access: &RelayAccess,
-) -> BTreeMap<RelaySessionKey, RelayDeliveryOutcome> {
+pub(super) fn destinations(routing: &WriteRouting) -> BTreeMap<RelayUrl, RelayDeliveryOutcome> {
     match routing {
         WriteRouting::Automatic => BTreeMap::new(),
         WriteRouting::Explicit(relays) => relays
             .iter()
             .cloned()
-            .map(|relay| {
-                (
-                    RelaySessionKey {
-                        relay,
-                        access: access.clone(),
-                    },
-                    RelayDeliveryOutcome::Pending,
-                )
-            })
+            .map(|relay| (relay, RelayDeliveryOutcome::Pending))
             .collect(),
     }
 }

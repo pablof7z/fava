@@ -1,12 +1,19 @@
 //! The application's decision seam.
 
+use fava_write::PublicKey;
+
 use crate::demand::AuthenticationDemand;
 
 /// Application decision for one demand.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AuthenticationDecision {
-    /// Answer the challenge as the account named by the session key.
-    Authenticate,
+    /// Answer the challenge as this exact account. Deciding to authenticate
+    /// and deciding as whom are one decision: nothing else names the account
+    /// any more, since access stopped being part of a connection's identity.
+    Authenticate {
+        /// The account to answer the challenge as.
+        as_of: PublicKey,
+    },
     /// Do not authenticate to this relay under this account.
     Decline,
     /// A person owns this answer. Nothing is signed or sent, and work needing

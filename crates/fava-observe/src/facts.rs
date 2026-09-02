@@ -1,22 +1,22 @@
 //! The facts this owner publishes: scoped relay evidence for every observation
-//! that uses a relay, and the bounded diagnostics record for the session.
+//! that uses a relay, and the bounded diagnostics record for the slot.
 
 use std::time::Duration;
 
 use fava_query::{BoundedText, RelayDeadline, RelayShortfall, RelaySourceState, Round};
-use fava_relay::RelaySessionKey;
 use fava_subscriptions::{RelayDemand, SubscriptionPlan};
 use fava_transport::{TransportBounds, TransportDeadlines};
 use fava_wire::SubscriptionId;
+use nostr::types::RelayUrl;
 
 use crate::diagnostics;
 use crate::engine::Engine;
 
 impl Engine {
-    /// Tell every listed demand owner how far this relay has got.
+    /// Tell every listed demand owner how far this slot has got.
     pub(crate) fn publish_states(
         &self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
         demand: &[RelayDemand],
         generation: Round,
         state: &RelaySourceState,
@@ -27,34 +27,30 @@ impl Engine {
         }
     }
 
-    /// Tell every observation holding demand at this relay how far it has got.
+    /// Tell every observation this exact slot currently serves how far it has
+    /// got.
     pub(crate) fn publish_state_for_relay(
         &self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
+        generation: Round,
         state: &RelaySourceState,
     ) {
-        let Some(slot) = self.slots.get(relay) else {
-            return;
-        };
-        let generation = slot.generation;
-        for owner in self.registry.open_observations() {
-            if self.registry.demand_id(owner, relay).is_some() {
-                self.registry
-                    .record_state(owner, relay, Some(generation), state.clone());
-            }
+        for item in self.demand_for_slot(relay, generation) {
+            self.registry
+                .record_state(item.owner, relay, Some(generation), state.clone());
         }
     }
 
     pub(crate) fn publish_for_subscription(
         &self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
+        generation: Round,
         id: &SubscriptionId,
         state: &RelaySourceState,
     ) {
-        let Some(slot) = self.slots.get(relay) else {
+        let Some(slot) = self.slot(relay, generation) else {
             return;
         };
-        let generation = slot.generation;
         for owner in slot.owners(id) {
             self.registry
                 .record_state(owner, relay, Some(generation), state.clone());
@@ -64,11 +60,12 @@ impl Engine {
     /// Publish who shares each request, and what the plan could not carry.
     pub(crate) fn publish_plan(
         &self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
+        generation: Round,
         cohort: &[RelayDemand],
         planned: Option<&SubscriptionPlan>,
     ) {
-        let Some(slot) = self.slots.get(relay) else {
+        let Some(slot) = self.slot(relay, generation) else {
             return;
         };
         let revision = planned.map_or_else(
@@ -110,14 +107,14 @@ impl Engine {
     /// stored window, so no observation may read it as completeness.
     pub(crate) fn publish_shortfall(
         &self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
+        generation: Round,
         id: &fava_wire::SubscriptionId,
         completeness: fava_subscriptions::EoseCompleteness,
     ) {
-        let Some(slot) = self.slots.get(relay) else {
+        let Some(slot) = self.slot(relay, generation) else {
             return;
         };
-        let generation = slot.generation;
         let detail = BoundedText::new(format!("{completeness:?}"));
         for owner in slot.owners(id) {
             let branches = self
@@ -147,8 +144,8 @@ impl Engine {
         }
     }
 
-    pub(crate) fn publish_relay_diagnostic(&self, relay: &RelaySessionKey) {
-        let Some(slot) = self.slots.get(relay) else {
+    pub(crate) fn publish_relay_diagnostic(&self, relay: &RelayUrl, generation: Round) {
+        let Some(slot) = self.slot(relay, generation) else {
             return;
         };
         self.providers.diagnostics.relay(diagnostics::relay_fact(
@@ -167,6 +164,7 @@ impl Engine {
                 })
                 .collect(),
             slot.reconnects,
+            diagnostics::slot_authentication(slot),
         ));
     }
 }

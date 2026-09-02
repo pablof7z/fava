@@ -9,7 +9,7 @@
 
 use std::num::NonZeroUsize;
 
-use fava_relay::{AuthenticationState, BoundedText, RelaySessionKey};
+use fava_relay::{AuthenticationState, BoundedText};
 use fava_state::RetractionCause;
 use nostr::event::EventId;
 use nostr::types::{RelayUrl, Timestamp};
@@ -31,8 +31,8 @@ pub enum SourceKind {
     /// Verified live occurrences admitted from one relay session, retained by
     /// no store.
     LiveRelay {
-        /// Relay session that served them.
-        session: RelaySessionKey,
+        /// Relay that served them.
+        session: RelayUrl,
     },
 }
 
@@ -146,8 +146,8 @@ impl SourceEvidence {
 /// shares, what the plan leaves uncovered, and how it entered.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RelayQueryEvidence {
-    /// Relay and access authority.
-    pub session: RelaySessionKey,
+    /// Exact relay.
+    pub session: RelayUrl,
     /// Transport connection generation these facts belong to.
     pub generation: Option<Round>,
     /// Desired-plan revision under which this relay's demand was requested.
@@ -305,8 +305,8 @@ pub struct RelayShortfall {
 pub struct DesiredPlanEvidence {
     /// Monotonic desired-plan revision (`fava_subscriptions::PlanRevision`).
     pub revision: u64,
-    /// Relay sessions the plan covers.
-    pub relays: Vec<RelaySessionKey>,
+    /// Relays the plan covers.
+    pub relays: Vec<RelayUrl>,
     /// Wire subscriptions installed for this observation's demand.
     pub installed: usize,
 }
@@ -330,8 +330,8 @@ pub enum QueryShortfall {
     /// The observation owner refused an otherwise valid live transition
     /// because retaining it would exceed one exact session's live-state bound.
     LiveRetentionLimit {
-        /// Exact relay/access contribution whose live state reached the bound.
-        session: RelaySessionKey,
+        /// Exact relay whose live state reached the bound.
+        session: RelayUrl,
         /// Maximum live events retained for that exact session.
         limit: NonZeroUsize,
         /// Valid transitions refused since this session's live state opened.
@@ -370,18 +370,8 @@ pub struct QueryEvidence {
 impl QueryEvidence {
     /// Evidence for one exact relay session.
     #[must_use]
-    pub fn relay(&self, session: &RelaySessionKey) -> Option<&RelayQueryEvidence> {
+    pub fn relay(&self, session: &RelayUrl) -> Option<&RelayQueryEvidence> {
         self.relays.iter().find(|entry| &entry.session == session)
-    }
-
-    /// Every session at one relay URL, across relay-access identities.
-    pub fn relays_at<'a>(
-        &'a self,
-        relay: &'a RelayUrl,
-    ) -> impl Iterator<Item = &'a RelayQueryEvidence> {
-        self.relays
-            .iter()
-            .filter(move |entry| &entry.session.relay == relay)
     }
 
     /// Evidence for one local source role.

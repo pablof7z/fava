@@ -12,7 +12,7 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_observe::{Observation, ObserveError, Observer};
 use fava_query::{ObservationId, QueryEvaluator, QuerySource, RelayQueryEvidence};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_routing::Router;
 use fava_runtime::{Runtime, RuntimeConfig};
 use fava_subscriptions::{
@@ -123,7 +123,8 @@ impl Assembly {
     /// The session the fake registered for one relay, if it dialed one.
     #[must_use]
     pub fn peer(&self, relay: &RelayUrl) -> Option<FakeRelay> {
-        self.transport.relay(&session_key(relay))
+        self.transport
+            .relay(&session_key(relay), &Authority::Unauthenticated)
     }
 
     /// The session the fake registered for one relay.
@@ -154,11 +155,8 @@ pub fn relay(name: &str) -> RelayUrl {
 
 /// The public-access session key for one relay.
 #[must_use]
-pub fn session_key(relay: &RelayUrl) -> RelaySessionKey {
-    RelaySessionKey {
-        relay: relay.clone(),
-        access: RelayAccess::Public,
-    }
+pub fn session_key(relay: &RelayUrl) -> RelayUrl {
+    relay.clone()
 }
 
 /// Evidence one observation currently reports for one relay.
@@ -237,7 +235,7 @@ fn client_messages(peer: Option<FakeRelay>) -> Vec<ClientMessage<'static>> {
 /// A real planner that records every input the owner hands it.
 pub(crate) struct RecordingPlanner {
     inner: Arc<dyn SubscriptionPlanner>,
-    inputs: Mutex<Vec<(RelaySessionKey, Vec<RelayDemand>)>>,
+    inputs: Mutex<Vec<(RelayUrl, Vec<RelayDemand>)>>,
 }
 
 impl Default for RecordingPlanner {
@@ -258,13 +256,13 @@ impl RecordingPlanner {
 
     /// Every `plan` call this planner received, in order.
     #[must_use]
-    pub fn inputs(&self) -> Vec<(RelaySessionKey, Vec<RelayDemand>)> {
+    pub fn inputs(&self) -> Vec<(RelayUrl, Vec<RelayDemand>)> {
         self.inputs.lock().expect("planner lock").clone()
     }
 
     /// The largest demand set the owner ever handed this planner for `relay`.
     #[must_use]
-    pub fn widest(&self, relay: &RelaySessionKey) -> Vec<RelayDemand> {
+    pub fn widest(&self, relay: &RelayUrl) -> Vec<RelayDemand> {
         self.inputs()
             .into_iter()
             .filter(|(key, _)| key == relay)
@@ -277,7 +275,7 @@ impl RecordingPlanner {
 impl SubscriptionPlanner for RecordingPlanner {
     fn plan(
         &self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
         demand: &[RelayDemand],
         constraints: &RelayReadConstraints,
         installed: &InstalledSubscriptions,

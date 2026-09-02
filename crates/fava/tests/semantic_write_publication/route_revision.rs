@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use fava::{Fava, Receipt, ReceiptId};
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_testkit::DelayedRouter;
 use fava_routing::{RouteContribution, RouteDestination};
 use nostr::types::RelayUrl;
@@ -60,10 +59,7 @@ async fn reapplication_commits_newer_route_revision() {
 fn contribution(relay: RelayUrl) -> RouteContribution {
     RouteContribution {
         destinations: vec![RouteDestination::new(
-            RelaySessionKey {
-                relay,
-                access: RelayAccess::Public,
-            },
+            relay,
             BTreeSet::new(),
             "controlled semantic route",
         )],

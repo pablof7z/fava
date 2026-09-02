@@ -49,15 +49,7 @@ impl AppRelayRouter {
             return RouteContribution::default();
         }
         let targets = request.targets();
-        let sessions: BTreeSet<_> = self
-            .relays
-            .iter()
-            .cloned()
-            .map(|relay| fava_relay::RelaySessionKey {
-                relay,
-                access: request.access(),
-            })
-            .collect();
+        let sessions: BTreeSet<_> = self.relays.clone();
         let coverage = targets
             .iter()
             .cloned()

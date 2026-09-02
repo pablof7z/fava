@@ -1,6 +1,5 @@
 //! Executable examples for every public state value and rule.
 
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_state::{
     EventCoordinate, EventStateMutation, RelayEvent, RetractionCause, deletion_applies,
     event_coordinate, event_is_expired, event_is_newer, mutations_for_event,
@@ -13,10 +12,7 @@ use nostr::types::{RelayUrl, Timestamp};
 #[test]
 fn public_state_examples_cover_the_complete_contract() -> Result<(), Box<dyn std::error::Error>> {
     let keys = Keys::generate();
-    let session = RelaySessionKey {
-        relay: RelayUrl::parse("wss://relay.example")?,
-        access: RelayAccess::Public,
-    };
+    let session = RelayUrl::parse("wss://relay.example")?;
     let old = EventBuilder::new(Kind::Metadata, "old")
         .custom_created_at(Timestamp::from(1))
         .finalize(&keys)?;
@@ -33,7 +29,12 @@ fn public_state_examples_cover_the_complete_contract() -> Result<(), Box<dyn std
         (old.created_at, old.id)
     ));
 
-    let old_occurrence = RelayEvent::new(old.clone(), session.clone(), Timestamp::from(3));
+    let old_occurrence = RelayEvent::new(
+        old.clone(),
+        session.clone(),
+        fava_relay::Authority::Unauthenticated,
+        Timestamp::from(3),
+    );
     let occurrences =
         relay_occurrences_for_event(old.id, std::slice::from_ref(&old_occurrence)).unwrap();
     assert_eq!(occurrences.event_id(), old.id);
@@ -41,7 +42,12 @@ fn public_state_examples_cover_the_complete_contract() -> Result<(), Box<dyn std
     assert_eq!(occurrences.len(), 1);
     assert_eq!(occurrences.occurrences().next().unwrap().session, session);
 
-    let incoming = RelayEvent::new(new.clone(), session.clone(), Timestamp::from(4));
+    let incoming = RelayEvent::new(
+        new.clone(),
+        session.clone(),
+        fava_relay::Authority::Unauthenticated,
+        Timestamp::from(4),
+    );
     let mutations = mutations_for_event(&[old_occurrence], incoming.clone(), Timestamp::from(4));
     assert!(matches!(
         &mutations[0],
@@ -60,7 +66,12 @@ fn public_state_examples_cover_the_complete_contract() -> Result<(), Box<dyn std
         expiring.tags.as_slice(),
         Timestamp::from(10)
     ));
-    let expiring = RelayEvent::new(expiring, session.clone(), Timestamp::from(5));
+    let expiring = RelayEvent::new(
+        expiring,
+        session.clone(),
+        fava_relay::Authority::Unauthenticated,
+        Timestamp::from(5),
+    );
     assert!(matches!(
         mutations_for_expiration(&[expiring], Timestamp::from(10)).as_slice(),
         [EventStateMutation::Retract {

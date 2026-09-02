@@ -15,7 +15,7 @@ use fava_auth::{AuthenticationDecision, AuthenticationDemand, AuthenticationPoli
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_signer_local::LocalSigner;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_testkit::{FakeRelay, FakeTransport};
@@ -70,27 +70,50 @@ impl fava_publisher::Publisher for SilentPublisher {
     }
 }
 
-/// A policy that answers every challenge the same way.
-struct Always(AuthenticationDecision);
+/// A policy answering every challenge the same way, named before the rig's
+/// account exists: `Rig::build` closes it over that account once it does, so
+/// `Authenticate` names who to authenticate as without the caller needing to
+/// generate the keys first.
+#[derive(Clone, Copy)]
+enum Always {
+    Authenticate,
+    Decline,
+    Defer,
+}
 
-impl AuthenticationPolicy for Always {
+struct AlwaysAs {
+    decision: Always,
+    account: nostr::key::PublicKey,
+}
+
+impl AuthenticationPolicy for AlwaysAs {
     fn decide(&self, _demand: &AuthenticationDemand) -> AuthenticationDecision {
-        self.0
+        match self.decision {
+            Always::Authenticate => AuthenticationDecision::Authenticate {
+                as_of: self.account,
+            },
+            Always::Decline => AuthenticationDecision::Decline,
+            Always::Defer => AuthenticationDecision::Defer,
+        }
     }
 }
 
 struct Rig {
     fava: Fava,
     transport: Arc<FakeTransport>,
-    key: RelaySessionKey,
     relay: RelayUrl,
     account: nostr::key::PublicKey,
 }
 
 impl Rig {
+    /// The authority this rig's own query authenticates as.
+    fn authority(&self) -> Authority {
+        Authority::As(self.account)
+    }
+
     /// How far authentication has got, read from the connection that holds it.
     fn authentication(&self) -> Option<fava_relay::Authentication> {
-        let session = self.transport.session(&self.key)?;
+        let session = self.transport.session(&self.relay, &self.authority())?;
         Some(
             fava_transport::RelaySessionExt::connection(&session)
                 .borrow()
@@ -104,10 +127,6 @@ impl Rig {
         let keys = Keys::generate();
         let account = keys.public_key();
         let relay = RelayUrl::parse("wss://authenticated.example").expect("relay URL");
-        let key = RelaySessionKey {
-            relay: relay.clone(),
-            access: RelayAccess::Authenticated(account),
-        };
         let transport = Arc::new(FakeTransport::new());
 
         let mut builder = Fava::builder()
@@ -125,15 +144,14 @@ impl Rig {
                 .publisher(Arc::new(SilentPublisher))
                 .delivery_policy(Arc::new(StandardDeliveryPolicy::default()));
         }
-        if let Some(policy) = policy {
-            builder = builder.authentication_policy(Arc::new(policy));
+        if let Some(decision) = policy {
+            builder = builder.authentication_policy(Arc::new(AlwaysAs { decision, account }));
         }
         let fava = builder.build().expect("assembly is complete");
 
         Self {
             fava,
             transport,
-            key,
             relay,
             account,
         }
@@ -144,11 +162,11 @@ impl Rig {
         Query::events()
             .only_from_relays([self.relay.clone()])
             .expect("relay selection")
-            .with_relay_access(RelayAccess::Authenticated(self.account))
+            .with_relay_access(self.authority())
     }
 
     fn peer(&self) -> Option<FakeRelay> {
-        self.transport.relay(&self.key)
+        self.transport.relay(&self.relay, &self.authority())
     }
 }
 
@@ -156,7 +174,7 @@ impl Rig {
 /// relay's challenge is answered without the application doing anything else.
 #[tokio::test(flavor = "current_thread")]
 async fn an_assembled_engine_answers_a_challenge_through_its_public_api() {
-    let rig = Rig::build(Some(Always(AuthenticationDecision::Authenticate)), true);
+    let rig = Rig::build(Some(Always::Authenticate), true);
     let _observation = rig
         .fava
         .observe(rig.query())
@@ -209,7 +227,7 @@ async fn an_engine_without_a_policy_authenticates_to_nothing() {
 /// A declining policy signs nothing, and says so.
 #[tokio::test(flavor = "current_thread")]
 async fn a_declining_policy_signs_nothing() {
-    let rig = Rig::build(Some(Always(AuthenticationDecision::Decline)), true);
+    let rig = Rig::build(Some(Always::Decline), true);
     let _observation = rig
         .fava
         .observe(rig.query())
@@ -232,7 +250,7 @@ async fn a_declining_policy_signs_nothing() {
 /// of band -- the seam an application needs when a person owns the decision.
 #[tokio::test(flavor = "current_thread")]
 async fn a_deferred_challenge_reaches_the_application_and_is_answered_out_of_band() {
-    let rig = Rig::build(Some(Always(AuthenticationDecision::Defer)), true);
+    let rig = Rig::build(Some(Always::Defer), true);
     let _observation = rig
         .fava
         .observe(rig.query())
@@ -254,10 +272,13 @@ async fn a_deferred_challenge_reaches_the_application_and_is_answered_out_of_ban
 
     let pending = authentication.pending();
     assert_eq!(pending.len(), 1, "exactly one demand awaits a person");
-    assert_eq!(pending[0].session.key, rig.key);
+    assert_eq!(pending[0].session.relay, rig.relay);
 
     authentication
-        .answer(pending[0].id, AuthenticationDecision::Authenticate)
+        .answer(
+            pending[0].id,
+            AuthenticationDecision::Authenticate { as_of: rig.account },
+        )
         .await
         .expect("the demand is answered");
     settle().await;
@@ -273,30 +294,32 @@ async fn a_deferred_challenge_reaches_the_application_and_is_answered_out_of_ban
     );
 }
 
-/// A public query never authenticates, and never asks the policy.
+/// A connection opened for public work still asks the policy when its relay
+/// challenges it, and a policy naming an account still answers: deciding
+/// whether to authenticate and deciding as whom is the policy's call, not a
+/// structural guarantee tied to what the connection was acquired for. Access
+/// stopped being identity, so nothing about how a connection was opened
+/// exempts it from a later challenge.
 #[tokio::test(flavor = "current_thread")]
-async fn a_public_query_authenticates_nothing() {
-    let rig = Rig::build(Some(Always(AuthenticationDecision::Authenticate)), true);
+async fn a_challenge_on_a_public_connection_still_reaches_the_policy() {
+    let rig = Rig::build(Some(Always::Authenticate), true);
     let public = Query::events()
         .only_from_relays([rig.relay.clone()])
         .expect("relay selection");
     let _observation = rig.fava.observe(public).await.expect("live query opens");
     settle().await;
 
-    let public_key = RelaySessionKey {
-        relay: rig.relay.clone(),
-        access: RelayAccess::Public,
-    };
     let peer = rig
         .transport
-        .relay(&public_key)
+        .relay(&rig.relay, &Authority::Unauthenticated)
         .expect("the public session was acquired");
     peer.push_frame(&challenge_frame("nonce-one"));
     settle().await;
 
-    assert!(
-        auth_frames(&peer).is_empty(),
-        "public access is never authenticated"
+    assert_eq!(
+        auth_frames(&peer).len(),
+        1,
+        "the policy named an account, so it answers even a publicly opened connection"
     );
 }
 
@@ -304,7 +327,7 @@ async fn a_public_query_authenticates_nothing() {
 /// owner that determined it rather than decoded a second time from the wire.
 #[tokio::test(flavor = "current_thread")]
 async fn an_observation_reports_the_relays_demand_from_the_owners_conclusion() {
-    let rig = Rig::build(Some(Always(AuthenticationDecision::Decline)), true);
+    let rig = Rig::build(Some(Always::Decline), true);
     let observation = rig
         .fava
         .observe(rig.query())
@@ -345,7 +368,7 @@ async fn an_observation_reports_the_relays_demand_from_the_owners_conclusion() {
     let snapshot = observation.current();
     let state = snapshot
         .evidence
-        .relay(&rig.key)
+        .relay(&rig.relay)
         .map(|occurrence| occurrence.state.clone())
         .expect("the observation carries evidence for this relay");
     // The observation reports what the relay said to it, in the relay's own
@@ -364,12 +387,16 @@ async fn an_observation_reports_the_relays_demand_from_the_owners_conclusion() {
 
 /// OWN-07's `auth_denied_for_one_access_context_leaves_another_running`.
 ///
-/// A relay is one host and several session authorities. Denying one account
-/// must not disturb another account's work, nor public-access work, on that
-/// same host: they are different connections with different identities.
+/// A relay is one host. Denying one account's authentication must not disturb
+/// public work on the same host: a decline still lets a connection carry
+/// anonymous work (a connection nobody authenticated can still become
+/// anyone's -- and, symmetrically, one the relay refused to authenticate can
+/// still carry the work that never asked to be authenticated). Whether the
+/// two share the underlying connection or not, the public observation's own
+/// evidence and subscription must be unaffected by the other's refusal.
 #[tokio::test(flavor = "current_thread")]
 async fn auth_denied_for_one_access_context_leaves_another_running() {
-    let rig = Rig::build(Some(Always(AuthenticationDecision::Decline)), true);
+    let rig = Rig::build(Some(Always::Decline), true);
 
     let denied = rig
         .fava
@@ -386,14 +413,10 @@ async fn auth_denied_for_one_access_context_leaves_another_running() {
         .expect("the public query opens");
     settle().await;
 
-    let public_key = RelaySessionKey {
-        relay: rig.relay.clone(),
-        access: RelayAccess::Public,
-    };
     let denied_peer = rig.peer().expect("the authenticated session");
     let public_peer = rig
         .transport
-        .relay(&public_key)
+        .relay(&rig.relay, &Authority::Unauthenticated)
         .expect("the public session");
 
     denied_peer.push_frame(&challenge_frame("nonce-one"));
@@ -405,22 +428,11 @@ async fn auth_denied_for_one_access_context_leaves_another_running() {
         "the authenticated context was denied"
     );
     assert!(
-        rig.transport
-            .session(&public_key)
-            .is_none_or(|session| matches!(
-                fava_transport::RelaySessionExt::connection(&session)
-                    .borrow()
-                    .authentication,
-                fava_relay::Authentication::None
-            )),
-        "public access is never authenticated, so it has no verdict"
-    );
-    assert!(
-        public.current().evidence.relay(&public_key).is_some(),
+        public.current().evidence.relay(&rig.relay).is_some(),
         "the public observation still carries evidence for its own session"
     );
     assert!(
-        denied.current().evidence.relay(&rig.key).is_some(),
+        denied.current().evidence.relay(&rig.relay).is_some(),
         "the denied observation stays open and reports its own relay"
     );
 
@@ -436,7 +448,7 @@ async fn auth_denied_for_one_access_context_leaves_another_running() {
     assert!(
         snapshot
             .evidence
-            .relay(&public_key)
+            .relay(&rig.relay)
             .is_some_and(fava_query::RelayQueryEvidence::stored_events_complete),
         "public work on the same host completes while another account is denied"
     );

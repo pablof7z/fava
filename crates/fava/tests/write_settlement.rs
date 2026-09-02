@@ -16,7 +16,7 @@ use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_transport::{
     BoundedText, OpenRelaySession, RelaySessionFuture, Transport, TransportError, TransportFailure,
     TransportShutdownFuture,
@@ -435,11 +435,11 @@ fn mixed_receipt() -> Receipt {
         receipt_id,
         current,
         routing: WriteRouting::Explicit(vec![
-            acknowledged.relay.clone(),
-            rejected.relay.clone(),
-            unknown.relay.clone(),
+            acknowledged.clone(),
+            rejected.clone(),
+            unknown.clone(),
         ]),
-        access: fava_relay::RelayAccess::Public,
+        access: Authority::Unauthenticated,
         outcome: ReceiptOutcome::Complete,
         route_revision: 1,
         route_settled: true,
@@ -449,11 +449,8 @@ fn mixed_receipt() -> Receipt {
     }
 }
 
-fn session(name: &str) -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL"),
-        access: RelayAccess::Public,
-    }
+fn session(name: &str) -> RelayUrl {
+    RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
 }
 
 fn relay(name: &str) -> RelayUrl {
@@ -511,7 +508,7 @@ async fn deadline<T>(future: impl Future<Output = T>) -> T {
 
 #[derive(Default)]
 struct ManualPublisher {
-    lanes: Mutex<Vec<(RelaySessionKey, Arc<ManualLane>)>>,
+    lanes: Mutex<Vec<(RelayUrl, Arc<ManualLane>)>>,
     started: AtomicUsize,
     started_changed: Notify,
 }
@@ -533,9 +530,7 @@ impl ManualPublisher {
             .lock()
             .expect("lane lock")
             .iter()
-            .find(|(session, lane)| {
-                session.relay == *relay && lane.outcome.lock().unwrap().is_none()
-            })
+            .find(|(session, lane)| *session == *relay && lane.outcome.lock().unwrap().is_none())
             .map(|(_, lane)| Arc::clone(lane))
             .expect("pending relay lane exists");
         lane.release(outcome);
@@ -547,7 +542,7 @@ impl ManualPublisher {
             .lock()
             .expect("lane lock")
             .iter()
-            .filter(|(session, _)| session.relay == *relay)
+            .filter(|(session, _)| *session == *relay)
             .nth(receipt_index)
             .map(|(_, lane)| Arc::clone(lane))
             .expect("indexed relay lane exists");
@@ -616,7 +611,7 @@ impl Transport for NoopTransport {
         tokio::sync::broadcast::Sender::new(1).subscribe()
     }
 
-    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+    fn holders(&self, _relay: &RelayUrl, _authority: &Authority) -> Option<NonZeroUsize> {
         None
     }
 

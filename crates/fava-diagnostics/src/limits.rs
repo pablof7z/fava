@@ -1,7 +1,7 @@
 //! Current facts about bounds that refused, backpressured, or fell short.
 
 use fava_query::ObservationId;
-use fava_relay::RelaySessionKey;
+use nostr::types::RelayUrl;
 
 use crate::providers::ProviderOperation;
 
@@ -55,7 +55,7 @@ pub enum LimitScope {
     /// One relay session.
     Relay {
         /// The session.
-        session: RelaySessionKey,
+        session: RelayUrl,
     },
     /// One observation.
     Observation {

@@ -3,7 +3,7 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, ReleaseOutcome, Transport,
     TransportBounds, TransportDeadlines, TransportError, TransportFailure,
@@ -25,24 +25,19 @@ fn frames(count: usize) -> NonZeroUsize {
     NonZeroUsize::new(count).expect("non-zero")
 }
 
-async fn listener() -> (TcpListener, RelaySessionKey) {
+async fn listener() -> (TcpListener, RelayUrl) {
     let listener = TcpListener::bind(("127.0.0.1", 0))
         .await
         .expect("listener binds");
     let url = RelayUrl::parse(&format!("ws://{}", listener.local_addr().expect("address")))
         .expect("relay URL");
-    (
-        listener,
-        RelaySessionKey {
-            relay: url,
-            access: RelayAccess::Public,
-        },
-    )
+    (listener, url)
 }
 
-fn request(key: RelaySessionKey) -> OpenRelaySession {
+fn request(relay: RelayUrl) -> OpenRelaySession {
     OpenRelaySession {
-        key,
+        relay,
+        authority: Authority::Unauthenticated,
         deadlines: TransportDeadlines {
             establish: Duration::from_secs(2),
             write: Duration::from_secs(2),
@@ -338,7 +333,7 @@ async fn the_last_release_closes_deterministically() {
         first.release().await.expect("releases"),
         ReleaseOutcome::Closed
     );
-    assert_eq!(transport.holders(&key), None);
+    assert_eq!(transport.holders(&key, &Authority::Unauthenticated), None);
     server.abort();
 }
 
@@ -362,7 +357,7 @@ async fn shutdown_closes_every_session_and_refuses_new_work() {
         .await
         .expect("shutdown joins every session");
 
-    assert_eq!(transport.holders(&key), None);
+    assert_eq!(transport.holders(&key, &Authority::Unauthenticated), None);
     assert_eq!(
         transport
             .acquire_session(request(key))
@@ -442,16 +437,19 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
     let mut connection = fava_transport::RelaySessionExt::connection(&session);
     server.await.expect("server joins");
 
+    // A plain `Disconnected` fires first, while a reconnect may still come:
+    // wait specifically for the *exhausted* budget, `spent: Some(_)`, which is
+    // the one transition after which nothing more will ever be published.
     let state = until(&mut connection, |state| {
         matches!(
             state.connectivity,
-            fava_transport::Connectivity::Disconnected { .. }
+            fava_transport::Connectivity::Disconnected { spent: Some(_), .. }
         )
     })
     .await;
     assert!(matches!(
         state.connectivity,
-        fava_transport::Connectivity::Disconnected { .. }
+        fava_transport::Connectivity::Disconnected { spent: Some(_), .. }
     ));
     assert!(
         connection.changed().await.is_err(),

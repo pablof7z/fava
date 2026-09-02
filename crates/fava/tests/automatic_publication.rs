@@ -13,7 +13,6 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query::{Query, QuerySnapshot};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_app_relays::AppRelayRouter;
 use fava_router_testkit::DelayedRouter;
 use fava_routing::{
@@ -83,7 +82,7 @@ async fn known_destinations_deliver_immediately() {
         &routers,
         &RouteRequest::Write {
             event: EventValue::Unsigned(event.clone()),
-            access: fava_relay::RelayAccess::Public,
+            access: fava_relay::Authority::Unauthenticated,
         },
         &vec![Vec::new(); routers.len()],
     )
@@ -211,10 +210,7 @@ fn contribution(
     let mut coverage = BTreeMap::new();
     let mut destinations = Vec::new();
     for (relay, target) in values {
-        let session = RelaySessionKey {
-            relay: relay.clone(),
-            access: RelayAccess::Public,
-        };
+        let session = relay.clone();
         coverage.insert(
             target.clone(),
             CoverageState::Covered(BTreeSet::from([session.clone()])),
@@ -298,7 +294,11 @@ impl Transport for NoopTransport {
         tokio::sync::broadcast::Sender::new(1).subscribe()
     }
 
-    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+    fn holders(
+        &self,
+        _relay: &RelayUrl,
+        _authority: &fava_relay::Authority,
+    ) -> Option<NonZeroUsize> {
         None
     }
 

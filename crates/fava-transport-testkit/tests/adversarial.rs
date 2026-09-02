@@ -5,7 +5,7 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, ReleaseOutcome, Transport,
     TransportAmbiguity, TransportBounds, TransportDeadlines, TransportError, TransportFailure,
@@ -13,11 +13,8 @@ use fava_transport::{
 use fava_transport_testkit::FakeTransport;
 use nostr::types::RelayUrl;
 
-fn key() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse("ws://127.0.0.1:1/").expect("relay URL"),
-        access: RelayAccess::Public,
-    }
+fn key() -> RelayUrl {
+    RelayUrl::parse("ws://127.0.0.1:1/").expect("relay URL")
 }
 
 fn frames(count: usize) -> NonZeroUsize {
@@ -26,7 +23,8 @@ fn frames(count: usize) -> NonZeroUsize {
 
 fn request() -> OpenRelaySession {
     OpenRelaySession {
-        key: key(),
+        relay: key(),
+        authority: Authority::Unauthenticated,
         deadlines: TransportDeadlines {
             establish: Duration::from_millis(50),
             write: Duration::from_millis(50),
@@ -108,7 +106,7 @@ async fn mid_operation_failure_reaches_every_reader_as_an_attributed_disconnect(
     let mut connection = fava_transport::RelaySessionExt::connection(&session);
 
     transport
-        .relay(&key())
+        .relay(&key(), &Authority::Unauthenticated)
         .expect("relay is registered")
         .fail_now("relay closed the connection");
 
@@ -132,7 +130,9 @@ async fn a_frame_in_flight_when_the_session_fails_is_ambiguous_not_lost() {
         .acquire_session(request())
         .await
         .expect("acquires");
-    let relay = transport.relay(&key()).expect("relay is registered");
+    let relay = transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("relay is registered");
     relay.stall_writer();
 
     let outcome = lease
@@ -164,7 +164,9 @@ async fn cancelling_a_handoff_mid_operation_leaves_no_half_frame() {
         .acquire_session(request())
         .await
         .expect("acquires");
-    let relay = transport.relay(&key()).expect("relay is registered");
+    let relay = transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("relay is registered");
     relay.stall_writer();
     relay.block_queue();
 
@@ -192,7 +194,7 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
     let mut connection = fava_transport::RelaySessionExt::connection(&session);
 
     transport
-        .relay(&key())
+        .relay(&key(), &Authority::Unauthenticated)
         .expect("relay is registered")
         .reconnect();
 
@@ -203,7 +205,7 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
     .await;
     let identity = state.identity;
 
-    assert_eq!(identity.key, before.key);
+    assert_eq!(identity.relay, before.relay);
     assert_eq!(
         identity.connection,
         before.connection.checked_next().expect("successor exists")
@@ -220,7 +222,9 @@ async fn a_stale_generation_completion_is_attributable_to_the_generation_that_ma
         .await
         .expect("acquires");
     let stale = lease.session().identity();
-    let relay = transport.relay(&key()).expect("relay is registered");
+    let relay = transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("relay is registered");
     relay.stall_writer();
     let _ = lease
         .session()
@@ -249,7 +253,9 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
         .expect("acquires");
     let session = std::sync::Arc::clone(lease.session());
     let mut connection = fava_transport::RelaySessionExt::connection(&session);
-    let relay = transport.relay(&key()).expect("relay is registered");
+    let relay = transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("relay is registered");
     relay.refuse_reconnects("relay refuses");
 
     relay.fail_now("relay dropped us");
@@ -288,7 +294,9 @@ async fn a_slow_subscription_loses_bounded_items_and_is_told_exactly() {
         fava_transport::RelaySessionExt::subscribe(&session, vec![nostr::filter::Filter::new()])
             .await
             .expect("subscription opens");
-    let relay = transport.relay(&key()).expect("relay is registered");
+    let relay = transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("relay is registered");
 
     // The queue is bounded at two frames; six arrive with nothing draining them.
     for _ in 0..6 {
@@ -324,7 +332,9 @@ async fn a_slow_peer_never_parks_an_unrelated_sender_on_the_same_session() {
         .await
         .expect("acquires");
     let second = transport.acquire_session(request()).await.expect("reuses");
-    let relay = transport.relay(&key()).expect("relay is registered");
+    let relay = transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("relay is registered");
     relay.stall_writer();
 
     for attempt in 0..2_u64 {
@@ -371,7 +381,7 @@ async fn the_last_release_closes_deterministically() {
         first.release().await.expect("releases"),
         ReleaseOutcome::Closed
     );
-    assert_eq!(transport.holders(&key()), None);
+    assert_eq!(transport.holders(&key(), &Authority::Unauthenticated), None);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -387,7 +397,7 @@ async fn shutdown_closes_every_registered_session() {
         .await
         .expect("shutdown joins");
 
-    assert_eq!(transport.holders(&key()), None);
+    assert_eq!(transport.holders(&key(), &Authority::Unauthenticated), None);
     assert!(matches!(
         lease
             .session()
@@ -418,7 +428,9 @@ async fn a_relay_asking_to_authenticate_reaches_a_listener() {
         .await
         .expect("acquires");
     let session = std::sync::Arc::clone(lease.session());
-    let relay = transport.relay(&key()).expect("relay is registered");
+    let relay = transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("relay is registered");
 
     // A connection nobody challenged is not this stream's business.
     relay.push_frame(b"[\"NOTICE\",\"nothing to do with authentication\"]");

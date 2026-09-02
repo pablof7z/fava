@@ -4,7 +4,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use fava_query::{Query, QuerySnapshot};
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
@@ -101,11 +100,8 @@ async fn one_router_fails_while_another_continues() {
     );
 }
 
-fn relay() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse("wss://surviving.example").expect("relay"),
-        access: RelayAccess::Public,
-    }
+fn relay() -> RelayUrl {
+    RelayUrl::parse("wss://surviving.example").expect("relay")
 }
 
 fn contribution() -> RouteContribution {

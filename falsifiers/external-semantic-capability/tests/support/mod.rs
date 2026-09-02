@@ -9,14 +9,14 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_external_semantic_capability_proof::selected_applier;
 use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::Authority;
 use fava_signer_local::LocalSigner;
-use fava_relay::RelaySessionKey;
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use fava_transport::{
     BoundedReason, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
-    RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySession, RelaySessionFuture,
-    RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
-    TransportFailure, TransportShutdownFuture,
+    RelayConnection, RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySession,
+    RelaySessionFuture, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport,
+    TransportError, TransportFailure, TransportShutdownFuture,
 };
 use fava_transport_testkit::detached_lease;
 use fava_write_store_memory::MemoryWriteStore;
@@ -293,9 +293,9 @@ impl Transport for ScriptedTransport {
         Box::pin(async move {
             let session: Arc<dyn RelaySession> = Arc::new(ScriptedSession {
                 identity: RelaySessionIdentity {
-                    key: request.key,
-                    generation: fava_transport::RelaySessionGeneration::new(generation)
-                        .expect("scripted session generation is non-zero"),
+                    relay: request.relay,
+                    connection: RelayConnection::new(generation)
+                        .expect("scripted session connection is non-zero"),
                 },
                 owner,
                 inbox,
@@ -304,7 +304,7 @@ impl Transport for ScriptedTransport {
         })
     }
 
-    fn holders(&self, _key: &RelaySessionKey) -> Option<std::num::NonZeroUsize> {
+    fn holders(&self, _relay: &RelayUrl, _authority: &Authority) -> Option<std::num::NonZeroUsize> {
         None
     }
 

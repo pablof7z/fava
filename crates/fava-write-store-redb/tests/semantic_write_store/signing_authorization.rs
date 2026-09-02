@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::RoutePlan;
 use fava_write::{EventValue, RevisionId, SignatureState, WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
@@ -20,13 +19,11 @@ fn redb_authorized_generation_and_bounded_successor_survive_reopen() {
     let first_event = revision(author, 1, "one");
     let initial_route = RoutePlan::explicit(
         [RelayUrl::parse("wss://authorized-predecessor.example").unwrap()],
-        &RelayAccess::Public,
         &BTreeSet::new(),
     )
     .unwrap();
     let relay = RelayUrl::parse("wss://authorized-successor.example").unwrap();
-    let successor_route =
-        RoutePlan::explicit([relay.clone()], &RelayAccess::Public, &BTreeSet::new()).unwrap();
+    let successor_route = RoutePlan::explicit([relay.clone()], &BTreeSet::new()).unwrap();
     let first = {
         let store = RedbWriteStore::open(&path).unwrap();
         let first_edit = edit();
@@ -77,10 +74,7 @@ fn redb_authorized_generation_and_bounded_successor_survive_reopen() {
         recovered.route_revision,
         initial_route.revision.saturating_add(1)
     );
-    assert!(recovered.destinations().contains_key(&RelaySessionKey {
-        relay,
-        access: RelayAccess::Public,
-    }));
+    assert!(recovered.destinations().contains_key(&relay));
     assert!(
         reopened
             .authorize_signing(

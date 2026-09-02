@@ -5,10 +5,10 @@ use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceError, SourceChangeFuture, SourceChanges,
     SourceCoverage, SourceKind, SourceSnapshot,
 };
-use fava_relay::RelaySessionKey;
 use fava_state::{EventStateMutation, RelayEvent};
 use nostr::event::EventId;
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 
 /// Deliberately absent event cache implemented outside the Fava workspace.
 pub struct NullEventCache;
@@ -17,7 +17,7 @@ impl EventCache for NullEventCache {
     /// A null cache retains nothing, so it never has a reusable proof.
     fn source_coverage(
         &self,
-        _session: &RelaySessionKey,
+        _session: &RelayUrl,
         _filter: &Filter,
     ) -> Result<Option<SourceCoverage>, EventCacheError> {
         Ok(None)

@@ -134,11 +134,22 @@ pub struct Router {
     ///
     /// A current value rather than a queue of past ones: a reader arriving
     /// late wants the state as it is, and a reader falling behind wants the
-    /// newest rather than the oldest. Dropping this sender is how a connection
-    /// says it will never reach anything again.
-    connection: watch::Sender<Connection>,
+    /// newest rather than the oldest. Dropping the sender is how a connection
+    /// says it will never reach anything again; `close` is what drops it.
+    connection: Mutex<ConnectionCell>,
     /// Traffic that reached no handle.
     pub unrouted: Unrouted,
+}
+
+/// The connection watch, plus the last value it carried once the sender
+/// behind it is gone.
+///
+/// Held separately from the sender because a `watch::Sender` cannot be asked
+/// for its value once dropped, and a reader arriving after close still needs
+/// to see where the connection ended rather than nothing at all.
+struct ConnectionCell {
+    sender: Option<watch::Sender<Connection>>,
+    last: Connection,
 }
 
 impl Router {
@@ -149,7 +160,10 @@ impl Router {
             subscriptions: Mutex::default(),
             acknowledgements: Mutex::default(),
             challenges: Mutex::default(),
-            connection: watch::Sender::new(connection),
+            connection: Mutex::new(ConnectionCell {
+                last: connection.clone(),
+                sender: Some(watch::Sender::new(connection)),
+            }),
             unrouted: Unrouted::default(),
         }
     }
@@ -230,10 +244,23 @@ impl Router {
     /// Watch where this connection has got to.
     ///
     /// The receiver holds the current value, so a reader that arrives after a
-    /// change still sees it.
+    /// change still sees it. A reader that arrives after `close` gets a
+    /// receiver over the connection's final value whose `changed` fails
+    /// immediately, rather than one that waits on a sender no longer there.
+    ///
+    /// # Panics
+    ///
+    /// If a prior holder of this session's router lock panicked.
     #[must_use]
     pub fn connection(&self) -> watch::Receiver<Connection> {
-        self.connection.subscribe()
+        let cell = self.connection.lock().expect("router is not poisoned");
+        if let Some(sender) = &cell.sender {
+            sender.subscribe()
+        } else {
+            let (sender, receiver) = watch::channel(cell.last.clone());
+            drop(sender);
+            receiver
+        }
     }
 
     /// Move this connection to a new state.
@@ -243,10 +270,28 @@ impl Router {
     /// is replaced ends them rather than leaving them waiting on a relay that
     /// has forgotten them. The caller says where the connection got to; what
     /// that means for the handles is not a second decision.
+    ///
+    /// A no-op once the sender is gone: nothing here reaches a closed
+    /// connection, because nothing about it can still change.
+    ///
+    /// A transition that lands on `Connectivity::Disconnected { spent: Some(_), .. }`
+    /// drops the sender before returning: that is the terminal state, whether
+    /// it was reached by an exhausted reconnect budget or by a deliberate
+    /// close, and a watcher told to wait must learn instead that nothing here
+    /// will ever change again, not go on waiting for a write that will not
+    /// come.
+    ///
+    /// # Panics
+    ///
+    /// If a prior holder of this session's router lock panicked.
     pub fn moved(&self, next: impl FnOnce(&mut Connection)) {
         let ended = {
             let mut ended = None;
-            self.connection.send_modify(|connection| {
+            let mut cell = self.connection.lock().expect("router is not poisoned");
+            let Some(sender) = &cell.sender else {
+                return;
+            };
+            sender.send_modify(|connection| {
                 let was = connection.identity.clone();
                 let live = matches!(connection.connectivity, Connectivity::Connected);
                 next(connection);
@@ -268,11 +313,37 @@ impl Router {
                     _ => None,
                 };
             });
+            let current = sender.borrow().clone();
+            let terminal = matches!(
+                current.connectivity,
+                Connectivity::Disconnected { spent: Some(_), .. }
+            );
+            cell.last = current;
+            if terminal {
+                cell.sender = None;
+            }
             ended
         };
         if let Some(ended) = ended {
             self.end_connection(&ended);
         }
+    }
+
+    /// Close the connection watch: write a terminal `Disconnected` state
+    /// (unless it already carries a more specific reason to stop), which
+    /// `moved` itself turns into dropping the sender.
+    fn close_connection(&self) {
+        self.moved(|connection| {
+            if !matches!(
+                connection.connectivity,
+                Connectivity::Disconnected { spent: Some(_), .. }
+            ) {
+                connection.connectivity = Connectivity::Disconnected {
+                    detail: BoundedText::new("session closed"),
+                    spent: Some(0),
+                };
+            }
+        });
     }
 
     /// Read the relay's authentication challenges on this session.
@@ -386,9 +457,7 @@ impl Router {
     ///
     /// If a prior holder of this session's router lock panicked.
     pub fn close(&self) {
-        self.end_connection(&SessionEnded::Disconnected {
-            detail: BoundedText::new("session closed"),
-        });
+        self.close_connection();
         for mailbox in self
             .challenges
             .lock()

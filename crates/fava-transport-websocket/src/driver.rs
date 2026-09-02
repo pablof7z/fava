@@ -32,7 +32,7 @@ pub(crate) struct Outbound {
 
 /// Establish one socket under the Fava-owned establishment deadline.
 pub(crate) async fn establish(shared: &SessionShared) -> Result<Socket, TransportFailure> {
-    let url = shared.identity.key().relay.as_str().to_owned();
+    let url = shared.identity.relay().as_str().to_owned();
     let deadline = shared.deadlines.establish;
     match tokio::time::timeout(deadline, connect_async(url)).await {
         Err(_) => Err(TransportFailure::EstablishTimeout { after: deadline }),

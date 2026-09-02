@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use fava_relay::BoundedText;
 use fava_transport::RelaySession;
+use fava_write::PublicKey;
 use thiserror::Error;
 use tokio::sync::watch;
 
@@ -73,8 +74,8 @@ impl Authenticator {
                     fava_relay::Authentication::Declined,
                 );
             }
-            AuthenticationDecision::Authenticate => {
-                authenticate(self, &demand, &session).await;
+            AuthenticationDecision::Authenticate { as_of } => {
+                authenticate(self, &demand, as_of, &session).await;
             }
             AuthenticationDecision::Defer => unreachable!("refused above"),
         }
@@ -89,21 +90,11 @@ impl Authenticator {
 pub(super) async fn authenticate(
     authenticator: &Authenticator,
     demand: &AuthenticationDemand,
+    account: PublicKey,
     session: &Arc<dyn RelaySession>,
 ) {
     let identity = &demand.session;
-    let Some(account) = Authenticator::account(&identity.key) else {
-        authenticator.record(
-            identity,
-            session,
-            fava_relay::Authentication::Failed {
-                reason: BoundedText::new("a public session has no account to authenticate as"),
-            },
-        );
-        return;
-    };
-
-    let unsigned = match auth_event(account, &identity.key.relay, &demand.challenge) {
+    let unsigned = match auth_event(account, &identity.relay, &demand.challenge) {
         Ok(event) => event,
         Err(error) => {
             authenticator.record(

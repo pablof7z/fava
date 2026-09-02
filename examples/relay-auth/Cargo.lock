@@ -578,6 +578,7 @@ dependencies = [
  "fava-state",
  "fava-transport",
  "fava-write",
+ "nostr",
 ]
 
 [[package]]
@@ -764,10 +765,10 @@ name = "fava-write-store"
 version = "0.1.0"
 dependencies = [
  "fava-query",
- "fava-relay",
  "fava-routing",
  "fava-state",
  "fava-write",
+ "nostr",
  "thiserror",
  "tokio",
 ]

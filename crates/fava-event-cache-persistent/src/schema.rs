@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::RelayEvent;
 use nostr::event::{Event, EventId};
 use nostr::key::PublicKey;
@@ -20,32 +20,28 @@ const SCHEMA_VERSION: u64 = 1;
 struct PersistedEvent {
     event_json: serde_json::Value,
     relay_url: String,
-    relay_access: PersistedAccess,
+    authority: PersistedAuthority,
     observed_at: u64,
 }
 
 #[derive(Serialize, Deserialize)]
-enum PersistedAccess {
-    Public,
-    Authenticated(String),
+enum PersistedAuthority {
+    Unauthenticated,
+    As(String),
 }
 
-pub(super) fn composite_key(event_id: EventId, session: &RelaySessionKey) -> String {
-    let access = match &session.access {
-        RelayAccess::Public => "pub".to_owned(),
-        RelayAccess::Authenticated(pk) => format!("auth:{}", pk.to_hex()),
-    };
-    format!("{}:{}:{}", event_id.to_hex(), session.relay, access)
+pub(super) fn composite_key(event_id: EventId, session: &RelayUrl) -> String {
+    format!("{}:{}", event_id.to_hex(), session)
 }
 
 fn to_bytes(event: &RelayEvent) -> Result<Vec<u8>, String> {
     let event_json = serde_json::to_value(event.event()).map_err(|e| e.to_string())?;
     let persisted = PersistedEvent {
         event_json,
-        relay_url: event.occurrence().session.relay.to_string(),
-        relay_access: match &event.occurrence().session.access {
-            RelayAccess::Public => PersistedAccess::Public,
-            RelayAccess::Authenticated(pk) => PersistedAccess::Authenticated(pk.to_hex()),
+        relay_url: event.occurrence().session.to_string(),
+        authority: match &event.occurrence().authority {
+            Authority::Unauthenticated => PersistedAuthority::Unauthenticated,
+            Authority::As(pk) => PersistedAuthority::As(pk.to_hex()),
         },
         observed_at: event.occurrence().observed_at.as_secs(),
     };
@@ -56,19 +52,16 @@ fn from_bytes(data: &[u8]) -> Result<RelayEvent, String> {
     let persisted: PersistedEvent = serde_json::from_slice(data).map_err(|e| e.to_string())?;
     let event: Event = serde_json::from_value(persisted.event_json).map_err(|e| e.to_string())?;
     let relay_url = RelayUrl::parse(&persisted.relay_url).map_err(|e| e.to_string())?;
-    let relay_access = match persisted.relay_access {
-        PersistedAccess::Public => RelayAccess::Public,
-        PersistedAccess::Authenticated(hex) => {
-            RelayAccess::Authenticated(PublicKey::from_hex(&hex).map_err(|e| e.to_string())?)
+    let authority = match persisted.authority {
+        PersistedAuthority::Unauthenticated => Authority::Unauthenticated,
+        PersistedAuthority::As(hex) => {
+            Authority::As(PublicKey::from_hex(&hex).map_err(|e| e.to_string())?)
         }
-    };
-    let session = RelaySessionKey {
-        relay: relay_url,
-        access: relay_access,
     };
     Ok(RelayEvent::new(
         event,
-        session,
+        relay_url,
+        authority,
         Timestamp::from_secs(persisted.observed_at),
     ))
 }
@@ -107,7 +100,7 @@ fn validate_schema(database: &Database) -> Result<(), String> {
 
 pub(super) fn load(
     database: &Database,
-) -> Result<BTreeMap<(EventId, RelaySessionKey), RelayEvent>, String> {
+) -> Result<BTreeMap<(EventId, RelayUrl), RelayEvent>, String> {
     let txn = database.begin_read().map_err(|e| e.to_string())?;
     let table = txn.open_table(EVENTS).map_err(|e| e.to_string())?;
     let mut events = BTreeMap::new();
@@ -126,7 +119,7 @@ pub(super) fn load(
 pub(super) fn apply_diff(
     database: &Database,
     inserted: &[RelayEvent],
-    removed: &[(EventId, RelaySessionKey)],
+    removed: &[(EventId, RelayUrl)],
 ) -> Result<(), String> {
     if inserted.is_empty() && removed.is_empty() {
         return Ok(());

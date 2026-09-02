@@ -184,11 +184,16 @@ async fn a_deferred_challenge_waits_for_a_person_then_authenticates() {
 
     let pending = rig.authenticator().pending();
     assert_eq!(pending.len(), 1, "the application can enumerate every ask");
-    assert_eq!(&pending[0].session.key, rig.key());
+    assert_eq!(&pending[0].session.relay, rig.relay_url());
 
     let outcome = rig
         .authenticator()
-        .answer(pending[0].id, AuthenticationDecision::Authenticate)
+        .answer(
+            pending[0].id,
+            AuthenticationDecision::Authenticate {
+                as_of: rig.account(),
+            },
+        )
         .await
         .expect("the demand awaits this answer");
 
@@ -238,7 +243,12 @@ async fn a_reconnect_drops_an_outstanding_demand_and_a_stale_answer_does_nothing
 
     let outcome = rig
         .authenticator()
-        .answer(pending[0].id, AuthenticationDecision::Authenticate)
+        .answer(
+            pending[0].id,
+            AuthenticationDecision::Authenticate {
+                as_of: rig.account(),
+            },
+        )
         .await;
 
     assert!(

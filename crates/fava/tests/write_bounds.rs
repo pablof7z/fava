@@ -3,7 +3,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use fava::EventBuilder;
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{RouteContribution, RouteDestination, RoutePlan, RouteRequest};
 use fava_write::{
     EventValue, Kind, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteIntent,
@@ -167,10 +166,7 @@ fn automatic_route_fanout_is_bounded_before_receipt_mutation() {
     let destinations = (0..257)
         .map(|index| {
             RouteDestination::new(
-                RelaySessionKey {
-                    relay: RelayUrl::parse(&format!("wss://automatic-{index}.example")).unwrap(),
-                    access: RelayAccess::Public,
-                },
+                RelayUrl::parse(&format!("wss://automatic-{index}.example")).unwrap(),
                 BTreeSet::new(),
                 "bounded route",
             )
@@ -222,10 +218,7 @@ fn automatic_route_shortfall_bound_is_atomic() {
         .accept(WriteIntent::event(event, WriteRouting::Automatic).unwrap())
         .unwrap();
     let destination = RouteDestination::new(
-        RelaySessionKey {
-            relay: RelayUrl::parse("wss://atomic-route.example").unwrap(),
-            access: RelayAccess::Public,
-        },
+        RelayUrl::parse("wss://atomic-route.example").unwrap(),
         BTreeSet::new(),
         "initial route",
     );
@@ -283,10 +276,7 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
     let accepted = store
         .accept(WriteIntent::presigned(event, WriteRouting::Automatic).unwrap())
         .unwrap();
-    let session = RelaySessionKey {
-        relay: RelayUrl::parse("wss://withdrawn-in-flight.example").unwrap(),
-        access: RelayAccess::Public,
-    };
+    let session = RelayUrl::parse("wss://withdrawn-in-flight.example").unwrap();
     let first = RoutePlan::from_contribution(
         1,
         &RouteContribution {
@@ -367,7 +357,7 @@ fn settled_empty_automatic_route_has_typed_outcome_and_reason() {
         .unwrap();
     let request = RouteRequest::Write {
         event: EventValue::Unsigned(event.clone()),
-        access: fava_relay::RelayAccess::Public,
+        access: fava_relay::Authority::Unauthenticated,
     };
     let plan = fava_routing::preview(&[], &request, &[]).unwrap();
     let store = MemoryWriteStore::default();

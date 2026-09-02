@@ -5,7 +5,7 @@ relay add refuse ws://127.0.0.1:18093
 account import alice 0000000000000000000000000000000000000000000000000000000000000001
 account import bob 0000000000000000000000000000000000000000000000000000000000000002
 account import carol 0000000000000000000000000000000000000000000000000000000000000003
-policy set authenticate
+policy set authenticate:alice
 publish public 1 "public note on nostr" nostr
 capture pub-write receipt_id
 receipt wait ${pub-write}
@@ -26,11 +26,12 @@ publish as:carol 1 "carol declines" reject
 capture decline-write receipt_id
 receipt wait ${decline-write}
 auth state reject as:carol
-policy set authenticate
+policy set authenticate:bob
 publish as:bob 1 "bob rejected" reject
 capture reject-write receipt_id
 receipt wait ${reject-write}
 auth state reject as:bob
+policy set authenticate:alice
 publish as:alice 1 "alice still refused" refuse
 capture refuse-write receipt_id
 receipt wait ${refuse-write}
@@ -49,7 +50,7 @@ capture defer-write receipt_id
 auth pending
 capture pending-id first_id
 auth state nostr as:alice
-auth answer ${pending-id} authenticate
+auth answer ${pending-id} authenticate:alice
 receipt wait ${defer-write}
 capture defer-event event_id
 auth state nostr as:alice

@@ -11,11 +11,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava_query::{BoundedText, Round};
-use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, OperationName, ProviderCompletion, Runtime, TaskName};
 use fava_subscriptions::{DeclaredLimit, PlanRevision, RelayReadConstraints, SubscriptionPlan};
 use fava_transport::{OpenRelaySession, RelaySession, RelaySessionLease, Transport};
 use fava_wire::SubscriptionId;
+use nostr::types::RelayUrl;
 
 use crate::engine::{Report, Reports};
 
@@ -39,7 +39,7 @@ pub(crate) fn acquire(
 ) {
     let transport = Arc::clone(transport);
     let reports = reports.clone();
-    let relay = request.key.clone();
+    let relay = request.relay.clone();
     let deadline = request.deadlines.establish;
     let owner = runtime.clone();
     let _ = runtime.spawn_cancellable(ACQUIRE_TASK, cancel, async move {
@@ -80,7 +80,7 @@ pub(crate) fn acquire(
 pub(crate) fn arm_admission(
     runtime: &Runtime,
     reports: &Reports,
-    relay: RelaySessionKey,
+    relay: RelayUrl,
     generation: Round,
     window: Duration,
 ) {
@@ -94,7 +94,7 @@ pub(crate) fn arm_admission(
 /// Identity of the plan installation one execution carries out.
 pub(crate) struct Installing {
     /// Relay session the plan applies to.
-    pub(crate) relay: RelaySessionKey,
+    pub(crate) relay: RelayUrl,
     /// Owner round the frames are issued under.
     pub(crate) generation: Round,
     /// Desired-plan revision being installed.
@@ -192,7 +192,7 @@ pub(crate) fn release(
 pub(crate) fn listen(
     runtime: &Runtime,
     reports: &Reports,
-    relay: RelaySessionKey,
+    relay: RelayUrl,
     generation: Round,
     session: &Arc<dyn RelaySession>,
     cancel: CancellationToken,
@@ -234,7 +234,7 @@ pub(crate) fn listen(
 pub(crate) fn attend(
     runtime: &Runtime,
     reports: &Reports,
-    relay: RelaySessionKey,
+    relay: RelayUrl,
     generation: Round,
     mut subscription: Box<dyn fava_transport::Subscription>,
     cancel: CancellationToken,
@@ -270,7 +270,7 @@ pub(crate) fn attend(
 async fn open_subscription(
     runtime: &Runtime,
     reports: &Reports,
-    relay: &RelaySessionKey,
+    relay: &RelayUrl,
     session: &Arc<dyn RelaySession>,
     filters: Vec<nostr::filter::Filter>,
     generation: Round,
@@ -317,15 +317,20 @@ const NIP11_TASK: TaskName = TaskName("observe.nip11");
 pub(crate) fn fetch_constraints(
     runtime: &Runtime,
     reports: &Reports,
-    relay: RelaySessionKey,
+    relay: RelayUrl,
+    generation: Round,
     timeout: std::time::Duration,
     cancel: CancellationToken,
 ) {
     let reports = reports.clone();
     let _ = runtime.spawn_cancellable(NIP11_TASK, cancel, async move {
-        let constraints = nip11_fetch(&relay.relay, timeout).await;
+        let constraints = nip11_fetch(&relay, timeout).await;
         reports
-            .send(crate::engine::Report::Constraints { relay, constraints })
+            .send(crate::engine::Report::Constraints {
+                relay,
+                generation,
+                constraints,
+            })
             .await;
     });
 }

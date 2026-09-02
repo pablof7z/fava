@@ -3,12 +3,12 @@
 use std::cell::Cell;
 
 use fava_query::{QuerySource, SourceCoverage};
-use fava_relay::RelaySessionKey;
 use fava_state::{
     EventStateMutation, RelayEvent, event_is_expired, mutations_for_event, mutations_for_expiration,
 };
 use nostr::event::EventId;
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 use nostr::types::Timestamp;
 use thiserror::Error;
 
@@ -24,7 +24,7 @@ pub trait EventCache: QuerySource + Send + Sync {
     /// Returns [`EventCacheError`] when the retained coverage cannot be read.
     fn source_coverage(
         &self,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         filter: &Filter,
     ) -> Result<Option<SourceCoverage>, EventCacheError>;
 

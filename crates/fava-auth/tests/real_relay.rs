@@ -44,7 +44,7 @@ use std::time::Duration;
 use fava_auth::{
     AuthenticationDecision, AuthenticationDemand, AuthenticationPolicy, Authenticator,
 };
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
 use fava_signer::Signer;
@@ -79,15 +79,14 @@ async fn nostr_rs_relay_challenge_and_kind_22242_response_are_exact_wire_frames(
         max_tasks: nonzero(1_024),
         max_provider_operations: nonzero(256),
     });
-    let authenticator = Authenticator::new(signers, Arc::new(AlwaysAuthenticate), runtime);
+    let authenticator =
+        Authenticator::new(signers, Arc::new(AlwaysAuthenticate { account }), runtime);
     authenticator
         .answer_requests(transport.as_ref())
         .expect("the owner begins answering");
-    let key = RelaySessionKey {
-        relay: RelayUrl::parse(&proxy_url).expect("proxy url parses"),
-        access: RelayAccess::Authenticated(account),
-    };
-    let lease = connect(transport.as_ref(), key.clone()).await;
+    let relay_url = RelayUrl::parse(&proxy_url).expect("proxy url parses");
+    let authority = Authority::As(account);
+    let lease = connect(transport.as_ref(), relay_url, authority).await;
 
     wait_for_round_trip(&transcript, &lease).await;
 
@@ -186,11 +185,15 @@ fn has_two_frames(transcript: &Transcript) -> bool {
     challenge && response
 }
 
-struct AlwaysAuthenticate;
+struct AlwaysAuthenticate {
+    account: nostr::key::PublicKey,
+}
 
 impl AuthenticationPolicy for AlwaysAuthenticate {
     fn decide(&self, _demand: &AuthenticationDemand) -> AuthenticationDecision {
-        AuthenticationDecision::Authenticate
+        AuthenticationDecision::Authenticate {
+            as_of: self.account,
+        }
     }
 }
 
@@ -202,12 +205,14 @@ fn nonzero_usize(value: usize) -> std::num::NonZeroUsize {
 /// components open; it opens none itself.
 async fn connect(
     transport: &dyn fava_transport::Transport,
-    key: RelaySessionKey,
+    relay: RelayUrl,
+    authority: Authority,
 ) -> fava_transport::RelaySessionLease {
     fava_transport::Transport::acquire_session(
         transport,
         fava_transport::OpenRelaySession {
-            key,
+            relay,
+            authority,
             deadlines: fava_transport::TransportDeadlines {
                 establish: FRAME_TIMEOUT,
                 write: FRAME_TIMEOUT,

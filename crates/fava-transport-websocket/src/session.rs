@@ -38,7 +38,7 @@ impl SessionShared {
         generations: Arc<AtomicU64>,
         subscriptions: Arc<AtomicU64>,
     ) -> Self {
-        let identity = LiveIdentity::new(request.key.clone(), generation);
+        let identity = LiveIdentity::new(request.relay.clone(), generation);
         let opening = fava_transport::Connection {
             connectivity: fava_transport::Connectivity::Connected,
             ..fava_transport::Connection::opening(identity.read())

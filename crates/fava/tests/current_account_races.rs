@@ -8,7 +8,7 @@ use fava_event_cache::{EventCache, EventCacheError};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{OpenedQuerySource, QuerySource, QuerySourceError, SourceCoverage};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder, EventId, FinalizeEvent};
@@ -127,10 +127,8 @@ fn assembly(alice: &Keys, bob: &Keys, carol: &Keys) -> (Fava, Arc<BlockingCache>
             .admit(
                 RelayEvent::new(
                     event,
-                    RelaySessionKey {
-                        relay: RelayUrl::parse("wss://cache.example").expect("relay URL"),
-                        access: RelayAccess::Public,
-                    },
+                    RelayUrl::parse("wss://cache.example").expect("relay URL"),
+                    Authority::Unauthenticated,
                     Timestamp::from(index as u64 + 1),
                 ),
                 Timestamp::from(index as u64 + 1),
@@ -214,7 +212,7 @@ impl QuerySource for BlockingCache {
 impl EventCache for BlockingCache {
     fn source_coverage(
         &self,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         filter: &Filter,
     ) -> Result<Option<SourceCoverage>, EventCacheError> {
         self.inner.source_coverage(session, filter)

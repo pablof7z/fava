@@ -7,6 +7,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use fava_query::{Query, RelaySourceState, RouteOrigin};
+use fava_relay::Authority;
 use fava_router_app_relays::AppRelayRouter;
 use fava_routing::Router;
 use fava_transport::Transport;
@@ -77,7 +78,12 @@ async fn one_wire_subscription_serves_every_observation_that_shares_it() {
         sharing,
         "both holders see the same sharing set"
     );
-    assert_eq!(assembly.transport.holders(&key), NonZeroUsize::new(1));
+    assert_eq!(
+        assembly
+            .transport
+            .holders(&key, &Authority::Unauthenticated),
+        NonZeroUsize::new(1)
+    );
     first.close();
     second.close();
 }
@@ -170,7 +176,9 @@ async fn a_route_withdrawal_leaves_the_explicit_observation_intact() {
         "the surviving request keeps its identity and its filter"
     );
     assert_eq!(
-        assembly.transport.holders(&key),
+        assembly
+            .transport
+            .holders(&key, &Authority::Unauthenticated),
         NonZeroUsize::new(1),
         "the shared connection survives one holder leaving"
     );
@@ -209,10 +217,21 @@ async fn the_last_holder_to_close_releases_the_shared_connection() {
         withdrawals(Some(peer.clone())).is_empty(),
         "the request still serves the second observation"
     );
-    assert_eq!(assembly.transport.holders(&key), NonZeroUsize::new(1));
+    assert_eq!(
+        assembly
+            .transport
+            .holders(&key, &Authority::Unauthenticated),
+        NonZeroUsize::new(1)
+    );
 
     second.close();
-    wait_until(|| assembly.transport.holders(&key).is_none()).await;
+    wait_until(|| {
+        assembly
+            .transport
+            .holders(&key, &Authority::Unauthenticated)
+            .is_none()
+    })
+    .await;
     assert_eq!(withdrawals(Some(peer)), vec![installed]);
     assert_eq!(assembly.transport.dials(&key), 1);
 }
@@ -270,7 +289,7 @@ async fn dropping_the_handle_closes_established_work_while_another_relay_stalls(
     wait_until(|| {
         assembly
             .transport
-            .holders(&session_key(&reachable))
+            .holders(&session_key(&reachable), &Authority::Unauthenticated)
             .is_none()
     })
     .await;
@@ -296,7 +315,13 @@ async fn an_establishment_that_completes_after_withdrawal_is_released_not_instal
     assembly.transport.release_establishment(&key);
     drop(observation);
 
-    wait_until(|| assembly.transport.holders(&key).is_none()).await;
+    wait_until(|| {
+        assembly
+            .transport
+            .holders(&key, &Authority::Unauthenticated)
+            .is_none()
+    })
+    .await;
     settle().await;
     assert!(
         requests(assembly.peer(&gated)).is_empty(),

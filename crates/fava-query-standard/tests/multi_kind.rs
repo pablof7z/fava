@@ -6,7 +6,7 @@ use fava_query::{
     Query, QueryEvaluator, SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::RelayEvent;
 use nostr::event::{Event, EventBuilder, EventId, FinalizeEvent, Kind};
 use nostr::key::Keys;
@@ -36,10 +36,8 @@ fn bounded_kind_set_local_selection_is_complete() {
             .map(|event| {
                 SourceEvent::Relay(RelayEvent::new(
                     event,
-                    RelaySessionKey {
-                        relay: RelayUrl::parse("wss://relay.example").unwrap(),
-                        access: RelayAccess::Public,
-                    },
+                    RelayUrl::parse("wss://relay.example").unwrap(),
+                    Authority::Unauthenticated,
                     Timestamp::from(1),
                 ))
             })

@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use fava_query::EventRecord;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_router_hints::HintRouter;
 use fava_routing::{RoutePlan, RouteRequest, Router};
 use fava_state::{RelayEvent, relay_occurrences_for_event};
@@ -26,10 +26,8 @@ fn reference_hint_and_actual_relay_evidence_are_independent_reasons() {
             target.id,
             &[RelayEvent::new(
                 target.clone(),
-                RelaySessionKey {
-                    relay: observed.clone(),
-                    access: RelayAccess::Public,
-                },
+                observed.clone(),
+                Authority::Unauthenticated,
                 Timestamp::from(10),
             )],
         )
@@ -49,18 +47,14 @@ fn reference_hint_and_actual_relay_evidence_are_independent_reasons() {
         .preview(
             &RouteRequest::Write {
                 event: EventValue::Unsigned(reply),
-                access: fava_relay::RelayAccess::Public,
+                access: fava_relay::Authority::Unauthenticated,
             },
             &RoutePlan::default(),
             &[],
         )
         .unwrap();
     let plan = RoutePlan::from_contribution(1, &contribution).unwrap();
-    let relays: BTreeSet<_> = plan
-        .destinations
-        .keys()
-        .map(|session| session.relay.clone())
-        .collect();
+    let relays: BTreeSet<_> = plan.destinations.keys().cloned().collect();
 
     assert_eq!(relays, BTreeSet::from([hinted, observed]));
 }

@@ -13,6 +13,7 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
 use fava_query::Query;
+use fava_relay::Authority;
 use fava_transport::Transport;
 use nostr::event::Kind;
 use nostr::key::{Keys, PublicKey};
@@ -100,11 +101,22 @@ async fn a_merged_request_absorbs_a_late_joiner_and_survives_until_its_last_dema
         "a running request is never rewritten to narrow it"
     );
     assert!(withdrawals(Some(peer.clone())).is_empty());
-    assert_eq!(assembly.transport.holders(&key), NonZeroUsize::new(1));
+    assert_eq!(
+        assembly
+            .transport
+            .holders(&key, &Authority::Unauthenticated),
+        NonZeroUsize::new(1)
+    );
 
     second.close();
     wait_until(|| withdrawals(Some(peer.clone())) == vec![merged[0].0.clone()]).await;
-    wait_until(|| assembly.transport.holders(&key).is_none()).await;
+    wait_until(|| {
+        assembly
+            .transport
+            .holders(&key, &Authority::Unauthenticated)
+            .is_none()
+    })
+    .await;
     assert_eq!(assembly.transport.dials(&key), 1);
 }
 

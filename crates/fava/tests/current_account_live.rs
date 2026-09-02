@@ -6,7 +6,7 @@ use std::time::Duration;
 use fava::{EventValue, Fava, Query, RelayUrl};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_transport_testkit::{FakeRelay, FakeTransport};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId};
 use fava_write_store_memory::MemoryWriteStore;
@@ -23,10 +23,7 @@ async fn current_account_switch_replaces_exact_wire_demand() {
     let alice = Keys::generate();
     let bob = Keys::generate();
     let relay = RelayUrl::parse("wss://current-account.example").expect("relay URL");
-    let key = RelaySessionKey {
-        relay: relay.clone(),
-        access: RelayAccess::Public,
-    };
+    let key = relay.clone();
     let transport = Arc::new(FakeTransport::new());
     let fava = assembly(&transport);
     fava.add_account(alice.public_key()).expect("Alice adds");
@@ -57,7 +54,9 @@ async fn current_account_switch_replaces_exact_wire_demand() {
             .collect::<Vec<_>>(),
         vec![observation_id]
     );
-    let peer = transport.relay(&key).expect("relay established");
+    let peer = transport
+        .relay(&key, &Authority::Unauthenticated)
+        .expect("relay established");
 
     fava.select_account(bob.public_key()).expect("Bob selects");
     wait_until("Bob REQ", || {
@@ -156,7 +155,7 @@ fn assembly(transport: &Arc<FakeTransport>) -> Fava {
 
 fn request_for(
     transport: &FakeTransport,
-    key: &RelaySessionKey,
+    key: &RelayUrl,
     author: PublicKey,
 ) -> Option<SubscriptionId> {
     requests(transport, key)
@@ -190,7 +189,7 @@ fn request_for_peer(peer: &FakeRelay, author: PublicKey) -> Option<SubscriptionI
 
 fn requests(
     transport: &FakeTransport,
-    key: &RelaySessionKey,
+    key: &RelayUrl,
 ) -> Vec<(SubscriptionId, Vec<nostr::filter::Filter>)> {
     messages(transport, key)
         .into_iter()
@@ -239,9 +238,9 @@ fn withdrawals_peer(peer: &FakeRelay) -> Vec<SubscriptionId> {
         .collect()
 }
 
-fn messages(transport: &FakeTransport, key: &RelaySessionKey) -> Vec<ClientMessage<'static>> {
+fn messages(transport: &FakeTransport, key: &RelayUrl) -> Vec<ClientMessage<'static>> {
     transport
-        .relay(key)
+        .relay(key, &Authority::Unauthenticated)
         .map(|peer| peer.delivered_frames())
         .unwrap_or_default()
         .into_iter()

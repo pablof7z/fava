@@ -11,9 +11,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use fava_relay::{AuthenticationState, BoundedText};
+pub use fava_relay::{AuthenticationState, Authority, BoundedText};
 
-use fava_relay::RelayAccess;
 use fava_state::{RelayEvent, RelayOccurrences};
 use fava_write::{EventValue, LocalWriteEvent, PublicationEvidence};
 pub use nostr::event::{EventId, Kind};
@@ -103,8 +102,8 @@ pub enum Freshness {
 /// query is complete anywhere else or that no matching event exists elsewhere.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceCoverage {
-    /// Exact relay and access identity that supplied EOSE.
-    pub session: fava_relay::RelaySessionKey,
+    /// Exact relay that supplied EOSE.
+    pub session: RelayUrl,
     /// Exact filter carried by the completed request.
     pub filter: nostr::filter::Filter,
     /// Timestamp from the attributed EOSE frame.
@@ -154,8 +153,8 @@ pub struct Query {
     selection: FilterSelection,
     /// Acquisition and provenance authority.
     source: QuerySourcePolicy,
-    /// Relay access.
-    access: RelayAccess,
+    /// Authority this query requires of a connection.
+    access: Authority,
     /// Whether live relay demand is permitted.
     freshness: Freshness,
     /// Deterministic result order.
@@ -169,7 +168,7 @@ impl Default for Query {
         Self {
             selection: FilterSelection::default(),
             source: QuerySourcePolicy::default(),
-            access: RelayAccess::Public,
+            access: Authority::Unauthenticated,
             freshness: Freshness::Live,
             ordering: QueryOrdering::NewestFirst,
             limit: None,
@@ -178,9 +177,10 @@ impl Default for Query {
 }
 
 impl Query {
-    /// Select exact relay access before acquisition opens.
+    /// Select the authority this query requires of a connection, before
+    /// acquisition opens.
     #[must_use]
-    pub fn with_relay_access(mut self, access: RelayAccess) -> Self {
+    pub fn with_relay_access(mut self, access: Authority) -> Self {
         self.access = access;
         self
     }
@@ -256,9 +256,9 @@ impl Query {
         &self.source
     }
 
-    /// Relay access.
+    /// Authority this query requires of a connection.
     #[must_use]
-    pub const fn access(&self) -> &RelayAccess {
+    pub const fn access(&self) -> &Authority {
         &self.access
     }
 

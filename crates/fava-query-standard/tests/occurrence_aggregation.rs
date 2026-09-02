@@ -2,7 +2,7 @@
 
 use fava_query::{Query, QueryEvaluator, SourceEvent, SourceKind, SourceRevision, SourceSnapshot};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::RelayEvent;
 use nostr::event::{EventBuilder, FinalizeEvent, Kind};
 use nostr::key::Keys;
@@ -12,14 +12,8 @@ use nostr::types::{RelayUrl, Timestamp};
 fn same_event_uses_earliest_time_per_serving_exact_session()
 -> Result<(), Box<dyn std::error::Error>> {
     let event = EventBuilder::new(Kind::TextNote, "shared").finalize(&Keys::generate())?;
-    let a = RelaySessionKey {
-        relay: RelayUrl::parse("wss://a.example")?,
-        access: RelayAccess::Public,
-    };
-    let b = RelaySessionKey {
-        relay: RelayUrl::parse("wss://b.example")?,
-        access: RelayAccess::Public,
-    };
+    let a = RelayUrl::parse("wss://a.example")?;
+    let b = RelayUrl::parse("wss://b.example")?;
     let source = SourceSnapshot::current(
         SourceKind::EventCache,
         SourceRevision(1),
@@ -27,22 +21,25 @@ fn same_event_uses_earliest_time_per_serving_exact_session()
             SourceEvent::Relay(RelayEvent::new(
                 event.clone(),
                 a.clone(),
+                Authority::Unauthenticated,
                 Timestamp::from(9),
             )),
             SourceEvent::Relay(RelayEvent::new(
                 event.clone(),
                 a.clone(),
+                Authority::Unauthenticated,
                 Timestamp::from(3),
             )),
             SourceEvent::Relay(RelayEvent::new(
                 event.clone(),
                 b.clone(),
+                Authority::Unauthenticated,
                 Timestamp::from(5),
             )),
         ],
     );
     let result = StandardQueryEvaluator.evaluate(
-        &Query::events().with_relay_access(RelayAccess::Public),
+        &Query::events().with_relay_access(Authority::Unauthenticated),
         &[source],
     )?;
     let occurrences = result.events[0].relay_occurrences();

@@ -1,4 +1,3 @@
-use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_write::{
     Event, EventEdit, EventId, EventValue, LocalWriteEvent, PublicationEvidence, Receipt,
@@ -9,6 +8,7 @@ use fava_write_store::{
     AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt, validate_current_revision,
     validate_delivery_outcome,
 };
+use nostr::types::RelayUrl;
 use tokio::sync::broadcast;
 
 use crate::RedbWriteStore;
@@ -57,7 +57,7 @@ impl WriteStore for RedbWriteStore {
             }
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
         };
-        let destinations = destinations(&routing, &accepted_access);
+        let destinations = destinations(&routing);
         let desired_destinations = destinations.keys().cloned().collect();
         let explicit = matches!(routing, WriteRouting::Explicit(_));
         let current = LocalWriteEvent::new(
@@ -78,7 +78,7 @@ impl WriteStore for RedbWriteStore {
             receipt_id,
             current: current.clone(),
             routing,
-            access: accepted_access.clone(),
+            access: accepted_access,
             outcome: ReceiptOutcome::Open,
             route_revision: u64::from(explicit),
             route_settled: explicit,
@@ -268,7 +268,7 @@ impl WriteStore for RedbWriteStore {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
     ) -> Result<Receipt, WriteStoreError> {
         self.update(receipt_id, |receipt| {
@@ -320,7 +320,7 @@ impl WriteStore for RedbWriteStore {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError> {

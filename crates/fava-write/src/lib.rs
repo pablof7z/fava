@@ -1,6 +1,6 @@
 //! Event values and publication evidence shared by write owners and queries.
 
-use fava_relay::RelayAccess;
+use fava_relay::Authority;
 use fava_state::{EventCoordinate, event_coordinate};
 pub use nostr::event::{Event, EventId, Kind, Tag, UnsignedEvent};
 pub use nostr::key::PublicKey;
@@ -10,15 +10,11 @@ use serde::{Deserialize, Serialize};
 use std::num::{NonZeroU64, TryFromIntError};
 use thiserror::Error;
 
-mod attempt_map;
 mod builder;
-mod delivery_map;
 mod edit;
 mod edit_application;
 mod receipt;
-mod relay_session_serde;
 mod routing;
-mod session_set;
 
 pub use builder::{AuthoredEventBuilder, EventBuildError, EventBuilder};
 pub use edit::EventEdit;
@@ -86,24 +82,24 @@ pub enum WritePayload {
 pub struct WriteIntent {
     payload: WritePayload,
     routing: WriteRouting,
-    /// The relay authority this write is accepted under. Separate from the
+    /// The authority this write is accepted under. Separate from the
     /// event's author: a write may go over one account's authenticated session
     /// and be signed by another.
-    access: RelayAccess,
+    access: Authority,
 }
 
 impl WriteIntent {
-    /// The relay authority this write is accepted under.
+    /// The authority this write is accepted under.
     #[must_use]
-    pub const fn access(&self) -> &RelayAccess {
+    pub const fn access(&self) -> &Authority {
         &self.access
     }
 
-    /// Accept this write under one account's relay authority.
+    /// Accept this write under one account's authority.
     ///
     /// Separate from the event's author, which the payload already carries.
     #[must_use]
-    pub fn under(mut self, access: RelayAccess) -> Self {
+    pub fn under(mut self, access: Authority) -> Self {
         self.access = access;
         self
     }
@@ -138,7 +134,7 @@ impl WriteIntent {
         Ok(Self {
             payload: WritePayload::Event(event),
             routing,
-            access: RelayAccess::Public,
+            access: Authority::Unauthenticated,
         })
     }
 
@@ -168,7 +164,7 @@ impl WriteIntent {
         Ok(Self {
             payload: WritePayload::Presigned(event),
             routing,
-            access: RelayAccess::Public,
+            access: Authority::Unauthenticated,
         })
     }
 
@@ -196,7 +192,7 @@ impl WriteIntent {
 
     /// Consume the intent into its exact parts.
     #[must_use]
-    pub fn into_parts(self) -> (WritePayload, WriteRouting, RelayAccess) {
+    pub fn into_parts(self) -> (WritePayload, WriteRouting, Authority) {
         (self.payload, self.routing, self.access)
     }
 }

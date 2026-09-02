@@ -3,7 +3,6 @@
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 
 use fava_query::{ObservationId, QueryBounds, QueryBranchId};
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::{
     DeclaredLimit, DemandId, PlanRevision, PlanRevisionIssuer, RelayDemand, RelayReadConstraints,
 };
@@ -16,11 +15,8 @@ use nostr::types::RelayUrl;
     dead_code,
     reason = "shared fixture; not every test file uses every helper"
 )]
-pub fn relay() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse("wss://relay.example").expect("relay URL"),
-        access: RelayAccess::Public,
-    }
+pub fn relay() -> RelayUrl {
+    RelayUrl::parse("wss://relay.example").expect("relay URL")
 }
 
 /// One observation identity.

@@ -2,12 +2,12 @@
 
 use std::collections::BTreeMap;
 
-use fava_relay::RelaySessionKey;
+use fava_relay::Authority;
 use fava_state::RelayEvent;
 use nostr::event::Event;
 use nostr::filter::{Filter, MatchEventOptions};
 use nostr::message::SubscriptionId;
-use nostr::types::Timestamp;
+use nostr::types::{RelayUrl, Timestamp};
 use thiserror::Error;
 
 /// Refusal of one relay EVENT before it can affect local state.
@@ -29,8 +29,12 @@ pub enum RelayIngestError {
 
 /// Attribute, verify, filter, and admit one relay EVENT.
 ///
-/// `accepted` is the exact set of subscription IDs this relay session accepted
-/// and the complete filter set each one authorizes. `attributed` is the
+/// `authority` is what the connection this event arrived on had proved to the
+/// relay at the moment it arrived, and travels with the admitted occurrence:
+/// content handed over under one authority is not necessarily content the
+/// relay would hand to another. `accepted` is the exact set of subscription
+/// IDs this relay session accepted and the complete filter set each one
+/// authorizes. `attributed` is the
 /// subscription ID the relay itself put on the EVENT frame. Attribution is
 /// resolved here, so a relay can never select which accepted filter validates
 /// its event and no caller can pair an ID with a filter the session did not
@@ -50,7 +54,8 @@ pub enum RelayIngestError {
 /// matches one of that subscription's accepted filters, and can become one
 /// storage-neutral live contribution.
 pub fn admit_subscription_event(
-    session: &RelaySessionKey,
+    session: &RelayUrl,
+    authority: &Authority,
     accepted: &BTreeMap<SubscriptionId, Vec<Filter>>,
     attributed: &SubscriptionId,
     event: Event,
@@ -71,5 +76,5 @@ pub fn admit_subscription_event(
     {
         return Err(RelayIngestError::OffFilter);
     }
-    Ok(RelayEvent::new(event, session.clone(), now))
+    Ok(RelayEvent::new(event, session.clone(), *authority, now))
 }

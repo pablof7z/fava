@@ -9,7 +9,7 @@ use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{ObservationId, QuerySnapshot, RelaySourceState, RouteOrigin};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_subscriptions::SubscriptionPlanner;
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use fava_transport::Transport;
@@ -75,7 +75,8 @@ async fn equivalent_observations_share_one_relay_connection() {
     let second = fava.observe(query).await.expect("second query opens");
 
     assert_ne!(first.id(), second.id());
-    wait_until(|| transport.holders(&key) == NonZeroUsize::new(1)).await;
+    wait_until(|| transport.holders(&key, &Authority::Unauthenticated) == NonZeroUsize::new(1))
+        .await;
     settle().await;
     assert_eq!(
         transport.dials(&key),
@@ -85,10 +86,18 @@ async fn equivalent_observations_share_one_relay_connection() {
 
     first.close();
     settle().await;
-    assert_eq!(transport.holders(&key), NonZeroUsize::new(1));
+    assert_eq!(
+        transport.holders(&key, &Authority::Unauthenticated),
+        NonZeroUsize::new(1)
+    );
 
     second.close();
-    wait_until(|| transport.holders(&key).is_none()).await;
+    wait_until(|| {
+        transport
+            .holders(&key, &Authority::Unauthenticated)
+            .is_none()
+    })
+    .await;
     assert_eq!(transport.dials(&key), 1);
 }
 
@@ -150,7 +159,10 @@ async fn one_admission_cohort_groups_and_the_running_request_is_never_rewritten(
         "a running request is never rewritten to narrow it"
     );
     assert!(withdrawals(Some(peer.clone())).is_empty());
-    assert_eq!(transport.holders(&key), NonZeroUsize::new(1));
+    assert_eq!(
+        transport.holders(&key, &Authority::Unauthenticated),
+        NonZeroUsize::new(1)
+    );
 
     third.close();
     wait_until(|| withdrawals(Some(peer.clone())) == vec![merged.clone()]).await;
@@ -245,7 +257,10 @@ async fn a_planner_that_never_groups_still_shares_one_connection() {
         .filter(|id| !withdrawn.contains(id))
         .collect();
     assert_eq!(surviving.len(), 1, "the third demand keeps its own request");
-    assert_eq!(transport.holders(&key), NonZeroUsize::new(1));
+    assert_eq!(
+        transport.holders(&key, &Authority::Unauthenticated),
+        NonZeroUsize::new(1)
+    );
     third.close();
 }
 
@@ -274,14 +289,21 @@ async fn cancelling_observe_while_another_relay_opens_closes_provisional_work() 
     let peer = established(&transport, &key);
     let installed = requests(Some(peer.clone()))[0].0.clone();
     assert!(
-        transport.relay(&session_key(&stalled)).is_none(),
+        transport
+            .relay(&session_key(&stalled), &Authority::Unauthenticated)
+            .is_none(),
         "the stalled relay never established"
     );
 
     drop(observation);
 
     wait_until(|| withdrawals(Some(peer.clone())) == vec![installed.clone()]).await;
-    wait_until(|| transport.holders(&key).is_none()).await;
+    wait_until(|| {
+        transport
+            .holders(&key, &Authority::Unauthenticated)
+            .is_none()
+    })
+    .await;
     assert_eq!(transport.dials(&key), 1);
 }
 
@@ -463,11 +485,8 @@ fn relay(name: &str) -> RelayUrl {
     RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
 }
 
-fn session_key(relay: &RelayUrl) -> RelaySessionKey {
-    RelaySessionKey {
-        relay: relay.clone(),
-        access: RelayAccess::Public,
-    }
+fn session_key(relay: &RelayUrl) -> RelayUrl {
+    relay.clone()
 }
 
 fn metadata_of(author: PublicKey, relay: &RelayUrl) -> Query {
@@ -480,12 +499,14 @@ fn metadata_of(author: PublicKey, relay: &RelayUrl) -> Query {
         .expect("explicit relay is valid")
 }
 
-fn session(transport: &FakeTransport, key: &RelaySessionKey) -> Option<FakeRelay> {
-    transport.relay(key)
+fn session(transport: &FakeTransport, key: &RelayUrl) -> Option<FakeRelay> {
+    transport.relay(key, &Authority::Unauthenticated)
 }
 
-fn established(transport: &FakeTransport, key: &RelaySessionKey) -> FakeRelay {
-    transport.relay(key).expect("the relay session established")
+fn established(transport: &FakeTransport, key: &RelayUrl) -> FakeRelay {
+    transport
+        .relay(key, &Authority::Unauthenticated)
+        .expect("the relay session established")
 }
 
 fn push(peer: &FakeRelay, message: &RelayMessage<'_>) {
@@ -536,10 +557,7 @@ fn withdrawals(peer: Option<FakeRelay>) -> Vec<SubscriptionId> {
         .collect()
 }
 
-fn relay_occurrence(
-    snapshot: &QuerySnapshot,
-    key: &RelaySessionKey,
-) -> fava_query::RelayQueryEvidence {
+fn relay_occurrence(snapshot: &QuerySnapshot, key: &RelayUrl) -> fava_query::RelayQueryEvidence {
     snapshot
         .evidence
         .relay(key)
@@ -549,7 +567,7 @@ fn relay_occurrence(
 
 async fn await_state(
     observation: &mut fava::Observation,
-    key: &RelaySessionKey,
+    key: &RelayUrl,
     predicate: impl Fn(&RelaySourceState) -> bool,
 ) -> fava_query::RelayQueryEvidence {
     let snapshot = observation

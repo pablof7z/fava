@@ -3,9 +3,9 @@
 
 use std::collections::BTreeSet;
 
-use fava_relay::RelaySessionKey;
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 use thiserror::Error;
 
 use crate::constraints::RelayReadConstraints;
@@ -27,7 +27,7 @@ use crate::plan::SubscriptionPlan;
 ///
 /// [`PlanConformanceError`] for the first violated rule, in declaration order.
 pub fn validate_plan(
-    relay: &RelaySessionKey,
+    relay: &RelayUrl,
     demand: &[RelayDemand],
     constraints: &RelayReadConstraints,
     installed: &InstalledSubscriptions,
@@ -111,10 +111,7 @@ fn check_distinct_filters(
 }
 
 /// C1: the plan is scoped to the relay session it was asked about.
-fn check_relay(
-    relay: &RelaySessionKey,
-    plan: &SubscriptionPlan,
-) -> Result<(), PlanConformanceError> {
+fn check_relay(relay: &RelayUrl, plan: &SubscriptionPlan) -> Result<(), PlanConformanceError> {
     if &plan.relay == relay {
         Ok(())
     } else {

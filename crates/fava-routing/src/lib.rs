@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use fava_query::{Query, QuerySnapshot};
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_write::{EventId, EventValue};
 use nostr::key::PublicKey;
 use nostr::types::RelayUrl;
@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 mod chain;
-mod serde_maps;
 
 pub use chain::{open, preview, queries};
 
@@ -29,8 +28,8 @@ pub enum RouteRequest {
     Write {
         /// The event to route.
         event: EventValue,
-        /// The relay authority this write was accepted under.
-        access: RelayAccess,
+        /// The authority this write was accepted under.
+        access: Authority,
     },
 }
 
@@ -85,12 +84,12 @@ impl RouteRequest {
         }
     }
 
-    /// Relay access under which selected destinations must execute.
+    /// Authority under which selected destinations must execute.
     #[must_use]
-    pub fn access(&self) -> RelayAccess {
+    pub fn access(&self) -> Authority {
         match self {
-            Self::Read(query) => query.access().clone(),
-            Self::Write { access, .. } => access.clone(),
+            Self::Read(query) => *query.access(),
+            Self::Write { access, .. } => *access,
         }
     }
 
@@ -133,8 +132,8 @@ pub enum RouteTarget {
 /// settled yet, or settled with no destination at all.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum CoverageState {
-    /// Exact relay sessions currently covering the target.
-    Covered(#[serde(with = "serde_maps::sessions")] BTreeSet<RelaySessionKey>),
+    /// Exact relays currently covering the target.
+    Covered(BTreeSet<RelayUrl>),
     /// Relevant routing knowledge has not settled.
     Unresolved,
     /// Relevant routing knowledge settled without a destination.
@@ -144,8 +143,8 @@ pub enum CoverageState {
 /// One relay destination supplied by one router.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RouteDestination {
-    /// Exact relay and access identity.
-    pub session: RelaySessionKey,
+    /// Exact relay.
+    pub session: RelayUrl,
     /// Targets this relay covers.
     pub targets: BTreeSet<RouteTarget>,
     /// Router instance attribution, stamped by the routing core.
@@ -158,7 +157,7 @@ impl RouteDestination {
     /// Contribute one relay destination. Router attribution is added by the chain.
     #[must_use]
     pub fn new(
-        session: RelaySessionKey,
+        session: RelayUrl,
         targets: BTreeSet<RouteTarget>,
         reason: impl Into<String>,
     ) -> Self {
@@ -197,9 +196,8 @@ pub struct RouteContribution {
 /// One deduplicated relay in a current route plan.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PlannedRelay {
-    /// Exact relay and access identity.
-    #[serde(with = "serde_maps::session")]
-    pub session: RelaySessionKey,
+    /// Exact relay.
+    pub session: RelayUrl,
     /// Union of targets covered at this relay.
     pub targets: BTreeSet<RouteTarget>,
     /// Exact `(router, reason)` pairs that selected this relay.
@@ -212,10 +210,8 @@ pub struct RoutePlan {
     /// Monotonic revision of this open routing calculation.
     pub revision: u64,
     /// Deduplicated exact relay destinations.
-    #[serde(with = "serde_maps::destinations")]
-    pub destinations: BTreeMap<RelaySessionKey, PlannedRelay>,
+    pub destinations: BTreeMap<RelayUrl, PlannedRelay>,
     /// Merged current target coverage.
-    #[serde(with = "serde_maps::coverage")]
     pub coverage: BTreeMap<RouteTarget, CoverageState>,
     /// Targets for which at least one configured router still owes an answer.
     pub unresolved: BTreeSet<RouteTarget>,
@@ -260,7 +256,7 @@ impl RoutePlan {
         contribution: &RouteContribution,
     ) -> Result<Self, RouterError> {
         chain::validate_combined(contribution)?;
-        let mut destinations = BTreeMap::<RelaySessionKey, PlannedRelay>::new();
+        let mut destinations = BTreeMap::<RelayUrl, PlannedRelay>::new();
         let mut coverage = contribution.coverage.clone();
         let mut unresolved = contribution.unresolved.clone();
         unresolved.extend(
@@ -307,21 +303,14 @@ impl RoutePlan {
     /// Returns [`RouterError`] when the explicit relay demand exceeds routing bounds.
     pub fn explicit(
         relays: impl IntoIterator<Item = RelayUrl>,
-        access: &RelayAccess,
         targets: &BTreeSet<RouteTarget>,
     ) -> Result<Self, RouterError> {
         let contribution = RouteContribution {
             destinations: relays
                 .into_iter()
                 .map(|relay| {
-                    let mut destination = RouteDestination::new(
-                        RelaySessionKey {
-                            relay,
-                            access: access.clone(),
-                        },
-                        targets.clone(),
-                        "application-selected relay",
-                    );
+                    let mut destination =
+                        RouteDestination::new(relay, targets.clone(), "application-selected relay");
                     destination.set_router("explicit");
                     destination
                 })

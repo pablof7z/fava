@@ -7,7 +7,7 @@ use fava::{Fava, Query, SingleLetterTag};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_write::EventValue;
 use fava_write_store::WriteStore;
@@ -81,22 +81,24 @@ fn literal_tag(key: char, value: &str, later_cells: &[&str]) -> Tag {
 
 #[derive(Clone)]
 struct TestRelayOccurrence {
-    session: RelaySessionKey,
+    session: RelayUrl,
     observed_at: Timestamp,
 }
 
 fn occurrence(relay: &str, observed_at: u64) -> TestRelayOccurrence {
     TestRelayOccurrence {
-        session: RelaySessionKey {
-            relay: RelayUrl::parse(relay).expect("test relay url"),
-            access: RelayAccess::Public,
-        },
+        session: RelayUrl::parse(relay).expect("test relay url"),
         observed_at: Timestamp::from(observed_at),
     }
 }
 
 fn relay_event(event: Event, occurrence: TestRelayOccurrence) -> RelayEvent {
-    RelayEvent::new(event, occurrence.session, occurrence.observed_at)
+    RelayEvent::new(
+        event,
+        occurrence.session,
+        Authority::Unauthenticated,
+        occurrence.observed_at,
+    )
 }
 
 async fn next_snapshot(feed: &mut fava_observe::Observation) -> Arc<fava::QuerySnapshot> {

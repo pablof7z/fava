@@ -9,7 +9,7 @@ use std::time::Duration;
 use fava::{Fava, Query};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_router_app_relays::AppRelayRouter;
 use fava_router_fallback_relays::FallbackRelayRouter;
 use fava_router_testkit::DelayedRouter;
@@ -38,7 +38,7 @@ impl RecordingTransport {
             .lock()
             .expect("transport lock")
             .iter()
-            .filter(|session| &session.identity.key.relay == relay)
+            .filter(|session| &session.identity.relay == relay)
             .count()
     }
 
@@ -47,7 +47,7 @@ impl RecordingTransport {
             .lock()
             .expect("transport lock")
             .iter()
-            .filter(|session| &session.identity.key.relay == relay)
+            .filter(|session| &session.identity.relay == relay)
             .any(|session| {
                 session
                     .sent
@@ -77,13 +77,13 @@ impl Transport for RecordingTransport {
                 router: fava_transport::Router::new(fava_transport::Connection {
                     connectivity: fava_transport::Connectivity::Connected,
                     ..fava_transport::Connection::opening(fava_transport::RelaySessionIdentity {
-                        key: request.key.clone(),
+                        relay: request.relay.clone(),
                         connection: RelayConnection::new(previous + 1).expect("non-zero"),
                     })
                 }),
                 subscriptions: std::sync::atomic::AtomicU64::new(0),
                 identity: RelaySessionIdentity {
-                    key: request.key,
+                    relay: request.relay,
                     connection: RelayConnection::new(previous + 1)
                         .expect("issued generation is non-zero"),
                 },
@@ -105,7 +105,7 @@ impl Transport for RecordingTransport {
         tokio::sync::broadcast::Sender::new(1).subscribe()
     }
 
-    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+    fn holders(&self, _relay: &RelayUrl, _authority: &Authority) -> Option<NonZeroUsize> {
         None
     }
 
@@ -327,10 +327,7 @@ fn contribution(values: &[(RelayUrl, RouteTarget)]) -> RouteContribution {
     let destinations = values
         .iter()
         .map(|(relay, target)| {
-            let session = RelaySessionKey {
-                relay: relay.clone(),
-                access: RelayAccess::Public,
-            };
+            let session = relay.clone();
             coverage.insert(
                 target.clone(),
                 CoverageState::Covered(BTreeSet::from([session.clone()])),

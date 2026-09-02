@@ -19,7 +19,7 @@ use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::RelaySessionKey;
+use fava_relay::Authority;
 use fava_signer_local::LocalSigner;
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_transport::{
@@ -31,6 +31,7 @@ use fava_write_store::WriteStore;
 use fava_write_store_redb::RedbWriteStore;
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 
 use super::{relay, session, unique_root, wait_for};
 
@@ -682,8 +683,13 @@ fn keys() -> Keys {
         .expect("fixed semantic key")
 }
 
-fn relay_event(event: Event, _session: RelaySessionKey) -> RelayEvent {
-    RelayEvent::new(event, session(), Timestamp::from(1))
+fn relay_event(event: Event, _session: RelayUrl) -> RelayEvent {
+    RelayEvent::new(
+        event,
+        session(),
+        Authority::Unauthenticated,
+        Timestamp::from(1),
+    )
 }
 
 struct TestApplier {
@@ -830,7 +836,7 @@ impl Transport for NoopTransport {
         tokio::sync::broadcast::Sender::new(1).subscribe()
     }
 
-    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+    fn holders(&self, _relay: &RelayUrl, _authority: &Authority) -> Option<NonZeroUsize> {
         None
     }
 

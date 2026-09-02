@@ -1,9 +1,9 @@
 //! One live connection to a relay, and what it delivers.
 
-use fava_relay::RelaySessionKey;
 use fava_wire::{ClientMessage, SubscriptionId, encode_client};
 use nostr::event::Event;
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 
 use crate::{HandoffFuture, HandoffOutcome, ReleaseFuture, ReqFuture, TransportFailure};
 
@@ -42,8 +42,8 @@ pub fn subscription_id(counter: u64) -> SubscriptionId {
 /// connection and relay-access identity."
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct RelaySessionIdentity {
-    /// Relay URL and relay-access authority.
-    pub key: RelaySessionKey,
+    /// Exact normalized relay URL.
+    pub relay: RelayUrl,
     /// Which physical connection this is. Advances on every reconnect.
     pub connection: RelayConnection,
 }
@@ -248,21 +248,29 @@ impl Connection {
     }
 }
 
-/// Publish `session` on `requests` each time its relay asks it to authenticate.
+/// Publish the session `weak` names on `requests` each time its relay asks it
+/// to authenticate.
 ///
 /// A transport implementation spawns this once per session it opens. It is
 /// here rather than in each implementation because the rule is the contract's:
 /// one event per request, a repeated identical challenge is not a new request,
 /// and a replaced connection asks again from nothing.
 ///
-/// Holds only a weak reference, so a session with no lease holders is still
-/// dropped and this ends with it.
+/// Takes only a weak reference, and upgrades it fresh each iteration, so a
+/// session with no lease holders is still dropped and this ends with it. A
+/// caller that instead keeps a strong `Arc` alive across the whole task —
+/// even one this function itself would only ever downgrade — recreates
+/// exactly the leak this signature exists to prevent: the task would keep the
+/// session alive, and the session would need the task to end.
 pub async fn publish_authentication_requests(
-    session: &std::sync::Arc<dyn RelaySession>,
+    weak: std::sync::Weak<dyn RelaySession>,
     requests: tokio::sync::broadcast::Sender<std::sync::Arc<dyn RelaySession>>,
 ) {
-    let weak = std::sync::Arc::downgrade(session);
-    let mut connection = crate::RelaySessionExt::connection(session);
+    let Some(initial) = weak.upgrade() else {
+        return;
+    };
+    let mut connection = crate::RelaySessionExt::connection(&initial);
+    drop(initial);
     let mut asked: Option<String> = None;
     let mut seen = connection.borrow_and_update().identity.clone();
     loop {

@@ -5,13 +5,13 @@ use std::sync::{Arc, Barrier};
 use fava::{
     EventBuilder, EventEdit, EventValue, Kind, RelayDeliveryOutcome, RevisionId, Timestamp,
 };
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::RoutePlan;
 use fava_write::{WriteIntent, WritePayload, WriteRouting};
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 
 use super::support::{intent, relay_url};
 
@@ -48,11 +48,8 @@ fn automatic_route(revision: u64) -> RoutePlan {
     }
 }
 
-fn public_session() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: relay_url(),
-        access: RelayAccess::Public,
-    }
+fn public_session() -> RelayUrl {
+    relay_url()
 }
 
 #[test]

@@ -5,7 +5,7 @@ use std::future::Future;
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{Query, QuerySource, SourceKind, SourceRevision};
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_write::EventValue;
 use fava_write_store::WriteStore;
@@ -69,10 +69,7 @@ fn memory_event_cache_runs_the_source_corpus() {
         .finalize(&keys)
         .expect("event signs");
     let event_id = event.id;
-    let session = RelaySessionKey {
-        relay: RelayUrl::parse("wss://relay.example").expect("relay url"),
-        access: RelayAccess::Public,
-    };
+    let session = RelayUrl::parse("wss://relay.example").expect("relay url");
 
     let removal_session = session.clone();
     run(assert_add_remove_corpus(
@@ -81,7 +78,12 @@ fn memory_event_cache_runs_the_source_corpus() {
         || {
             cache
                 .admit(
-                    RelayEvent::new(event, session.clone(), Timestamp::from(11)),
+                    RelayEvent::new(
+                        event,
+                        session.clone(),
+                        Authority::Unauthenticated,
+                        Timestamp::from(11),
+                    ),
                     Timestamp::from(11),
                 )
                 .expect("event admits");

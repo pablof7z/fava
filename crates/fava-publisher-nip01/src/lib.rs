@@ -9,11 +9,11 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
-use fava_relay::RelaySessionKey;
 use fava_transport::{
     HandoffOutcome, OpenRelaySession, SessionEnded, Settlement, Transport, TransportBounds,
     TransportDeadlines,
 };
+use nostr::types::RelayUrl;
 
 /// Inbound queue depth this publisher asks the transport for.
 const INBOUND_FRAMES: usize = 64;
@@ -24,10 +24,15 @@ const AUTH_REQUIRED: &str = "auth-required:";
 
 /// Deadlines and bounds this publisher hands the transport for one attempt.
 /// The attempt's own timeout is the only Fava-owned duration it knows.
-fn open_request(key: &RelaySessionKey, timeout: std::time::Duration) -> OpenRelaySession {
+fn open_request(
+    relay: &RelayUrl,
+    authority: &fava_relay::Authority,
+    timeout: std::time::Duration,
+) -> OpenRelaySession {
     let frames = |count: usize| NonZeroUsize::new(count).expect("constant is non-zero");
     OpenRelaySession {
-        key: key.clone(),
+        relay: relay.clone(),
+        authority: *authority,
         deadlines: TransportDeadlines {
             establish: timeout,
             write: timeout,
@@ -58,7 +63,11 @@ impl Publisher for Nip01Publisher {
     ) -> Pin<Box<dyn Future<Output = PublishOutcome> + Send + 'a>> {
         Box::pin(async move {
             let lease = match transport
-                .acquire_session(open_request(&attempt.session, attempt.timeout))
+                .acquire_session(open_request(
+                    &attempt.session,
+                    &attempt.authority,
+                    attempt.timeout,
+                ))
                 .await
             {
                 Ok(lease) => lease,

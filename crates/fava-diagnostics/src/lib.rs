@@ -28,7 +28,7 @@ use std::sync::{Mutex, MutexGuard};
 pub use fava_query::{
     BoundedText, ObservationId, QueryBounds, QueryBranchId, RelaySourceState, Round,
 };
-use fava_relay::RelaySessionKey;
+use nostr::types::RelayUrl;
 
 pub use crate::limits::{BoundKind, LimitDiagnostic, LimitScope};
 pub use crate::providers::{
@@ -129,18 +129,22 @@ impl Diagnostics {
         }
     }
 
-    /// Publish the current facts for one relay session, replacing any earlier
-    /// record for the same session.
+    /// Publish the current facts for one relay connection, replacing any
+    /// earlier record for the same connection.
+    ///
+    /// Identity is the relay *and* the generation, not the relay alone: one
+    /// relay may need more than one connection at once (`GOALS:3.3`), and
+    /// each keeps its own record rather than overwriting the other's.
     pub fn relay(&self, fact: RelayDiagnostic) {
         let capacity = self.capacity.get();
-        let key = fact.session.clone();
-        self.lock()
-            .relays
-            .publish(capacity, fact, |current| current.session == key);
+        let key = (fact.session.clone(), fact.generation);
+        self.lock().relays.publish(capacity, fact, |current| {
+            (current.session.clone(), current.generation) == key
+        });
     }
 
     /// Drop the record for one relay session Fava no longer holds.
-    pub fn forget_relay(&self, session: &RelaySessionKey) {
+    pub fn forget_relay(&self, session: &RelayUrl) {
         self.lock()
             .relays
             .forget(|current| &current.session == session);

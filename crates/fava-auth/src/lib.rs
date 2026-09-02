@@ -1,10 +1,11 @@
 //! NIP-42 challenge and authorization lifecycles for exact relay access.
 //!
 //! Authentication belongs to a relay connection, not to a message. One
-//! lifecycle exists per [`fava_relay::RelaySessionKey`] whose access is
-//! [`fava_relay::RelayAccess::Authenticated`], scoped to the transport
-//! generation it was established on. Queries and publications that join an
-//! authenticated session inherit it; neither performs a handshake.
+//! lifecycle exists per connection whose live [`fava_relay::Authentication`]
+//! is on its way to [`fava_relay::Authentication::Authenticated`], identified
+//! by the exact relay and transport generation it was established on. Queries
+//! and publications that join an authenticated session inherit it; neither
+//! performs a handshake.
 //!
 //! The application supplies one [`AuthenticationPolicy`] for the engine. It
 //! decides synchronously and performs no effects: authenticate, decline, or

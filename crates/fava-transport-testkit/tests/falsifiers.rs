@@ -3,7 +3,7 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, Transport, TransportBounds,
     TransportDeadlines, TransportFailure,
@@ -12,11 +12,8 @@ use fava_transport_testkit::FakeTransport;
 use nostr::filter::Filter;
 use nostr::types::RelayUrl;
 
-fn key() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse("ws://127.0.0.1:1/").expect("relay URL"),
-        access: RelayAccess::Public,
-    }
+fn key() -> RelayUrl {
+    RelayUrl::parse("ws://127.0.0.1:1/").expect("relay URL")
 }
 
 fn frames(count: usize) -> NonZeroUsize {
@@ -25,7 +22,8 @@ fn frames(count: usize) -> NonZeroUsize {
 
 fn request() -> OpenRelaySession {
     OpenRelaySession {
-        key: key(),
+        relay: key(),
+        authority: Authority::Unauthenticated,
         deadlines: TransportDeadlines {
             establish: Duration::from_millis(200),
             write: Duration::from_millis(200),
@@ -56,7 +54,9 @@ async fn one_relay_message_reaches_only_the_subscription_that_owns_it() {
         .await
         .expect("second subscription opens");
 
-    let relay = transport.relay(&key()).expect("peer");
+    let relay = transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("peer");
     relay.push_frame(format!("[\"EOSE\",\"{}\"]", owner.id().as_str()).as_bytes());
 
     assert!(matches!(
@@ -81,7 +81,10 @@ async fn acquiring_a_live_session_does_not_dial() {
         .expect("acquires");
     let second = transport.acquire_session(request()).await.expect("reuses");
 
-    assert_eq!(transport.holders(&key()), Some(frames(2)));
+    assert_eq!(
+        transport.holders(&key(), &Authority::Unauthenticated),
+        Some(frames(2))
+    );
     assert_eq!(transport.dials(&key()), 1);
     assert_eq!(
         first.session().identity().connection,
@@ -121,7 +124,7 @@ async fn exhausted_initial_generation_refuses_before_a_dial() {
 
     assert_eq!(error, fava_transport::TransportError::GenerationExhausted);
     assert_eq!(transport.dials(&key()), 0);
-    assert_eq!(transport.holders(&key()), None);
+    assert_eq!(transport.holders(&key(), &Authority::Unauthenticated), None);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -136,7 +139,10 @@ async fn exhausted_reconnect_generation_is_terminal_without_a_dial() {
     let dials = transport.dials(&key());
 
     transport.exhaust_generations();
-    transport.relay(&key()).expect("peer").reconnect();
+    transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("peer")
+        .reconnect();
 
     let down = connection
         .wait_for(|state| {
@@ -166,7 +172,7 @@ async fn stalled_relay_yields_bounded_refusal_not_an_unbounded_park() {
         .await
         .expect("acquires");
     transport
-        .relay(&key())
+        .relay(&key(), &Authority::Unauthenticated)
         .expect("relay is registered")
         .stall_writer();
 

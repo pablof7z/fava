@@ -237,7 +237,7 @@ impl Publication {
         source: Option<&EventValue>,
         current: Option<&EventValue>,
         routing: &WriteRouting,
-        access: &fava_relay::RelayAccess,
+        access: &fava_relay::Authority,
     ) -> Result<(UnsignedEvent, RoutePlan), PublicationError> {
         if edits.is_empty() {
             return Err(PublicationError::Routing(
@@ -356,18 +356,18 @@ impl Publication {
         &self,
         event: &UnsignedEvent,
         routing: &WriteRouting,
-        access: &fava_relay::RelayAccess,
+        access: &fava_relay::Authority,
     ) -> Result<RoutePlan, PublicationError> {
         let request = RouteRequest::Write {
             event: EventValue::Unsigned(event.clone()),
-            access: access.clone(),
+            access: *access,
         };
         match routing {
             // The read path has always passed the query's own authority here.
             // The write path hardcoded public, which is why a write accepted
             // under an account still went to public sessions.
             WriteRouting::Explicit(relays) => {
-                RoutePlan::explicit(relays.iter().cloned(), access, &request.targets())
+                RoutePlan::explicit(relays.iter().cloned(), &request.targets())
                     .map_err(|error| PublicationError::Routing(error.to_string()))
             }
             WriteRouting::Automatic => fava_routing::preview(

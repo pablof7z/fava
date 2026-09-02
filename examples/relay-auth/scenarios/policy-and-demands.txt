@@ -1,7 +1,7 @@
 relay add dead ws://127.0.0.1:1
 account import alice 0000000000000000000000000000000000000000000000000000000000000001
 account import bob 0000000000000000000000000000000000000000000000000000000000000002
-policy set authenticate
+policy set authenticate:alice
 auth pending
 auth state dead as:alice
 auth state dead public

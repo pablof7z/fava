@@ -5,17 +5,40 @@ use fava_diagnostics::{
     RelayDiagnostic, RelaySessionState, WireSubscriptionDiagnostic,
 };
 use fava_query::{BoundedText, ObservationId, RelayQueryEvidence, Round};
-use fava_relay::RelaySessionKey;
+use fava_relay::Authentication;
+use fava_transport::RelaySessionExt;
 use fava_wire::SubscriptionId;
+use nostr::types::RelayUrl;
+
+use crate::slot::Slot;
+
+/// How far NIP-42 authentication has got on this slot's live connection.
+///
+/// A slot with no live session yet has proved nothing.
+pub(crate) fn slot_authentication(slot: &Slot) -> Authentication {
+    slot.session
+        .as_ref()
+        .map_or(Authentication::None, |session| {
+            RelaySessionExt::connection(session)
+                .borrow()
+                .authentication
+                .clone()
+        })
+}
 
 /// Current facts for one relay session this owner holds.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one relay's diagnostic record names its generation, state, holders, subscriptions, reconnect attempts, and authentication"
+)]
 pub(crate) fn relay_fact(
-    session: &RelaySessionKey,
+    session: &RelayUrl,
     generation: Option<Round>,
     state: RelaySessionState,
     holders: usize,
     subscriptions: Vec<WireSubscriptionDiagnostic>,
     reconnect_attempts: usize,
+    authentication: Authentication,
 ) -> RelayDiagnostic {
     RelayDiagnostic {
         session: session.clone(),
@@ -24,6 +47,7 @@ pub(crate) fn relay_fact(
         holders,
         subscriptions,
         reconnect_attempts,
+        authentication,
     }
 }
 
@@ -42,7 +66,7 @@ pub(crate) fn wire_fact(
 }
 
 /// A relay whose plan this owner could not install.
-pub(crate) fn refused_plan(session: &RelaySessionKey, detail: BoundedText) -> RelayDiagnostic {
+pub(crate) fn refused_plan(session: &RelayUrl, detail: BoundedText) -> RelayDiagnostic {
     RelayDiagnostic {
         session: session.clone(),
         generation: None,
@@ -50,11 +74,12 @@ pub(crate) fn refused_plan(session: &RelaySessionKey, detail: BoundedText) -> Re
         holders: 0,
         subscriptions: Vec::new(),
         reconnect_attempts: 0,
+        authentication: Authentication::None,
     }
 }
 
 /// Bounded inbound loss reported by one relay session's consumer.
-pub(crate) fn inbound_loss(session: &RelaySessionKey, dropped: u64) -> LimitDiagnostic {
+pub(crate) fn inbound_loss(session: &RelayUrl, dropped: u64) -> LimitDiagnostic {
     LimitDiagnostic {
         bound: BoundKind::InboundQueue,
         limit: 0,

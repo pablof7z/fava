@@ -6,7 +6,6 @@ use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
     SourceChanges, SourceCoverage,
 };
-use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_write::{
@@ -16,6 +15,7 @@ use fava_write::{
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::EventId as NostrEventId;
+use nostr::types::RelayUrl;
 use tokio::sync::{broadcast, watch};
 
 fn controlled_open(
@@ -82,7 +82,7 @@ impl QuerySource for ClosingEventCache {
 impl EventCache for ClosingEventCache {
     fn source_coverage(
         &self,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         filter: &nostr::filter::Filter,
     ) -> Result<Option<SourceCoverage>, EventCacheError> {
         self.inner.source_coverage(session, filter)
@@ -447,7 +447,7 @@ impl WriteStore for FaultingWriteStore {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner.begin_attempt(
@@ -465,7 +465,7 @@ impl WriteStore for FaultingWriteStore {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError> {

@@ -9,7 +9,7 @@ use fava::{
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_signer_local::LocalSigner;
 use fava_simple_groups::{
     SavedGroupList, SimpleGroup, SimpleGroupEventBuilder, SimpleGroupMetadata,
@@ -190,10 +190,8 @@ fn tag(values: &[&str]) -> Tag {
 fn observed(event: Event, relay: RelayUrl, observed_at: u64) -> RelayEvent {
     RelayEvent::new(
         event,
-        RelaySessionKey {
-            relay,
-            access: RelayAccess::Public,
-        },
+        relay,
+        Authority::Unauthenticated,
         Timestamp::from(observed_at),
     )
 }

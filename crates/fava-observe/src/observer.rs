@@ -420,12 +420,10 @@ impl Observer {
     pub fn preview_routes(&self, query: &Query) -> Result<fava_routing::RoutePlan, ObserveError> {
         let request = fava_routing::RouteRequest::Read(query.clone());
         match query.source().acquisition() {
-            QueryAcquisition::Explicit(relays) => fava_routing::RoutePlan::explicit(
-                relays.iter().cloned(),
-                query.access(),
-                &request.targets(),
-            )
-            .map_err(|error| ObserveError::Relay(error.to_string())),
+            QueryAcquisition::Explicit(relays) => {
+                fava_routing::RoutePlan::explicit(relays.iter().cloned(), &request.targets())
+                    .map_err(|error| ObserveError::Relay(error.to_string()))
+            }
             QueryAcquisition::Automatic => {
                 let declared = fava_routing::queries(&self.routers, &request)
                     .map_err(|error| ObserveError::Relay(error.to_string()))?;
@@ -527,6 +525,7 @@ impl Observer {
         self.registry.assign(
             id,
             branch,
+            *query.access(),
             routes::demand_for(id, branch, query, &plan, origin),
             origin.revision_of(&plan),
             RelayWithdrawal::RouteWithdrawn,
@@ -660,6 +659,7 @@ async fn follow_route_inputs(route: FollowedRoute<Observation>, registry: Arc<Re
         registry.assign(
             id,
             branch,
+            *query.access(),
             routes::demand_for(id, branch, &query, &plan, origin),
             origin.revision_of(&plan),
             RelayWithdrawal::RouteWithdrawn,

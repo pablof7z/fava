@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU64;
 
-use fava_relay::RelaySessionKey;
 use fava_state::event_is_newer;
 use fava_write::{
     EventValue, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, RevisionId,
@@ -65,17 +64,7 @@ fn validate_routing(receipt: &Receipt) -> Result<(), WriteStoreError> {
     if relays.iter().any(|relay| !seen.insert(relay)) {
         return incoherent("durable explicit route repeats a relay identity");
     }
-    let expected: BTreeSet<_> = relays
-        .iter()
-        .cloned()
-        .map(|relay| RelaySessionKey {
-            relay,
-            // A lane's authority is the one the write was accepted under, not
-            // public: an authenticated write's destinations are sessions under
-            // its own account.
-            access: receipt.access.clone(),
-        })
-        .collect();
+    let expected: BTreeSet<_> = relays.iter().cloned().collect();
     let retained: BTreeSet<_> = receipt
         .current
         .publication

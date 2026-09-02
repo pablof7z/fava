@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use fava_query::{Query, RelaySourceState, RouteOrigin};
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_router_testkit::DelayedRouter;
 use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget, Router};
 use fava_transport::Transport;
@@ -84,7 +84,13 @@ async fn close_and_drop_in_one_turn_withdraw_a_shared_request_exactly_once() {
         "one wire subscription earns exactly one CLOSE"
     );
     assert_eq!(assembly.transport.dials(&key), 1);
-    wait_until(|| assembly.transport.holders(&key).is_none()).await;
+    wait_until(|| {
+        assembly
+            .transport
+            .holders(&key, &Authority::Unauthenticated)
+            .is_none()
+    })
+    .await;
 }
 
 fn automatic(author: PublicKey) -> Query {
@@ -107,10 +113,7 @@ fn explicit(author: PublicKey, relay: &RelayUrl) -> Query {
 
 /// A complete router contribution naming exactly one relay.
 fn contribution(relay: &RelayUrl) -> RouteContribution {
-    let session = RelaySessionKey {
-        relay: relay.clone(),
-        access: RelayAccess::Public,
-    };
+    let session = relay.clone();
     RouteContribution {
         destinations: vec![RouteDestination::new(
             session.clone(),

@@ -16,7 +16,7 @@ use std::time::Duration;
 use fava::{Fava, Query};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{OpenRelaySession, Transport, TransportBounds, TransportDeadlines};
 use fava_transport_testkit::{FakeRelay, FakeTransport};
@@ -29,17 +29,15 @@ use nostr::types::RelayUrl;
 #[tokio::test(flavor = "current_thread")]
 async fn reopening_drained_demand_on_a_retained_socket_uses_fresh_identity() {
     let relay = RelayUrl::parse("wss://retained.example").expect("relay URL");
-    let key = RelaySessionKey {
-        relay: relay.clone(),
-        access: RelayAccess::Public,
-    };
+    let key = relay.clone();
     let transport = Arc::new(FakeTransport::new());
 
     // The outsider stands in for the publisher: one lease on the same session
     // key, held across the whole exchange.
     let outsider = transport
         .acquire_session(OpenRelaySession {
-            key: key.clone(),
+            relay: key.clone(),
+            authority: fava_relay::Authority::Unauthenticated,
             deadlines: deadlines(),
             bounds: bounds(),
             reconnect_attempts: None,
@@ -68,7 +66,8 @@ async fn reopening_drained_demand_on_a_retained_socket_uses_fresh_identity() {
 
     first.close();
     wait_until(|| withdrawals(&transport, &key) == vec![retired.clone()]).await;
-    wait_until(|| transport.holders(&key) == NonZeroUsize::new(1)).await;
+    wait_until(|| transport.holders(&key, &Authority::Unauthenticated) == NonZeroUsize::new(1))
+        .await;
     settle().await;
 
     let second = fava.observe(query).await.expect("the second query opens");
@@ -88,7 +87,7 @@ async fn reopening_drained_demand_on_a_retained_socket_uses_fresh_identity() {
     // The acceptance clause: a completion for the retired request cannot settle
     // the new one.
     let peer = transport
-        .relay(&key)
+        .relay(&key, &fava_relay::Authority::Unauthenticated)
         .expect("the session is still registered");
     peer.push_frame(&encoded(&RelayMessage::eose(retired)));
     settle().await;
@@ -125,7 +124,7 @@ fn nonzero(value: usize) -> NonZeroUsize {
     NonZeroUsize::new(value).expect("constant is non-zero")
 }
 
-fn settled(observation: &fava::Observation, key: &RelaySessionKey) -> bool {
+fn settled(observation: &fava::Observation, key: &RelayUrl) -> bool {
     observation
         .current()
         .evidence
@@ -139,12 +138,9 @@ fn encoded(message: &RelayMessage<'_>) -> Vec<u8> {
         .into_bytes()
 }
 
-fn client_messages(
-    transport: &FakeTransport,
-    key: &RelaySessionKey,
-) -> Vec<ClientMessage<'static>> {
+fn client_messages(transport: &FakeTransport, key: &RelayUrl) -> Vec<ClientMessage<'static>> {
     transport
-        .relay(key)
+        .relay(key, &fava_relay::Authority::Unauthenticated)
         .map(|peer: FakeRelay| peer.delivered_frames())
         .unwrap_or_default()
         .into_iter()
@@ -155,7 +151,7 @@ fn client_messages(
         .collect()
 }
 
-fn requests(transport: &FakeTransport, key: &RelaySessionKey) -> Vec<SubscriptionId> {
+fn requests(transport: &FakeTransport, key: &RelayUrl) -> Vec<SubscriptionId> {
     client_messages(transport, key)
         .into_iter()
         .filter_map(|message| match message {
@@ -167,7 +163,7 @@ fn requests(transport: &FakeTransport, key: &RelaySessionKey) -> Vec<Subscriptio
         .collect()
 }
 
-fn withdrawals(transport: &FakeTransport, key: &RelaySessionKey) -> Vec<SubscriptionId> {
+fn withdrawals(transport: &FakeTransport, key: &RelayUrl) -> Vec<SubscriptionId> {
     client_messages(transport, key)
         .into_iter()
         .filter_map(|message| match message {

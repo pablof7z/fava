@@ -10,7 +10,7 @@ use fava_publication::Publication;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query::{Query, QuerySnapshot};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_routing::{
     RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession,
 };
@@ -49,11 +49,8 @@ pub fn relay_url(url: &str) -> RelayUrl {
 }
 
 #[must_use]
-pub fn relay(url: &str) -> RelaySessionKey {
-    RelaySessionKey {
-        relay: relay_url(url),
-        access: RelayAccess::Public,
-    }
+pub fn relay(url: &str) -> RelayUrl {
+    relay_url(url)
 }
 
 #[must_use]
@@ -422,7 +419,7 @@ impl Transport for RefusingTransport {
         tokio::sync::broadcast::Sender::new(1).subscribe()
     }
 
-    fn holders(&self, _key: &RelaySessionKey) -> Option<std::num::NonZeroUsize> {
+    fn holders(&self, _relay: &RelayUrl, _authority: &Authority) -> Option<std::num::NonZeroUsize> {
         None
     }
 

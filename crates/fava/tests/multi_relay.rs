@@ -10,7 +10,7 @@ use fava::{Fava, Query};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::RelaySessionKey;
+use fava_relay::Authority;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayConnection, RelaySession,
@@ -65,19 +65,19 @@ impl Transport for ScriptedTransport {
                 .map_err(|_| TransportError::GenerationExhausted)?;
             let generation =
                 RelayConnection::new(previous + 1).expect("issued generation is non-zero");
-            let relay = request.key.relay.clone();
+            let relay = request.relay.clone();
             let session = Arc::new(ScriptedSession {
                 router: fava_transport::Router::new(fava_transport::Connection {
                     connectivity: fava_transport::Connectivity::Connected,
                     ..fava_transport::Connection::opening(fava_transport::RelaySessionIdentity {
-                        key: request.key.clone(),
+                        relay: request.relay.clone(),
                         connection: generation,
                     })
                 }),
                 closed: AtomicBool::new(false),
                 subscriptions: std::sync::atomic::AtomicU64::new(0),
                 identity: RelaySessionIdentity {
-                    key: request.key,
+                    relay: request.relay,
                     connection: generation,
                 },
                 sent: Mutex::new(Vec::new()),
@@ -100,7 +100,7 @@ impl Transport for ScriptedTransport {
         tokio::sync::broadcast::Sender::new(1).subscribe()
     }
 
-    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+    fn holders(&self, _relay: &RelayUrl, _authority: &Authority) -> Option<NonZeroUsize> {
         None
     }
 
@@ -261,7 +261,7 @@ async fn duplicate_event_merges_only_actual_serving_relays() {
     let serving: Vec<_> = latest.events[0]
         .relay_occurrences()
         .occurrences()
-        .map(|evidence| evidence.session.relay.clone())
+        .map(|evidence| evidence.session.clone())
         .collect();
     assert!(serving.contains(&relays[0]));
     assert!(serving.contains(&relays[1]));
@@ -276,10 +276,7 @@ async fn duplicate_event_merges_only_actual_serving_relays() {
 #[tokio::test(flavor = "current_thread")]
 async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
     let relay = relay_urls(1).remove(0);
-    let key = RelaySessionKey {
-        relay: relay.clone(),
-        access: fava_relay::RelayAccess::Public,
-    };
+    let key = relay.clone();
     let transport = Arc::new(FakeTransport::new());
     let cache = Arc::new(MemoryEventCache::default());
     let fava = Fava::builder()
@@ -299,8 +296,10 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
         .await
         .expect("query opens");
 
-    wait_until(|| transport.relay(&key).is_some()).await;
-    let peer = transport.relay(&key).expect("session established");
+    wait_until(|| transport.relay(&key, &Authority::Unauthenticated).is_some()).await;
+    let peer = transport
+        .relay(&key, &Authority::Unauthenticated)
+        .expect("session established");
     wait_until(|| !requests_of(&peer).is_empty()).await;
     let subscription = requests_of(&peer)[0].clone();
     peer.push_frame(&encoded(&RelayMessage::eose(subscription.clone())));
@@ -355,10 +354,7 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
     observation.close();
 }
 
-fn evidence_of(
-    observation: &fava::Observation,
-    key: &RelaySessionKey,
-) -> fava_query::RelayQueryEvidence {
+fn evidence_of(observation: &fava::Observation, key: &RelayUrl) -> fava_query::RelayQueryEvidence {
     observation
         .current()
         .evidence
@@ -367,7 +363,7 @@ fn evidence_of(
         .expect("the observation reports evidence for every relay it uses")
 }
 
-fn settled(observation: &fava::Observation, key: &RelaySessionKey) -> bool {
+fn settled(observation: &fava::Observation, key: &RelayUrl) -> bool {
     observation
         .current()
         .evidence

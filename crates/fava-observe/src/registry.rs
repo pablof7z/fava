@@ -17,10 +17,11 @@ use fava_query::{
     RelayShortfall, RelaySourceState, Round, RouteOrigin, SourceEvent, SourceKind,
     SourceRetraction, SourceRevision, SourceSnapshot, SourceStatus,
 };
-use fava_relay::RelaySessionKey;
+use fava_relay::Authority;
 use fava_runtime::{CancellationToken, TaskHandle};
 use fava_state::{EventStateMutation, RelayEvent, mutations_for_event};
 use fava_subscriptions::{DemandId, RelayDemand};
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 /// One observation's demand at one relay, with the evidence that follows it.
@@ -36,11 +37,15 @@ struct Installed {
     active: bool,
     active_child: Option<ObservationId>,
     children: BTreeSet<ObservationId>,
-    relays: BTreeMap<RelaySessionKey, Assigned>,
+    relays: BTreeMap<RelayUrl, Assigned>,
+    /// Authority this observation's query requires. Constant for the whole
+    /// observation, so it partitions desired demand by relay without living
+    /// on each relay entry.
+    access: Authority,
     plan: Option<DesiredPlanEvidence>,
     route_revision: Option<u64>,
     coalesced: u64,
-    live: BTreeMap<RelaySessionKey, LiveState>,
+    live: BTreeMap<RelayUrl, LiveState>,
     wake: watch::Sender<u64>,
     tasks: Vec<TaskHandle<Option<()>>>,
 }
@@ -87,7 +92,7 @@ impl Registry {
     pub(crate) fn filter_for(
         &self,
         id: ObservationId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
     ) -> Option<nostr::filter::Filter> {
         self.lock()
             .observations
@@ -134,6 +139,7 @@ impl Registry {
                 active_child: None,
                 children: BTreeSet::new(),
                 relays: BTreeMap::new(),
+                access: Authority::Unauthenticated,
                 plan: None,
                 route_revision: None,
                 coalesced: 0,
@@ -239,7 +245,8 @@ impl Registry {
         &self,
         id: ObservationId,
         branch: QueryBranchId,
-        wanted: BTreeMap<RelaySessionKey, (RelayDemand, RouteOrigin)>,
+        access: Authority,
+        wanted: BTreeMap<RelayUrl, (RelayDemand, RouteOrigin)>,
         route_revision: Option<u64>,
         withdrawal: fava_query::RelayWithdrawal,
     ) {
@@ -248,6 +255,7 @@ impl Registry {
             return;
         };
         installed.route_revision = route_revision;
+        installed.access = access;
         let mut changed = false;
         for (session, assigned) in &mut installed.relays {
             if wanted.contains_key(session) {
@@ -326,9 +334,14 @@ impl Registry {
     }
 
     /// The complete current logical demand for every relay, never deduplicated.
-    pub(crate) fn desired(&self) -> BTreeMap<RelaySessionKey, Vec<RelayDemand>> {
+    ///
+    /// Each item carries the authority its owning observation requires. That
+    /// requirement belongs to the work, not to the relay: two observations of
+    /// the same relay under different authorities are two entries in the same
+    /// `Vec`, not two different keys.
+    pub(crate) fn desired(&self) -> BTreeMap<RelayUrl, Vec<(RelayDemand, Authority)>> {
         let state = self.lock();
-        let mut desired: BTreeMap<RelaySessionKey, Vec<RelayDemand>> = BTreeMap::new();
+        let mut desired: BTreeMap<RelayUrl, Vec<(RelayDemand, Authority)>> = BTreeMap::new();
         for installed in state.observations.values() {
             if !installed.active {
                 continue;
@@ -340,7 +353,7 @@ impl Registry {
                 desired
                     .entry(session.clone())
                     .or_default()
-                    .push(assigned.demand.clone());
+                    .push((assigned.demand.clone(), installed.access));
             }
         }
         desired
@@ -350,7 +363,7 @@ impl Registry {
     pub(crate) fn record_state(
         &self,
         id: ObservationId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         generation: Option<Round>,
         next: RelaySourceState,
     ) {
@@ -371,7 +384,7 @@ impl Registry {
     pub(crate) fn record_sharing(
         &self,
         id: ObservationId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         plan_revision: u64,
         shared_with: Vec<ObservationId>,
         shortfall: Option<RelayShortfall>,
@@ -492,16 +505,21 @@ impl Registry {
     }
 
     /// Every currently installed observation, ascending.
+    ///
+    /// `desired()` empties as soon as an observation's relays withdraw, which
+    /// is not the same fact as the observation itself having been removed
+    /// from `state.observations` — this is what the withdrawal test below
+    /// tells apart. No production caller needs the distinction today.
+    #[allow(
+        dead_code,
+        reason = "exercised by this module's own withdrawal test, not by production code"
+    )]
     pub(crate) fn open_observations(&self) -> Vec<ObservationId> {
         self.lock().observations.keys().copied().collect()
     }
 
     /// The demand identity one observation holds at one relay.
-    pub(crate) fn demand_id(
-        &self,
-        id: ObservationId,
-        session: &RelaySessionKey,
-    ) -> Option<DemandId> {
+    pub(crate) fn demand_id(&self, id: ObservationId, session: &RelayUrl) -> Option<DemandId> {
         self.lock()
             .observations
             .get(&id)
@@ -594,7 +612,7 @@ const fn retain_withdrawn(withdrawal: fava_query::RelayWithdrawal) -> bool {
 
 /// First report for a relay routing has named but no session has reached yet.
 fn planned_evidence(
-    session: RelaySessionKey,
+    session: RelayUrl,
     branch: QueryBranchId,
     route: RouteOrigin,
 ) -> RelayQueryEvidence {
@@ -621,8 +639,8 @@ mod tests {
     use std::sync::{Arc, Barrier, mpsc};
 
     use fava_query::{Query, QueryBranchId, RelayWithdrawal, RouteOrigin};
-    use fava_relay::{RelayAccess, RelaySessionKey};
     use fava_runtime::{Runtime, RuntimeConfig};
+    use nostr::types::RelayUrl;
 
     use super::Registry;
 
@@ -696,16 +714,14 @@ mod tests {
     }
 
     fn assign(registry: &Registry, id: fava_query::ObservationId) {
-        let session = RelaySessionKey {
-            relay: fava_query::RelayUrl::parse("wss://relay.example").expect("relay URL"),
-            access: RelayAccess::Public,
-        };
+        let session = RelayUrl::parse("wss://relay.example").expect("relay URL");
         let query = Query::events()
-            .from_relays([session.relay.clone()])
+            .from_relays([session.clone()])
             .expect("one relay is bounded");
         registry.assign(
             id,
             QueryBranchId::ROOT,
+            *query.access(),
             [(
                 session,
                 (

@@ -131,15 +131,20 @@ fn merge_qualifying_contribution(
     }
 }
 
-/// True when a relay contribution's access and relay both satisfy the query's source policy.
+/// True when a relay contribution's authority and relay both satisfy the query's source policy.
+///
+/// A relay hands over content under one authority; that authority travels
+/// with the occurrence, and it must match this query's requirement exactly,
+/// or content admitted for one account (or none) could surface in a query
+/// asking for another.
 fn relay_qualifies(query: &Query, relay_event: &RelayEvent) -> bool {
     let occurrence = relay_event.occurrence();
-    if &occurrence.session.access != query.access() {
+    if &occurrence.authority != query.access() {
         return false;
     }
     match query.source().authority() {
         ResultAuthority::AnyLocal => true,
-        ResultAuthority::OnlyRelays(relays) => relays.contains(&occurrence.session.relay),
+        ResultAuthority::OnlyRelays(relays) => relays.contains(&occurrence.session),
     }
 }
 

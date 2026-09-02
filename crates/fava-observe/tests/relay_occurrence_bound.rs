@@ -42,7 +42,7 @@ impl SourceChanges for NullChanges {
 impl EventCache for NullCache {
     fn source_coverage(
         &self,
-        _session: &fava_relay::RelaySessionKey,
+        _session: &nostr::types::RelayUrl,
         _filter: &nostr::filter::Filter,
     ) -> Result<Option<fava_query::SourceCoverage>, EventCacheError> {
         Ok(None)
@@ -319,7 +319,7 @@ async fn live_retention_applies_net_bounded_changes_then_refuses_overflow()
                 session,
                 limit,
                 refused: 1,
-            } if session.relay == relay && limit.get() == LIVE_LIMIT
+            } if *session == relay && limit.get() == LIVE_LIMIT
         )
     }));
     assert!(

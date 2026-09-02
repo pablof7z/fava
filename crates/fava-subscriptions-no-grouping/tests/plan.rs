@@ -3,7 +3,6 @@
 use std::num::{NonZeroU64, NonZeroUsize};
 
 use fava_query::{ObservationId, QueryBounds, QueryBranchId};
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::{
     DeclaredLimit, DemandId, InstalledSubscriptions, PlanRevision, PlanRevisionIssuer, RelayDemand,
     RelayReadConstraints, ShortfallReason, SubscriptionPlanError, SubscriptionPlanner,
@@ -13,11 +12,8 @@ use fava_subscriptions_no_grouping::planner;
 use nostr::filter::Filter;
 use nostr::types::RelayUrl;
 
-fn relay() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse("wss://relay.example").expect("relay URL"),
-        access: RelayAccess::Public,
-    }
+fn relay() -> RelayUrl {
+    RelayUrl::parse("wss://relay.example").expect("relay URL")
 }
 
 fn revision(sequence: u64) -> PlanRevision {

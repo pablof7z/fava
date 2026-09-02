@@ -1,13 +1,13 @@
 //! Neutral contract for accepted local event revisions.
 
 use fava_query::QuerySource;
-use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_write::{
     EventEdit, EventId, EventValue, InvalidEventValue, LocalWriteEvent, PublicKey, Receipt,
     ReceiptId, RelayDeliveryOutcome, RevisionId, Timestamp, UnsignedEvent, WriteId, WriteIntent,
     WriteIntentError, WriteRouting,
 };
+use nostr::types::RelayUrl;
 use thiserror::Error;
 use tokio::sync::broadcast;
 
@@ -346,7 +346,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
     ) -> Result<Receipt, WriteStoreError>;
 
@@ -362,7 +362,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError>;

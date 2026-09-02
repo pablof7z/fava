@@ -4,9 +4,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use fava_relay::RelaySessionKey;
+use fava_relay::Authority;
 use fava_transport::Transport;
 use fava_write::{Event, ReceiptId, RevisionId, WriteId};
+use nostr::types::RelayUrl;
 
 /// One exact publication attempt at one exact destination.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -19,8 +20,11 @@ pub struct PublishAttempt {
     pub revision_id: RevisionId,
     /// One-based durable attempt count for this destination.
     pub number: u32,
-    /// Exact relay and access destination.
-    pub session: RelaySessionKey,
+    /// Exact relay destination.
+    pub session: RelayUrl,
+    /// Authority this write was accepted under, and so the connection this
+    /// attempt must reach.
+    pub authority: Authority,
     /// Exact signed event bytes and identity.
     pub event: Event,
     /// Maximum time this one attempt may remain unresolved.

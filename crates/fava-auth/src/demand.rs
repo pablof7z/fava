@@ -8,12 +8,13 @@ use crate::challenge::Challenge;
 
 /// One relay demand that this session authenticate.
 ///
-/// The identity names both the session key, whose access carries the account
-/// to authenticate as, and the exact transport generation the challenge
-/// arrived on. A verdict never applies to a later generation.
+/// The identity names the relay and the exact transport generation the
+/// challenge arrived on. A verdict never applies to a later generation. The
+/// account to authenticate as is not here: the policy names it as part of
+/// deciding to authenticate at all.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthenticationDemand {
-    /// Session key and transport generation the challenge arrived on.
+    /// Relay and transport generation the challenge arrived on.
     pub session: RelaySessionIdentity,
     /// Current challenge for that generation.
     pub challenge: Challenge,
@@ -46,6 +47,6 @@ impl AuthenticationDemandId {
 pub struct PendingAuthentication {
     /// Stable identity for answering this exact demand.
     pub id: AuthenticationDemandId,
-    /// Session key and generation the demand belongs to.
+    /// Relay and generation the demand belongs to.
     pub session: RelaySessionIdentity,
 }

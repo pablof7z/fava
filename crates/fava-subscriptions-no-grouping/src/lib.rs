@@ -14,7 +14,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
-use fava_relay::RelaySessionKey;
 use fava_subscriptions::{
     AttributedSubscription, DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision,
     PlannedSubscription, RelayDemand, RelayReadConstraints, ShortfallReason,
@@ -23,6 +22,7 @@ use fava_subscriptions::{
 };
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 
 /// One wire subscription per logical demand, diffed against what is running.
 struct OnePerDemand;
@@ -30,7 +30,7 @@ struct OnePerDemand;
 impl SubscriptionPlanner for OnePerDemand {
     fn plan(
         &self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
         demand: &[RelayDemand],
         constraints: &RelayReadConstraints,
         installed: &InstalledSubscriptions,
@@ -236,7 +236,7 @@ fn encoded_bytes(filter: &Filter) -> usize {
 
 /// Express the answer as a diff against what is running.
 fn assemble(
-    relay: &RelaySessionKey,
+    relay: &RelayUrl,
     revision: PlanRevision,
     open: Vec<PlannedSubscription>,
     constraints: &RelayReadConstraints,

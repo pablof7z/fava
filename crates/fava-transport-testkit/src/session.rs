@@ -48,7 +48,7 @@ impl FakeSession {
         dials.fetch_add(1, Ordering::SeqCst);
         Self {
             identity: Arc::new(LiveIdentity {
-                key: request.key.clone(),
+                relay: request.relay.clone(),
                 generation: AtomicU64::new(generation.get()),
             }),
             bounds: request.bounds,
@@ -60,7 +60,7 @@ impl FakeSession {
             router: fava_transport::Router::new(fava_transport::Connection {
                 connectivity: fava_transport::Connectivity::Connected,
                 ..fava_transport::Connection::opening(RelaySessionIdentity {
-                    key: request.key.clone(),
+                    relay: request.relay.clone(),
                     connection: generation,
                 })
             }),

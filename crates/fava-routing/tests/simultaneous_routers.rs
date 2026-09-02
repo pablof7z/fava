@@ -4,7 +4,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 use fava_query::{Query, QuerySnapshot};
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
@@ -136,14 +135,11 @@ impl RouterSession for ControlledSession {
     fn close(&mut self) {}
 }
 
-fn session(name: &str) -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse(&format!("wss://{name}.example")).expect("relay"),
-        access: RelayAccess::Public,
-    }
+fn session(name: &str) -> RelayUrl {
+    RelayUrl::parse(&format!("wss://{name}.example")).expect("relay")
 }
 
-fn covering(session: RelaySessionKey) -> RouteContribution {
+fn covering(session: RelayUrl) -> RouteContribution {
     RouteContribution {
         destinations: vec![RouteDestination::new(
             session.clone(),

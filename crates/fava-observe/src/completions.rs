@@ -1,19 +1,21 @@
 //! Provider completions arriving back at the reconciliation owner.
 //!
-//! Every completion carries the round it was issued under. A
-//! completion whose generation the owner has moved past is refused, and any
-//! provider resource it produced is released rather than installed.
+//! Every completion carries the round it was issued under. The round alone
+//! finds the exact slot it belongs to — it is engine-wide monotonic and never
+//! reused, including by that slot's own reconnect — so a completion whose
+//! generation the owner has moved past is refused, and any provider resource
+//! it produced is released rather than installed.
 
 use std::sync::Arc;
 
 use fava_query::{BoundedText, ObservationId, RelaySourceState, Round, SourceCoverage};
-use fava_relay::RelaySessionKey;
-use fava_transport::RelaySessionLease;
+use fava_relay::Authority;
+use fava_transport::{RelaySessionExt, RelaySessionLease};
 use fava_wire::SubscriptionId;
-use nostr::types::Timestamp;
+use nostr::types::{RelayUrl, Timestamp};
 
 use crate::diagnostics;
-use crate::engine::{Engine, Report};
+use crate::engine::{self, Engine, Report};
 use crate::facts::failure_state;
 use crate::operations;
 
@@ -58,8 +60,12 @@ impl Engine {
                 subscription,
                 item,
             } => self.carried(&relay, generation, &subscription, *item),
-            Report::Constraints { relay, constraints } => {
-                self.constraints_received(&relay, constraints);
+            Report::Constraints {
+                relay,
+                generation,
+                constraints,
+            } => {
+                self.constraints_received(&relay, generation, constraints);
                 false
             }
         }
@@ -67,30 +73,27 @@ impl Engine {
 
     fn constraints_received(
         &mut self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
+        generation: Round,
         constraints: fava_subscriptions::RelayReadConstraints,
     ) {
-        if let Some(slot) = self.slots.get_mut(relay) {
+        if let Some(slot) = self.slot_mut(relay, generation) {
             slot.constraints = constraints;
         }
     }
 
     fn acquired(
         &mut self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
         generation: Round,
         lease: Box<RelaySessionLease>,
     ) -> bool {
         let rearm;
         {
-            let Some(slot) = self.slots.get_mut(relay) else {
+            let Some(slot) = engine::slot_mut(&mut self.slots, relay, generation) else {
                 self.release_lease(lease, generation);
                 return false;
             };
-            if slot.generation != generation {
-                self.release_lease(lease, generation);
-                return false;
-            }
             let session = Arc::clone(lease.session());
             slot.lease = Some(lease);
             slot.session = Some(Arc::clone(&session));
@@ -112,6 +115,7 @@ impl Engine {
                 &self.runtime,
                 &self.reports,
                 relay.clone(),
+                generation,
                 self.providers.deadlines.establish,
                 slot.cancel.clone(),
             );
@@ -119,32 +123,24 @@ impl Engine {
         if rearm {
             self.arm(relay, generation);
         }
-        self.publish_relay_diagnostic(relay);
+        self.publish_relay_diagnostic(relay, generation);
         false
     }
 
-    fn refused(
-        &mut self,
-        relay: &RelaySessionKey,
-        generation: Round,
-        detail: &BoundedText,
-    ) -> bool {
+    fn refused(&mut self, relay: &RelayUrl, generation: Round, detail: &BoundedText) -> bool {
         let next_generation = match self.next_round() {
             Ok(generation) => generation,
             Err(error) => {
-                let demand = self.registry.desired().remove(relay).unwrap_or_default();
-                self.publish_owner_refusal(relay, &demand, &error);
+                let demand = self.demand_for_slot(relay, generation);
+                self.publish_owner_refusal(relay, &demand, Some(generation), &error);
                 return false;
             }
         };
         let lease;
         {
-            let Some(slot) = self.slots.get_mut(relay) else {
+            let Some(slot) = engine::slot_mut(&mut self.slots, relay, generation) else {
                 return false;
             };
-            if slot.generation != generation {
-                return false;
-            }
             slot.state = fava_diagnostics::RelaySessionState::Unreachable {
                 detail: detail.clone(),
             };
@@ -157,8 +153,10 @@ impl Engine {
                 self.release_lease(lease, generation);
             }
         }
-        self.publish_state_for_relay(relay, &failure_state(detail));
-        self.publish_relay_diagnostic(relay);
+        // The slot just advanced past `generation`, so its current state and
+        // demand are read at `next_generation`.
+        self.publish_state_for_relay(relay, next_generation, &failure_state(detail));
+        self.publish_relay_diagnostic(relay, next_generation);
         true
     }
 
@@ -170,7 +168,7 @@ impl Engine {
     )]
     fn installed(
         &mut self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
         generation: Round,
         revision: fava_subscriptions::PlanRevision,
         plan: &fava_subscriptions::SubscriptionPlan,
@@ -179,16 +177,16 @@ impl Engine {
         closed: &std::collections::BTreeSet<fava_wire::SubscriptionId>,
     ) -> bool {
         {
-            let Some(slot) = self.slots.get(relay) else {
+            let Some(slot) = self.slot(relay, generation) else {
                 return false;
             };
-            if slot.generation != generation || slot.revision != Some(revision) {
+            if slot.revision != Some(revision) {
                 return false;
             }
         }
         // Closing a subscription is dropping its handle: cancel the task that
         // holds it and its Drop sends the CLOSE.
-        if let Some(slot) = self.slots.get_mut(relay) {
+        if let Some(slot) = self.slot_mut(relay, generation) {
             for (id, token) in attending {
                 slot.attending.insert(id, token);
             }
@@ -198,10 +196,10 @@ impl Engine {
                 }
             }
         }
-        self.record_installed(relay, plan, opened, closed);
-        let demand = self.registry.desired().remove(relay).unwrap_or_default();
-        self.publish_plan(relay, &demand, Some(plan));
-        let Some(slot) = self.slots.get(relay) else {
+        self.record_installed(relay, generation, plan, opened, closed);
+        let demand = self.demand_for_slot(relay, generation);
+        self.publish_plan(relay, generation, &demand, Some(plan));
+        let Some(slot) = self.slot(relay, generation) else {
             return false;
         };
         let requested_at = Timestamp::now();
@@ -219,21 +217,18 @@ impl Engine {
                 RelaySourceState::Open { requested_at },
             );
         }
-        self.publish_relay_diagnostic(relay);
+        self.publish_relay_diagnostic(relay, generation);
         false
     }
 
     /// One session's connection state changed.
     fn connection(
         &mut self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
         generation: Round,
         state: fava_transport::Connection,
     ) -> bool {
-        let Some(slot) = self.slots.get(relay) else {
-            return false;
-        };
-        if slot.generation != generation {
+        if self.slot(relay, generation).is_none() {
             return false;
         }
         let fava_relay::Connectivity::Disconnected { detail, spent } = state.connectivity else {
@@ -245,6 +240,7 @@ impl Engine {
             None => {
                 self.slot_state(
                     relay,
+                    generation,
                     fava_diagnostics::RelaySessionState::Reconnecting {
                         detail: detail.clone(),
                     },
@@ -254,6 +250,7 @@ impl Engine {
             Some(attempts) => {
                 self.slot_state(
                     relay,
+                    generation,
                     fava_diagnostics::RelaySessionState::Unreachable {
                         detail: detail.clone(),
                     },
@@ -261,52 +258,51 @@ impl Engine {
                 RelaySourceState::Unreachable { attempts, detail }
             }
         };
-        self.publish_state_for_relay(relay, &state);
-        self.publish_relay_diagnostic(relay);
+        self.publish_state_for_relay(relay, generation, &state);
+        self.publish_relay_diagnostic(relay, generation);
         false
     }
 
-    /// Record how this relay's session now stands, if it is still tracked.
-    fn slot_state(&mut self, relay: &RelaySessionKey, state: fava_diagnostics::RelaySessionState) {
-        if let Some(slot) = self.slots.get_mut(relay) {
+    /// Record how this slot's session now stands, if it is still tracked.
+    fn slot_state(
+        &mut self,
+        relay: &RelayUrl,
+        generation: Round,
+        state: fava_diagnostics::RelaySessionState,
+    ) {
+        if let Some(slot) = self.slot_mut(relay, generation) {
             slot.state = state;
         }
     }
 
-    /// The connection carrying this relay's work was replaced.
-    fn connection_replaced(&mut self, relay: &RelaySessionKey, generation: Round) -> bool {
-        let Some(slot) = self.slots.get(relay) else {
-            return false;
-        };
-        if slot.generation != generation {
+    /// The connection carrying this slot's work was replaced.
+    fn connection_replaced(&mut self, relay: &RelayUrl, generation: Round) -> bool {
+        if self.slot(relay, generation).is_none() {
             return false;
         }
-        self.reconnected(relay)
+        self.reconnected(relay, generation)
     }
 
     /// One installed subscription carried something of its own.
     fn carried(
         &mut self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
         generation: Round,
         subscription: &SubscriptionId,
         item: fava_transport::SubscriptionItem,
     ) -> bool {
-        let Some(slot) = self.slots.get(relay) else {
-            return false;
-        };
-        if slot.generation != generation {
+        if self.slot(relay, generation).is_none() {
             return false;
         }
         match item {
             fava_transport::SubscriptionItem::Event(event) => {
-                self.carried_event(relay, subscription, *event)
+                self.carried_event(relay, generation, subscription, *event)
             }
             fava_transport::SubscriptionItem::EndOfStoredEvents => {
-                self.stored_complete(relay, subscription)
+                self.stored_complete(relay, generation, subscription)
             }
             fava_transport::SubscriptionItem::Closed { reason } => {
-                self.subscription_refused(relay, subscription, &reason)
+                self.subscription_refused(relay, generation, subscription, &reason)
             }
             fava_transport::SubscriptionItem::Lost { dropped } => {
                 self.providers
@@ -321,19 +317,19 @@ impl Engine {
     }
 
     /// A new generation is live: every request is void and the demand replays.
-    fn reconnected(&mut self, relay: &RelaySessionKey) -> bool {
+    fn reconnected(&mut self, relay: &RelayUrl, generation: Round) -> bool {
         let next_generation = match self.next_round() {
             Ok(generation) => generation,
             Err(error) => {
-                let demand = self.registry.desired().remove(relay).unwrap_or_default();
-                self.publish_owner_refusal(relay, &demand, &error);
+                let demand = self.demand_for_slot(relay, generation);
+                self.publish_owner_refusal(relay, &demand, Some(generation), &error);
                 return false;
             }
         };
         let next;
         let armed;
         {
-            let Some(slot) = self.slots.get_mut(relay) else {
+            let Some(slot) = engine::slot_mut(&mut self.slots, relay, generation) else {
                 return false;
             };
             slot.reconnects = slot.reconnects.saturating_add(1);
@@ -352,33 +348,51 @@ impl Engine {
             }
         }
         {
-            let demand = self.registry.desired().remove(relay).unwrap_or_default();
-            let Some(slot) = self.slots.get_mut(relay) else {
+            let demand = self.demand_for_slot(relay, next);
+            let Some(slot) = self.slot_mut(relay, next) else {
                 return false;
             };
             // Every request on the previous generation is void, so all of this
-            // relay's demand is unsent again and re-enters admission.
+            // slot's demand is unsent again and re-enters admission.
             slot.armed = !slot.uncovered(&demand).is_empty();
             armed = slot.armed;
         }
         if armed {
             self.arm(relay, next);
         }
-        self.publish_state_for_relay(relay, &RelaySourceState::Connecting);
-        self.publish_relay_diagnostic(relay);
+        self.publish_state_for_relay(relay, next, &RelaySourceState::Connecting);
+        self.publish_relay_diagnostic(relay, next);
         false
+    }
+
+    /// What this slot's live connection has proved to it right now.
+    ///
+    /// An event admitted while nothing has been proved, or while an answer is
+    /// still in flight or was refused, travels as unauthenticated: only a
+    /// relay verdict of `Authenticated` is a fact this relay actually acted
+    /// on.
+    fn current_authority(&self, relay: &RelayUrl, generation: Round) -> Authority {
+        self.slot(relay, generation)
+            .and_then(|slot| slot.session.as_ref())
+            .map_or(
+                Authority::Unauthenticated,
+                |session| match RelaySessionExt::connection(session).borrow().authentication {
+                    fava_relay::Authentication::Authenticated { as_of } => Authority::As(as_of),
+                    _ => Authority::Unauthenticated,
+                },
+            )
     }
 
     /// One event the relay attributed to one installed subscription.
     fn carried_event(
         &mut self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
+        generation: Round,
         subscription: &SubscriptionId,
         event: nostr::event::Event,
     ) -> bool {
         let Some(entry) = self
-            .slots
-            .get(relay)
+            .slot(relay, generation)
             .and_then(|slot| slot.installed.get(subscription))
             .cloned()
         else {
@@ -392,6 +406,7 @@ impl Engine {
         let accepted = std::collections::BTreeMap::from([(subscription.clone(), entry.filters)]);
         let Ok(relay_event) = fava_ingest::admit_subscription_event(
             relay,
+            &self.current_authority(relay, generation),
             &accepted,
             subscription,
             event,
@@ -400,8 +415,7 @@ impl Engine {
             return false;
         };
         let owners = self
-            .slots
-            .get(relay)
+            .slot(relay, generation)
             .map(|slot| slot.owners(subscription))
             .unwrap_or_default();
         for owner in owners {
@@ -413,20 +427,23 @@ impl Engine {
     }
 
     /// The relay has sent everything it stored for one installed subscription.
-    fn stored_complete(&mut self, relay: &RelaySessionKey, id: &SubscriptionId) -> bool {
+    fn stored_complete(
+        &mut self,
+        relay: &RelayUrl,
+        generation: Round,
+        id: &SubscriptionId,
+    ) -> bool {
         let at = Timestamp::now();
         let proves = self
-            .slots
-            .get(relay)
+            .slot(relay, generation)
             .map(|slot| slot.proves_completeness(id))
             .unwrap_or_default();
-        if let Some(slot) = self.slots.get_mut(relay) {
+        if let Some(slot) = self.slot_mut(relay, generation) {
             slot.settled.insert(id.clone(), true);
         }
         if proves == fava_subscriptions::EoseCompleteness::Proven {
             let owners = self
-                .slots
-                .get(relay)
+                .slot(relay, generation)
                 .and_then(|slot| slot.installed.get(id))
                 .map(|entry| {
                     entry
@@ -451,6 +468,7 @@ impl Engine {
             }
             self.publish_for_subscription(
                 relay,
+                generation,
                 id,
                 &RelaySourceState::StoredEventsComplete { at },
             );
@@ -458,58 +476,31 @@ impl Engine {
             // The relay ended a bounded request, not the stored window.
             // Claiming completeness would claim omitted work was completed
             // (GOALS:1066).
-            self.publish_shortfall(relay, id, proves);
+            self.publish_shortfall(relay, generation, id, proves);
         }
-        self.publish_relay_diagnostic(relay);
+        self.publish_relay_diagnostic(relay, generation);
         false
     }
 
     /// The relay refused or ended one installed subscription, in its own words.
     fn subscription_refused(
         &mut self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
+        generation: Round,
         id: &SubscriptionId,
         message: &BoundedText,
     ) -> bool {
         let at = Timestamp::now();
         self.publish_for_subscription(
             relay,
+            generation,
             id,
             &RelaySourceState::Refused {
                 message: message.clone(),
                 at,
             },
         );
-        self.publish_relay_diagnostic(relay);
+        self.publish_relay_diagnostic(relay, generation);
         false
-    }
-
-    /// Withdraw every live request and release the relay's lease.
-    pub(crate) fn release(&mut self, relay: &RelaySessionKey) {
-        let Some(mut slot) = self.slots.remove(relay) else {
-            return;
-        };
-        // Cancelling the slot drops every subscription handle it held, and each
-        // handle sends the relay its own CLOSE on the way out.
-        slot.cancel.cancel();
-        let generation = slot.generation;
-        if let Some(lease) = slot.lease.take() {
-            operations::release(
-                &self.runtime,
-                lease,
-                generation,
-                self.providers.deadlines.close,
-            );
-        }
-        self.providers.diagnostics.forget_relay(relay);
-    }
-
-    pub(crate) fn release_lease(&self, lease: Box<RelaySessionLease>, generation: Round) {
-        operations::release(
-            &self.runtime,
-            lease,
-            generation,
-            self.providers.deadlines.close,
-        );
     }
 }

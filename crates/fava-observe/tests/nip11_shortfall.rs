@@ -19,7 +19,7 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_observe::Observer;
 use fava_query::{Query, QueryEvaluator, QuerySource};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_routing::Router;
 use fava_subscriptions::SubscriptionPlanner;
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
@@ -64,8 +64,8 @@ fn query_for(relay_url: &RelayUrl, author: nostr::key::PublicKey, kind: Kind) ->
         .expect("explicit relay is valid")
 }
 
-fn requests_for(transport: &FakeTransport, key: &RelaySessionKey) -> Vec<SubscriptionId> {
-    let Some(peer) = transport.relay(key) else {
+fn requests_for(transport: &FakeTransport, key: &RelayUrl) -> Vec<SubscriptionId> {
+    let Some(peer) = transport.relay(key, &Authority::Unauthenticated) else {
         return Vec::new();
     };
     peer.delivered_frames()
@@ -121,10 +121,7 @@ async fn relay_max_subscriptions_limits_active_requests() {
 
     // Use a ws:// URL so the NIP-11 fetcher can reach the server.
     let relay_url = RelayUrl::parse(&format!("ws://127.0.0.1:{port}")).expect("relay URL");
-    let relay_key = RelaySessionKey {
-        relay: relay_url.clone(),
-        access: RelayAccess::Public,
-    };
+    let relay_key = relay_url.clone();
 
     let transport = Arc::new(FakeTransport::new());
     let observer = build_observer(&relay_url, Arc::clone(&transport));

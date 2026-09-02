@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use fava_query::{Query, QueryError, QueryEvaluator, SourceEvent, SourceKind, SourceRevision};
 use fava_query::{SourceSnapshot, SourceStatus};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::RelayEvent;
 use fava_write::{
     EventValue, LocalWriteEvent, PublicationEvidence, ReceiptId, RevisionId, SignatureState,
@@ -21,18 +21,10 @@ fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("relay url")
 }
 
-fn evidence(urls: &[&str]) -> Vec<(RelaySessionKey, Timestamp)> {
+fn evidence(urls: &[&str]) -> Vec<(RelayUrl, Timestamp)> {
     urls.iter()
         .enumerate()
-        .map(|(index, url)| {
-            (
-                RelaySessionKey {
-                    relay: relay(url),
-                    access: RelayAccess::Public,
-                },
-                Timestamp::from(index as u64 + 1),
-            )
-        })
+        .map(|(index, url)| (relay(url), Timestamp::from(index as u64 + 1)))
         .collect()
 }
 
@@ -53,7 +45,7 @@ fn addressable_unsigned(keys: &Keys, created_at: u64, content: &str) -> Unsigned
     event
 }
 
-fn cache(events: Vec<(Event, Vec<(RelaySessionKey, Timestamp)>)>) -> SourceSnapshot {
+fn cache(events: Vec<(Event, Vec<(RelayUrl, Timestamp)>)>) -> SourceSnapshot {
     SourceSnapshot {
         kind: SourceKind::EventCache,
         revision: SourceRevision(1),
@@ -63,7 +55,12 @@ fn cache(events: Vec<(Event, Vec<(RelaySessionKey, Timestamp)>)>) -> SourceSnaps
             .into_iter()
             .flat_map(|(event, evidence)| {
                 evidence.into_iter().map(move |(session, observed_at)| {
-                    SourceEvent::Relay(RelayEvent::new(event.clone(), session, observed_at))
+                    SourceEvent::Relay(RelayEvent::new(
+                        event.clone(),
+                        session,
+                        Authority::Unauthenticated,
+                        observed_at,
+                    ))
                 })
             })
             .collect(),

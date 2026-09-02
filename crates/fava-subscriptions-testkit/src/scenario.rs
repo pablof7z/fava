@@ -2,12 +2,12 @@
 
 use std::collections::BTreeSet;
 
-use fava_relay::RelaySessionKey;
 use fava_subscriptions::{
     DemandId, InstalledSubscription, InstalledSubscriptions, PlanRevision, PlanRevisionIssuer,
     RelayDemand, RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner, validate_plan,
 };
 use fava_wire::SubscriptionId;
+use nostr::types::RelayUrl;
 
 /// Mints a fresh revision from a throwaway single-use authority, for scenarios that need one.
 fn fresh_revision() -> PlanRevision {
@@ -24,7 +24,7 @@ pub struct PlannerScenario {
     /// Human-readable name used in assertion messages.
     pub name: &'static str,
     /// Relay session the plan is scoped to.
-    pub relay: RelaySessionKey,
+    pub relay: RelayUrl,
     /// Complete current logical demand for that session.
     pub demand: Vec<RelayDemand>,
     /// Limits the relay declared, or their honest absence.
@@ -39,7 +39,7 @@ impl PlannerScenario {
     /// A scenario against a fresh session with nothing declared and nothing
     /// installed.
     #[must_use]
-    pub fn fresh(name: &'static str, relay: RelaySessionKey, demand: Vec<RelayDemand>) -> Self {
+    pub fn fresh(name: &'static str, relay: RelayUrl, demand: Vec<RelayDemand>) -> Self {
         Self {
             name,
             relay,

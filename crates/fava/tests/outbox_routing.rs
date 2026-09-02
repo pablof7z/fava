@@ -9,7 +9,7 @@ use fava_query::{
     RouteOrigin, Timestamp,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_router_outbox::OutboxRouter;
 use fava_routing::{CoverageState, RoutePlan, RouteRequest, RouteTarget, Router};
 use fava_subscriptions_no_grouping::planner;
@@ -122,7 +122,9 @@ fn public_preview_is_local_only() {
         Some(&CoverageState::Unresolved)
     );
     assert!(
-        transport.relay(&session(indexer)).is_none(),
+        transport
+            .relay(&session(indexer), &Authority::Unauthenticated)
+            .is_none(),
         "preview must not open a relay session or emit a REQ"
     );
 }
@@ -134,7 +136,7 @@ fn write_request(author: nostr::key::PublicKey) -> RouteRequest {
         .expect("event");
     RouteRequest::Write {
         event: EventValue::Unsigned(event),
-        access: fava_relay::RelayAccess::Public,
+        access: fava_relay::Authority::Unauthenticated,
     }
 }
 
@@ -162,9 +164,6 @@ fn relay(name: &str) -> RelayUrl {
     RelayUrl::parse(&format!("wss://{name}.example")).expect("relay")
 }
 
-fn session(relay: RelayUrl) -> RelaySessionKey {
-    RelaySessionKey {
-        relay,
-        access: RelayAccess::Public,
-    }
+fn session(relay: RelayUrl) -> RelayUrl {
+    relay
 }

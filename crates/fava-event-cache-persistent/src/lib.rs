@@ -16,10 +16,10 @@ use fava_query::{
     SourceChanges, SourceCoverage, SourceEvent, SourceKind, SourceRetraction, SourceRevision,
     SourceSnapshot, SourceStatus,
 };
-use fava_relay::RelaySessionKey;
 use fava_state::{EventStateMutation, RelayEvent, RetractionCause};
 use nostr::event::{EventId, Kind};
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 use redb::Database;
 use tokio::sync::watch;
 
@@ -30,7 +30,7 @@ fn refused(e: impl std::fmt::Display) -> EventCacheError {
 }
 
 /// Next state plus the exact inserted and removed events from one [`RedbEventCache::apply`] call.
-type AppliedMutations = (CacheState, Vec<RelayEvent>, Vec<(EventId, RelaySessionKey)>);
+type AppliedMutations = (CacheState, Vec<RelayEvent>, Vec<(EventId, RelayUrl)>);
 
 /// Durable event cache backed by a redb database file.
 ///
@@ -50,7 +50,7 @@ pub struct RedbEventCache {
 #[derive(Clone, Debug, Default)]
 struct CacheState {
     revision: u64,
-    events: BTreeMap<(EventId, RelaySessionKey), RelayEvent>,
+    events: BTreeMap<(EventId, RelayUrl), RelayEvent>,
     retractions: Vec<SourceRetraction>,
     coverage: Vec<SourceCoverage>,
 }
@@ -109,7 +109,7 @@ impl RedbEventCache {
         let mut next = current.clone();
         next.retractions = Vec::new();
         let mut inserted: Vec<RelayEvent> = Vec::new();
-        let mut removed: Vec<(EventId, RelaySessionKey)> = Vec::new();
+        let mut removed: Vec<(EventId, RelayUrl)> = Vec::new();
         let mut upserts: Vec<RelayEvent> = Vec::new();
 
         for mutation in mutations {
@@ -181,7 +181,7 @@ impl RedbEventCache {
         guard: &mut CacheState,
         next: CacheState,
         inserted: &[RelayEvent],
-        removed: &[(EventId, RelaySessionKey)],
+        removed: &[(EventId, RelayUrl)],
         database: &Database,
         sender: &watch::Sender<Arc<SourceSnapshot>>,
     ) -> Result<(), EventCacheError> {
@@ -216,7 +216,7 @@ fn cache_snapshot(state: &CacheState) -> SourceSnapshot {
 impl EventCache for RedbEventCache {
     fn source_coverage(
         &self,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         filter: &Filter,
     ) -> Result<Option<SourceCoverage>, EventCacheError> {
         let guard = self
@@ -360,7 +360,7 @@ impl SourceChanges for WatchChanges {
 mod tests {
     use super::*;
     use fava_event_cache::EventCache;
-    use fava_relay::RelayAccess;
+    use fava_relay::Authority;
     use nostr::event::{EventBuilder, FinalizeEvent, Kind};
     use nostr::key::Keys;
     use nostr::types::{RelayUrl, Timestamp};
@@ -382,11 +382,8 @@ mod tests {
             .custom_created_at(Timestamp::now())
             .finalize(keys)
             .expect("signed event");
-        let session = RelaySessionKey {
-            relay: RelayUrl::parse("ws://127.0.0.1:7777").expect("valid url"),
-            access: RelayAccess::Public,
-        };
-        RelayEvent::new(event, session, Timestamp::now())
+        let session = RelayUrl::parse("ws://127.0.0.1:7777").expect("valid url");
+        RelayEvent::new(event, session, Authority::Unauthenticated, Timestamp::now())
     }
 
     #[test]

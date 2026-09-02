@@ -9,7 +9,6 @@ use fava::{
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{OpenedQuerySource, Query, QuerySource, QuerySourceError};
-use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_state::{EventStateMutation, RetractionCause};
 use fava_write::{EventId, LocalWriteEvent, WriteIntent};
@@ -17,6 +16,7 @@ use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use tokio::sync::broadcast;
 
 use super::capability_protocol::{Enable, assert_source_removal};
@@ -491,7 +491,7 @@ impl WriteStore for CompletionStore {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner.begin_attempt(
@@ -509,7 +509,7 @@ impl WriteStore for CompletionStore {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError> {

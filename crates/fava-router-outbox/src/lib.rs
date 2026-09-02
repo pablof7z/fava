@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use fava_nip65::{RelayList, relay_lists};
 use fava_query::{Query, QuerySnapshot};
-use fava_relay::RelaySessionKey;
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
@@ -217,14 +216,7 @@ fn contribution(
             }
             continue;
         };
-        let sessions: BTreeSet<_> = relays
-            .iter()
-            .cloned()
-            .map(|relay| RelaySessionKey {
-                relay,
-                access: request.access(),
-            })
-            .collect();
+        let sessions: BTreeSet<_> = relays.iter().cloned().collect();
         if sessions.is_empty() {
             coverage.insert(target, CoverageState::SettledAbsent);
         } else {

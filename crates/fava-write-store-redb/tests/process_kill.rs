@@ -8,7 +8,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_write::{
     EventBuilder, EventValue, Kind, ReceiptOutcome, RelayDeliveryOutcome, SignatureState,
     WriteIntent, WriteRouting,
@@ -204,11 +203,8 @@ fn relay() -> RelayUrl {
     RelayUrl::parse("wss://durability.example").expect("relay parses")
 }
 
-fn session() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: relay(),
-        access: RelayAccess::Public,
-    }
+fn session() -> RelayUrl {
+    relay()
 }
 
 fn unique_root(boundary: &str) -> PathBuf {

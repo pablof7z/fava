@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::num::NonZeroU64;
 
 use fava_query::{ObservationId, QueryBounds, QueryBranchId};
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::{
     DemandId, EoseCompleteness, PlanRevision, PlanRevisionIssuer, PlannedSubscription, RelayDemand,
     SubscriptionAttribution, SubscriptionPlan,
@@ -15,11 +14,8 @@ use nostr::types::RelayUrl;
 
 /// The relay session every fixture plans against.
 #[must_use]
-pub fn relay() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse("wss://relay.example").expect("relay URL"),
-        access: RelayAccess::Public,
-    }
+pub fn relay() -> RelayUrl {
+    RelayUrl::parse("wss://relay.example").expect("relay URL")
 }
 
 /// One observation identity.

@@ -132,7 +132,7 @@ impl RedbWriteStore {
             revision_failure: None,
             retired_revisions: Vec::new(),
             signature: SignatureState::Unsigned,
-            destinations: destinations(&routing, &accepted_access),
+            destinations: destinations(&routing),
         };
         let current = LocalWriteEvent::new(EventValue::Unsigned(event), publication)?;
         let explicit = matches!(routing, WriteRouting::Explicit(_));
@@ -142,7 +142,7 @@ impl RedbWriteStore {
             receipt_id,
             current: current.clone(),
             routing,
-            access: accepted_access.clone(),
+            access: accepted_access,
             outcome: ReceiptOutcome::Open,
             route_revision: u64::from(explicit),
             route_settled: explicit,

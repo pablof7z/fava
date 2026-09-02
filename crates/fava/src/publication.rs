@@ -132,7 +132,7 @@ impl PublishAs<'_> {
         query: fava_query::Query,
     ) -> Result<crate::Observation, crate::ObserveError> {
         self.fava
-            .observe(query.with_relay_access(fava_relay::RelayAccess::Authenticated(self.account)))
+            .observe(query.with_relay_access(fava_relay::Authority::As(self.account)))
             .await
     }
 
@@ -195,7 +195,7 @@ impl PublishAs<'_> {
             payload,
             Some(self.account),
             self.routing,
-            fava_relay::RelayAccess::Authenticated(self.account),
+            fava_relay::Authority::As(self.account),
         )
     }
 }
@@ -273,7 +273,7 @@ impl<'a> PublishTo<'a> {
             self.routing,
             // No account was named, so this is public work. The current account
             // may author it; it does not make the connection authenticated.
-            fava_relay::RelayAccess::Public,
+            fava_relay::Authority::Unauthenticated,
         )
     }
 }
@@ -462,7 +462,7 @@ where
         payload,
         current_account,
         WriteRouting::Automatic,
-        fava_relay::RelayAccess::Public,
+        fava_relay::Authority::Unauthenticated,
     )
 }
 
@@ -493,7 +493,7 @@ fn publish_scoped<P>(
     payload: P,
     author: Option<PublicKey>,
     routing: WriteRouting,
-    access: fava_relay::RelayAccess,
+    access: fava_relay::Authority,
 ) -> Result<Write, PublishError>
 where
     P: PublishPayload,

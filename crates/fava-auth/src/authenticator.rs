@@ -4,10 +4,9 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
 
-use fava_relay::{BoundedText, RelayAccess, RelaySessionKey};
+use fava_relay::BoundedText;
 use fava_runtime::{CancellationToken, Runtime, TaskName};
 use fava_transport::RelaySessionIdentity;
-use fava_write::PublicKey;
 use tokio::sync::watch;
 
 use crate::challenge::Challenge;
@@ -209,14 +208,6 @@ impl Authenticator {
         let _ = self.inner.pending_changed.send(next);
     }
 
-    /// Account this session authenticates as, when it has one.
-    pub(crate) fn account(key: &RelaySessionKey) -> Option<PublicKey> {
-        match key.access {
-            RelayAccess::Authenticated(account) => Some(account),
-            RelayAccess::Public => None,
-        }
-    }
-
     /// Decide one challenge and act on the decision.
     ///
     /// Returns the identity of a demand that was deferred to a person.
@@ -251,8 +242,8 @@ impl Authenticator {
                 None
             }
             AuthenticationDecision::Defer => Some(self.defer(&demand, session)),
-            AuthenticationDecision::Authenticate => {
-                answer::authenticate(self, &demand, session).await;
+            AuthenticationDecision::Authenticate { as_of } => {
+                answer::authenticate(self, &demand, as_of, session).await;
                 None
             }
         }

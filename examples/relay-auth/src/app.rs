@@ -6,13 +6,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use e2e_support::{CommandResult, E2eSession, ResultValue, ShellError};
-use fava::{EventBuilder, Fava, Observation, PublicKey, Query};
+use fava::{EventBuilder, Fava, Observation, Query};
 use fava_auth::{AnswerOutcome, Authenticator};
-use fava_relay::{RelayAccess, RelaySessionKey};
 
 use crate::render::{
     AUTH_ANSWER_USAGE, AUTH_STATE_USAGE, AUTH_USAGE, AccessSpec, POLICY_USAGE, PUBLISH_USAGE,
-    QUERY_OPEN_USAGE, QUERY_WAIT_USAGE, access_label, answer_domain, block_on, decision_label,
+    QUERY_OPEN_USAGE, QUERY_WAIT_USAGE, answer_domain, block_on, decision_label,
     domain, help, parse_access, parse_decision, parse_demand_id, parse_kind, parse_receipt_id,
     receipt_result, required, resolve_access, resolve_relays, snapshot_result, state_result,
 };
@@ -24,19 +23,6 @@ pub(crate) struct App {
     fava: Fava,
     policy: Arc<SwitchablePolicy>,
     observations: BTreeMap<String, Observation>,
-    // Sessions this app has already told the `Authenticator` to watch.
-    //
-    // `Authenticator::watch_session` is the standing kind: its watch holds the
-    // session until the session itself ends, and asking for one twice gets two
-    // of them. Fava keeps one query-driven watch per key by itself, but not
-    // this one, because asking directly is an explicit request for a watch
-    // that never lets go. Calling it once per key is how this app avoids a
-    // second lease that nothing will ever release.
-    //
-    // A second watch no longer wipes an existing verdict -- that was a real
-    // Fava bug this app surfaced, fixed by guarding `reconnected` on a changed
-    // connection.
-    watched_sessions: std::collections::BTreeSet<RelaySessionKey>,
 }
 
 impl App {
@@ -45,7 +31,6 @@ impl App {
             fava,
             policy,
             observations: BTreeMap::new(),
-            watched_sessions: std::collections::BTreeSet::new(),
         }
     }
 
@@ -65,14 +50,14 @@ impl App {
         match words {
             [command, action, arguments @ ..] if command == "policy" && action == "set" => {
                 let decision = required(arguments, 0, "decision", POLICY_USAGE, prompt)?;
-                self.policy_set(&decision)
+                self.policy_set(session, &decision)
             }
             [command] if command == "auth" => Err(ShellError::Usage { usage: AUTH_USAGE }),
             [command, action] if command == "auth" && action == "pending" => self.auth_pending(),
             [command, action, arguments @ ..] if command == "auth" && action == "answer" => {
                 let id = required(arguments, 0, "demand-id", AUTH_ANSWER_USAGE, prompt)?;
                 let decision = required(arguments, 1, "decision", AUTH_ANSWER_USAGE, prompt)?;
-                self.auth_answer(&id, &decision)
+                self.auth_answer(session, &id, &decision)
             }
             [command, action, arguments @ ..] if command == "auth" && action == "state" => {
                 let relay = required(arguments, 0, "relay-alias", AUTH_STATE_USAGE, prompt)?;
@@ -158,8 +143,12 @@ impl App {
         }
     }
 
-    fn policy_set(&self, decision: &str) -> Result<CommandResult, ShellError> {
-        let decision = parse_decision(decision)?;
+    fn policy_set(
+        &self,
+        session: &E2eSession,
+        decision: &str,
+    ) -> Result<CommandResult, ShellError> {
+        let decision = parse_decision(session, decision)?;
         self.policy.set(decision);
         CommandResult::success(
             "policy-set",
@@ -176,10 +165,7 @@ impl App {
             .map(|demand| ResultValue::from(demand.id.get().get()));
         let relays = pending
             .iter()
-            .map(|demand| ResultValue::text(demand.session.key.relay.to_string()));
-        let accesses = pending
-            .iter()
-            .map(|demand| ResultValue::text(access_label(&demand.session.key.access)));
+            .map(|demand| ResultValue::text(demand.session.relay.to_string()));
         let connections = pending
             .iter()
             .map(|demand| ResultValue::from(demand.session.connection.get()));
@@ -196,13 +182,17 @@ impl App {
         .with_field("first_id", first_id)?
         .with_field("ids", ResultValue::array(ids))?
         .with_field("relays", ResultValue::array(relays))?
-        .with_field("accesses", ResultValue::array(accesses))?
         .with_field("connections", ResultValue::array(connections))
     }
 
-    fn auth_answer(&self, id: &str, decision: &str) -> Result<CommandResult, ShellError> {
+    fn auth_answer(
+        &self,
+        session: &E2eSession,
+        id: &str,
+        decision: &str,
+    ) -> Result<CommandResult, ShellError> {
         let id = parse_demand_id(id)?;
-        let decision = parse_decision(decision)?;
+        let decision = parse_decision(session, decision)?;
         let authenticator = self.authenticator()?;
         let outcome =
             block_on(authenticator.answer(id, decision)).map_err(|error| answer_domain(&error))?;
@@ -219,6 +209,12 @@ impl App {
         .with_field("outcome", label)
     }
 
+    /// What one relay connection has proved for the named authority.
+    ///
+    /// Authentication is a fact about a connection, not a lookup this
+    /// application can address directly: it reads the same diagnostics record
+    /// every other relay-status question does, and picks the one connection
+    /// (if any) currently reachable for the requested authority.
     fn auth_state(
         &self,
         session: &E2eSession,
@@ -226,10 +222,15 @@ impl App {
         access_token: &str,
     ) -> Result<CommandResult, ShellError> {
         let relay = session.relay(relay_alias)?.clone();
-        let access = resolve_access(session, &parse_access(access_token)?)?;
-        let key = RelaySessionKey { relay, access };
-        let authenticator = self.authenticator()?;
-        state_result(relay_alias, access_token, authenticator.state(&key))
+        let authority = resolve_access(session, &parse_access(access_token)?)?;
+        let diagnostics = self.fava.diagnostics();
+        let authentication = diagnostics
+            .relays
+            .into_iter()
+            .filter(|entry| entry.session == relay)
+            .find(|entry| entry.authentication.can_serve(&authority))
+            .map(|entry| entry.authentication);
+        state_result(relay_alias, access_token, authentication)
     }
 
     fn query_open(
@@ -321,6 +322,10 @@ impl App {
         let author = author_alias
             .map(|alias| session.account(alias).map(e2e_support::Account::public_key))
             .transpose()?;
+        // Publishing as an account performs no ceremony of its own: the
+        // transport announces every connection whose relay asks to
+        // authenticate, and the one component that answers hears about it
+        // without this application arranging a watch first.
         let write = match (spec, author) {
             (AccessSpec::Public, None) => self
                 .fava
@@ -336,7 +341,6 @@ impl App {
                 .map_err(domain)?,
             (AccessSpec::As(alias), None) => {
                 let account = session.account(&alias)?.public_key();
-                self.ensure_watched(&relays, account)?;
                 self.fava
                     .with_account(account)
                     .to(relays)
@@ -346,7 +350,6 @@ impl App {
             }
             (AccessSpec::As(alias), Some(author)) => {
                 let account = session.account(&alias)?.public_key();
-                self.ensure_watched(&relays, account)?;
                 self.fava
                     .with_account(account)
                     .to(relays)
@@ -455,14 +458,12 @@ impl App {
         let diagnostics = self.fava.diagnostics();
         let mut demand_observations = Vec::new();
         let mut demand_relays = Vec::new();
-        let mut demand_accesses = Vec::new();
         let mut demand_states = Vec::new();
         for query in diagnostics.queries {
             let observation = query.observation.get().get();
             for demand in query.demand {
                 demand_observations.push(ResultValue::from(observation));
-                demand_relays.push(ResultValue::text(demand.session.relay.to_string()));
-                demand_accesses.push(ResultValue::text(access_label(&demand.session.access)));
+                demand_relays.push(ResultValue::text(demand.session.to_string()));
                 demand_states.push(ResultValue::text(format!("{:?}", demand.state)));
             }
         }
@@ -472,7 +473,6 @@ impl App {
                 ResultValue::array(demand_observations),
             )?
             .with_field("demand_relays", ResultValue::array(demand_relays))?
-            .with_field("demand_accesses", ResultValue::array(demand_accesses))?
             .with_field("demand_states", ResultValue::array(demand_states))
     }
 
@@ -492,54 +492,5 @@ impl App {
         self.fava
             .authentication()
             .ok_or_else(|| ShellError::Domain("no authentication policy is configured".to_owned()))
-    }
-
-    /// Start the Authenticator watching every destination a publish is about
-    /// to write to, under this exact account, before the write is accepted.
-    ///
-    /// `Fava::observe` arranges this for a query automatically; there is no
-    /// public equivalent on the publish path. Without this explicit call,
-    /// `fava-publication` reads `AuthenticationOutcomes::state` for a session
-    /// the `Authenticator` was never told to watch, sees `None`, classifies
-    /// the relay's demand as a denial rather than something to attempt, and
-    /// no NIP-42 handshake ever actually happens. See this app's README for
-    /// the write-up: this is a Fava public-API gap, not app-owned ceremony.
-    fn ensure_watched(
-        &mut self,
-        relays: &[fava::RelayUrl],
-        account: PublicKey,
-    ) -> Result<(), ShellError> {
-        let authenticator = self.authenticator()?.clone();
-        for relay in relays {
-            let key = RelaySessionKey {
-                relay: relay.clone(),
-                access: RelayAccess::Authenticated(account),
-            };
-            if !self.watched_sessions.insert(key.clone()) {
-                // A standing watch is already held for this key; see the
-                // field doc on `watched_sessions`.
-                continue;
-            }
-            block_on(authenticator.watch_session(key.clone()))
-                .map_err(|error| ShellError::Domain(error.to_string()))?;
-            // `watch_session` resolves once the lease is acquired, not once
-            // the relay's own challenge frame has arrived and been processed;
-            // a write attempted immediately can race that frame and see no
-            // session state yet. The owner wakes its watchers whenever
-            // anything about authentication changes, so wait on that rather
-            // than asking repeatedly.
-            let mut changed = authenticator.subscribe();
-            block_on(async {
-                let _ = tokio::time::timeout(Duration::from_secs(5), async {
-                    while authenticator.state(&key).is_none() {
-                        if changed.changed().await.is_err() {
-                            break;
-                        }
-                    }
-                })
-                .await;
-            });
-        }
-        Ok(())
     }
 }

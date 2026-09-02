@@ -8,7 +8,6 @@ use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
     SourceChanges, SourceKind, SourceSnapshot,
 };
-use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_write::{
     Event, EventEdit, EventId, EventValue, LocalWriteEvent, PublicKey, PublicationEvidence,
@@ -16,6 +15,7 @@ use fava_write::{
     Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
+use nostr::types::RelayUrl;
 use tokio::sync::{broadcast, watch};
 
 mod lifecycle;
@@ -122,7 +122,7 @@ impl WriteStore for MemoryWriteStore {
             }
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
         };
-        let destinations = destinations(&routing, &accepted_access);
+        let destinations = destinations(&routing);
         let desired_destinations = destinations.keys().cloned().collect();
         let explicit = matches!(routing, fava_write::WriteRouting::Explicit(_));
         let publication = PublicationEvidence {
@@ -141,7 +141,7 @@ impl WriteStore for MemoryWriteStore {
             receipt_id,
             current: current.clone(),
             routing,
-            access: accepted_access.clone(),
+            access: accepted_access,
             outcome: ReceiptOutcome::Open,
             route_revision: u64::from(explicit),
             route_settled: explicit,
@@ -328,7 +328,7 @@ impl WriteStore for MemoryWriteStore {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
     ) -> Result<Receipt, WriteStoreError> {
         self.begin_attempt_current(
@@ -348,7 +348,7 @@ impl WriteStore for MemoryWriteStore {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError> {

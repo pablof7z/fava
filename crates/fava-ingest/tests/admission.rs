@@ -3,18 +3,15 @@
 use std::collections::BTreeMap;
 
 use fava_ingest::{RelayIngestError, admit_subscription_event};
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use nostr::event::{EventBuilder, FinalizeEvent, Kind};
 use nostr::filter::Filter;
 use nostr::key::Keys;
 use nostr::message::SubscriptionId;
 use nostr::types::{RelayUrl, Timestamp};
 
-fn session() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse("wss://relay.example").expect("relay URL"),
-        access: RelayAccess::Public,
-    }
+fn session() -> RelayUrl {
+    RelayUrl::parse("wss://relay.example").expect("relay URL")
 }
 
 #[test]
@@ -30,7 +27,14 @@ fn attribution_uses_only_the_named_subscription() {
         .finalize(&keys)
         .expect("signed");
     assert_eq!(
-        admit_subscription_event(&session(), &accepted, &narrow, contact, Timestamp::from(10),),
+        admit_subscription_event(
+            &session(),
+            &Authority::Unauthenticated,
+            &accepted,
+            &narrow,
+            contact,
+            Timestamp::from(10),
+        ),
         Err(RelayIngestError::OffFilter)
     );
 }
@@ -51,8 +55,15 @@ fn every_filter_in_one_req_authorizes_its_union() {
             .finalize(&keys)
             .expect("signed");
         assert!(
-            admit_subscription_event(&session(), &accepted, &id, event, Timestamp::from(10),)
-                .is_ok()
+            admit_subscription_event(
+                &session(),
+                &Authority::Unauthenticated,
+                &accepted,
+                &id,
+                event,
+                Timestamp::from(10),
+            )
+            .is_ok()
         );
     }
 }
@@ -65,7 +76,14 @@ fn empty_accepted_filter_set_authorizes_nothing() {
         .finalize(&Keys::generate())
         .expect("signed");
     assert_eq!(
-        admit_subscription_event(&session(), &accepted, &id, event, Timestamp::from(10),),
+        admit_subscription_event(
+            &session(),
+            &Authority::Unauthenticated,
+            &accepted,
+            &id,
+            event,
+            Timestamp::from(10),
+        ),
         Err(RelayIngestError::UnauthorizedSubscription)
     );
 }

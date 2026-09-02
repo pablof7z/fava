@@ -18,6 +18,25 @@ A connection SHALL hold exactly two states: whether it is reachable, and how far
 - **WHEN** any component asks how far authentication has got on a relay
 - **THEN** it reads the connection, and no component holds a second copy to reconcile
 
+### Requirement: A disconnection names whether a reconnect may still follow
+
+A disconnected connection SHALL report either how many attempts its reconnect budget spent before giving up — meaning no further connection will appear — or no count at all, meaning a reconnect may still be attempted. A reconnect budget SHALL be able to give up having spent zero attempts, so a reader SHALL tell "exhausted" apart from "still trying" by whether a count is present, never by its value.
+
+#### Scenario: A connection gives up after spending attempts
+
+- **WHEN** a connection's reconnect budget is exhausted after spending some attempts
+- **THEN** it reports disconnected naming that count, and no further connection follows
+
+#### Scenario: A connection may still return
+
+- **WHEN** a connection drops but a reconnect may still be attempted
+- **THEN** it reports disconnected with no attempt count
+
+#### Scenario: A budget can be exhausted having spent nothing
+
+- **WHEN** a reconnect budget is exhausted without any attempt being spent
+- **THEN** the disconnected state still names a count of zero, rather than carrying no count, so it is not mistaken for a connection that may still return
+
 ### Requirement: A change to a connection is a signal carrying the current state
 
 A component SHALL be able to wait for a connection's state to change and read what it became, without polling and without missing the current value by arriving late. A reader that arrives after a change SHALL see the state as it now is rather than a queue of what it was.
@@ -59,6 +78,25 @@ A relay asking for authentication SHALL move the connection to a state carrying 
 
 - **WHEN** a relay challenges a connection and that connection is replaced before anything decides
 - **THEN** the challenge is gone with it, and nothing records it against the replacement
+
+### Requirement: The transport announces which session a relay has just asked
+
+A transport SHALL publish, for each session whose relay demands authentication, that a demand now exists there — so the component that decides does not need to hold or poll connections to discover it. Each demand SHALL be announced once. A relay repeating the identical challenge on the same connection SHALL NOT be announced again. A connection that replaces another SHALL be announced afresh if its relay asks, even if the challenge text repeats what the replaced connection was asked.
+
+#### Scenario: A challenge is announced once
+
+- **WHEN** a relay challenges a session
+- **THEN** the transport announces that session exactly once for that challenge
+
+#### Scenario: A repeated identical challenge is not announced again
+
+- **WHEN** a relay sends the same challenge again on the same connection
+- **THEN** no further announcement is made
+
+#### Scenario: A replacement connection is announced afresh
+
+- **WHEN** a connection is replaced and the new connection is challenged, even with the same challenge text as before
+- **THEN** the new session is announced
 
 ### Requirement: Waiting work resumes because the connection moved
 

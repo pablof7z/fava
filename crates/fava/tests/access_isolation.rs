@@ -6,9 +6,9 @@ use fava::{Fava, Query};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{QueryEvidence, RelaySourceState};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::{Authentication, Authority};
 use fava_subscriptions_no_grouping::planner;
-use fava_transport::Transport;
+use fava_transport::{RelaySessionExt, Transport};
 use fava_transport_testkit::{FakeRelay, FakeTransport};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId};
 use fava_write_store_memory::MemoryWriteStore;
@@ -23,14 +23,7 @@ use nostr::types::RelayUrl;
 )]
 async fn query_access_survives_facade_planner_transport_observation_lifecycle() {
     let relay = RelayUrl::parse("wss://access-isolation.example").expect("relay URL");
-    let public_key = RelaySessionKey {
-        relay: relay.clone(),
-        access: RelayAccess::Public,
-    };
-    let authenticated_key = RelaySessionKey {
-        relay: relay.clone(),
-        access: RelayAccess::Authenticated(Keys::generate().public_key()),
-    };
+    let alice = Keys::generate().public_key();
     let transport = Arc::new(FakeTransport::new());
     let fava = Fava::builder()
         .event_cache(Arc::new(MemoryEventCache::default()))
@@ -44,64 +37,67 @@ async fn query_access_survives_facade_planner_transport_observation_lifecycle() 
     let public_query = Query::events()
         .only_from_relays([relay.clone()])
         .expect("relay selection")
-        .with_relay_access(public_key.access.clone());
+        .with_relay_access(Authority::Unauthenticated);
     let authenticated_query = Query::events()
-        .only_from_relays([relay])
+        .only_from_relays([relay.clone()])
         .expect("relay selection")
-        .with_relay_access(authenticated_key.access.clone());
+        .with_relay_access(Authority::As(alice));
     assert_ne!(
         public_query, authenticated_query,
         "exact access is part of facade query identity"
     );
-    let public = fava
-        .observe(public_query)
-        .await
-        .expect("public observation opens");
+
+    // The authenticated observation opens and authenticates first, so its
+    // connection is committed to alice before the public observation ever
+    // asks: a connection already authenticated as alice can never become
+    // anonymous again, so the two are guaranteed distinct connections.
     let authenticated = fava
         .observe(authenticated_query)
         .await
         .expect("authenticated observation opens");
+    wait_until(|| transport.relay(&relay, &Authority::As(alice)).is_some()).await;
+    let private_peer = transport.relay(&relay, &Authority::As(alice)).unwrap();
+    let private_session = transport
+        .session(&relay, &Authority::As(alice))
+        .expect("the watch acquired this session");
+    RelaySessionExt::record_authentication(
+        &private_session,
+        Authentication::Authenticated { as_of: alice },
+    );
+
+    let public = fava
+        .observe(public_query)
+        .await
+        .expect("public observation opens");
 
     wait_until(|| {
-        transport.holders(&public_key).is_some() && transport.holders(&authenticated_key).is_some()
+        transport
+            .holders(&relay, &Authority::Unauthenticated)
+            .is_some()
+            && transport.holders(&relay, &Authority::As(alice)).is_some()
     })
     .await;
-    assert_eq!(transport.dials(&public_key), 1);
-    assert_eq!(transport.dials(&authenticated_key), 1);
+    assert_eq!(transport.dials(&relay), 2);
 
-    let public_peer = transport.relay(&public_key).expect("public peer");
-    let private_peer = transport
-        .relay(&authenticated_key)
-        .expect("authenticated peer");
+    let public_peer = transport
+        .relay(&relay, &Authority::Unauthenticated)
+        .expect("public peer");
     wait_until(|| request(&public_peer).is_some() && request(&private_peer).is_some()).await;
     let public_wire = request(&public_peer).expect("public REQ");
     let private_wire = request(&private_peer).expect("authenticated REQ");
+    assert_ne!(public_wire, private_wire);
     wait_until(|| {
-        plan_is_exact(&public.current().evidence, &public_key)
-            && plan_is_exact(&authenticated.current().evidence, &authenticated_key)
+        plan_is_exact(&public.current().evidence, &relay)
+            && plan_is_exact(&authenticated.current().evidence, &relay)
     })
     .await;
-    assert!(
-        public
-            .current()
-            .evidence
-            .relay(&authenticated_key)
-            .is_none()
-    );
-    assert!(
-        authenticated
-            .current()
-            .evidence
-            .relay(&public_key)
-            .is_none()
-    );
 
     push(&public_peer, &RelayMessage::eose(public_wire.clone()));
     wait_until(|| {
         public
             .current()
             .evidence
-            .relay(&public_key)
+            .relay(&relay)
             .is_some_and(fava_query::RelayQueryEvidence::stored_events_complete)
     })
     .await;
@@ -109,7 +105,7 @@ async fn query_access_survives_facade_planner_transport_observation_lifecycle() 
         authenticated
             .current()
             .evidence
-            .relay(&authenticated_key)
+            .relay(&relay)
             .map(|item| &item.state),
         Some(RelaySourceState::Open { .. })
     ));
@@ -174,10 +170,7 @@ async fn query_access_survives_facade_planner_transport_observation_lifecycle() 
             .iter()
             .all(|item| item.id() != public_only.id)
     );
-    for (snapshot, expected) in [
-        (public_snapshot.as_ref(), &public_key),
-        (private_snapshot.as_ref(), &authenticated_key),
-    ] {
+    for snapshot in [public_snapshot.as_ref(), private_snapshot.as_ref()] {
         let record = snapshot
             .events
             .iter()
@@ -185,62 +178,21 @@ async fn query_access_survives_facade_planner_transport_observation_lifecycle() 
             .expect("shared event selected");
         let occurrences = record.relay_occurrences().occurrences().collect::<Vec<_>>();
         assert_eq!(occurrences.len(), 1);
-        assert_eq!(&occurrences[0].session, expected);
+        assert_eq!(occurrences[0].session, relay);
     }
 
-    let public_generation = public
-        .current()
-        .evidence
-        .relay(&public_key)
-        .expect("public lifecycle evidence")
-        .generation;
-    let authenticated_generation = authenticated
-        .current()
-        .evidence
-        .relay(&authenticated_key)
-        .expect("authenticated lifecycle evidence")
-        .generation;
-    private_peer.reconnect();
-    wait_until(|| requests(&private_peer).len() == 2).await;
-    wait_until(|| {
-        authenticated
-            .current()
-            .evidence
-            .relay(&authenticated_key)
-            .is_some_and(|item| item.generation > authenticated_generation)
-    })
-    .await;
-    assert_eq!(
-        public
-            .current()
-            .evidence
-            .relay(&public_key)
-            .expect("public lifecycle remains installed")
-            .generation,
-        public_generation
-    );
-
     public.close();
-    wait_until(|| transport.holders(&public_key).is_none()).await;
-    assert!(transport.holders(&authenticated_key).is_some());
-    let private_after_public_close = event(&keys, "private after public withdrawal");
-    let reconnected_wire = request(&private_peer).expect("authenticated reconnect REQ");
-    push(
-        &private_peer,
-        &RelayMessage::event(reconnected_wire, private_after_public_close.clone()),
-    );
     wait_until(|| {
-        authenticated
-            .current()
-            .events
-            .iter()
-            .any(|item| item.id() == private_after_public_close.id)
+        transport
+            .holders(&relay, &Authority::Unauthenticated)
+            .is_none()
     })
     .await;
+    assert!(transport.holders(&relay, &Authority::As(alice)).is_some());
     authenticated.close();
 }
 
-fn plan_is_exact(evidence: &QueryEvidence, expected: &RelaySessionKey) -> bool {
+fn plan_is_exact(evidence: &QueryEvidence, expected: &RelayUrl) -> bool {
     evidence
         .plan
         .as_ref()

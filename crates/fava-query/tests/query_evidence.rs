@@ -10,22 +10,17 @@ use fava_query::{
     QueryEvidence, QueryShortfall, RelayDeadline, RelayQueryEvidence, RelayShortfall,
     RelaySourceState, RelayWithdrawal, RoundIssuer, RouteOrigin, SourceKind,
 };
-use fava_relay::{RelayAccess, RelaySessionKey};
-use nostr::key::Keys;
 use nostr::types::{RelayUrl, Timestamp};
 
-fn session(url: &str) -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse(url).expect("test relay url parses"),
-        access: RelayAccess::Public,
-    }
+fn session(url: &str) -> RelayUrl {
+    RelayUrl::parse(url).expect("test relay url parses")
 }
 
 fn observation(value: u64) -> ObservationId {
     ObservationId::new(NonZeroU64::new(value).expect("non-zero observation id"))
 }
 
-fn relay(session: RelaySessionKey, state: RelaySourceState) -> RelayQueryEvidence {
+fn relay(session: RelayUrl, state: RelaySourceState) -> RelayQueryEvidence {
     let generation = RoundIssuer::new()
         .expect("generation authority")
         .allocate()
@@ -228,56 +223,6 @@ fn a_query_without_relays_never_claims_relay_completeness() {
     assert!(!evidence.all_relays_stored_events_complete());
     assert!(evidence.relays.is_empty());
     assert!(evidence.plan.is_none());
-}
-
-/// Sessions at one relay URL under different access identities stay separate
-/// while remaining reachable together.
-#[test]
-fn relay_sessions_are_scoped_by_access_identity() {
-    let url = RelayUrl::parse("wss://shared.example").expect("test relay url parses");
-    let public = RelaySessionKey {
-        relay: url.clone(),
-        access: RelayAccess::Public,
-    };
-    let named = RelaySessionKey {
-        relay: url.clone(),
-        access: RelayAccess::Authenticated(Keys::generate().public_key()),
-    };
-
-    let evidence = QueryEvidence {
-        sources: Vec::new(),
-        relays: vec![
-            relay(
-                public.clone(),
-                RelaySourceState::AuthenticationRequired {
-                    state: AuthenticationState::ChallengeReceived,
-                    at: Timestamp::from(9),
-                },
-            ),
-            relay(
-                named.clone(),
-                RelaySourceState::StoredEventsComplete {
-                    at: Timestamp::from(10),
-                },
-            ),
-        ],
-        plan: None,
-        shortfalls: Vec::new(),
-    };
-
-    assert_eq!(evidence.relays_at(&url).count(), 2);
-    assert!(
-        !evidence
-            .relay(&public)
-            .expect("public session present")
-            .stored_events_complete()
-    );
-    assert!(
-        evidence
-            .relay(&named)
-            .expect("named session present")
-            .stored_events_complete()
-    );
 }
 
 /// Bounded loss is reported inside the snapshot, not through a side channel.

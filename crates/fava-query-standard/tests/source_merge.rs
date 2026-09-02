@@ -7,7 +7,7 @@ use fava_query::{
     SourceSnapshot, SourceStatus,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::RelayEvent;
 use fava_write::{
     EventValue, LocalWriteEvent, PublicationEvidence, ReceiptId, SignatureState, WriteId,
@@ -85,10 +85,8 @@ fn result_ids(snapshot: &fava_query::QuerySnapshot) -> BTreeSet<EventId> {
 fn relay_source(event: Event, url: &str, observed_at: u64) -> SourceEvent {
     SourceEvent::Relay(RelayEvent::new(
         event,
-        RelaySessionKey {
-            relay: RelayUrl::parse(url).expect("test relay url"),
-            access: RelayAccess::Public,
-        },
+        RelayUrl::parse(url).expect("test relay url"),
+        Authority::Unauthenticated,
         Timestamp::from(observed_at),
     ))
 }

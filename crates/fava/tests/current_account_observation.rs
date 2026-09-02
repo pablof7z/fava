@@ -7,7 +7,7 @@ use fava::{EventValue, Fava, Kind, Query, RelayUrl, Timestamp};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::RelayEvent;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{Event, EventBuilder, FinalizeEvent};
@@ -116,13 +116,15 @@ fn note(keys: &Keys, content: &str) -> Event {
 }
 
 fn admit(cache: &MemoryEventCache, event: Event, observed_at: u64) {
-    let session = RelaySessionKey {
-        relay: RelayUrl::parse("wss://cache.example").expect("relay URL"),
-        access: RelayAccess::Public,
-    };
+    let session = RelayUrl::parse("wss://cache.example").expect("relay URL");
     cache
         .admit(
-            RelayEvent::new(event, session, Timestamp::from(observed_at)),
+            RelayEvent::new(
+                event,
+                session,
+                Authority::Unauthenticated,
+                Timestamp::from(observed_at),
+            ),
             Timestamp::from(observed_at),
         )
         .expect("event admits");

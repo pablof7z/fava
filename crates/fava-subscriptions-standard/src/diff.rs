@@ -7,7 +7,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use fava_relay::RelaySessionKey;
 use fava_subscriptions::{
     AttributedSubscription, DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision,
     PlannedSubscription, RelayReadConstraints, SubscriptionAttribution, SubscriptionPlan,
@@ -15,10 +14,11 @@ use fava_subscriptions::{
 };
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 
 /// Assemble the answer for one relay session.
 pub(crate) fn assemble(
-    relay: &RelaySessionKey,
+    relay: &RelayUrl,
     revision: PlanRevision,
     opened: Vec<AttributedSubscription>,
     constraints: &RelayReadConstraints,

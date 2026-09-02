@@ -3,7 +3,8 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use fava_relay::RelaySessionKey;
+use fava_relay::Authority;
+use nostr::types::RelayUrl;
 
 /// Fava-owned deadlines for one relay session. Never defaulted by transport.
 ///
@@ -44,8 +45,10 @@ pub struct TransportBounds {
 /// Authority: ARCH:1560-1565 (`fn open_session(&self, request: OpenRelaySession)`).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OpenRelaySession {
-    /// Relay URL and access authority to acquire.
-    pub key: RelaySessionKey,
+    /// Relay URL to acquire.
+    pub relay: RelayUrl,
+    /// Authority the acquired connection must be able to carry.
+    pub authority: Authority,
     /// Fava-owned deadlines applied to this session.
     pub deadlines: TransportDeadlines,
     /// Fava-owned queue and frame bounds applied to this session.

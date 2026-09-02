@@ -5,12 +5,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fava_query::{ObservationId, Round};
+use fava_relay::Authority;
 use fava_runtime::CancellationToken;
 use fava_subscriptions::{
     DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision, RelayDemand,
     RelayReadConstraints, filter_covers,
 };
-use fava_transport::{RelaySession, RelaySessionLease};
+use fava_transport::{RelaySession, RelaySessionExt, RelaySessionLease};
 use fava_wire::SubscriptionId;
 
 use crate::admission;
@@ -20,6 +21,15 @@ pub(crate) struct Slot {
     pub(crate) cancel: CancellationToken,
     pub(crate) lease: Option<Box<RelaySessionLease>>,
     pub(crate) session: Option<Arc<dyn RelaySession>>,
+    /// The authority this slot was opened to reach.
+    ///
+    /// Used only before a session exists: once `session` is `Some`, whether
+    /// this slot can still serve a piece of work is asked of the live
+    /// connection (see [`Self::can_serve`]), not read off this hint. It
+    /// exists so two demand items needing the same not-yet-resolved
+    /// authority land on the same in-flight slot within one reconcile pass,
+    /// rather than each opening a redundant connection.
+    pub(crate) requested: Authority,
     /// Relay-declared read limits, updated once per session from NIP-11.
     pub(crate) constraints: RelayReadConstraints,
     /// Exactly what the transport accepted on the current generation.
@@ -44,12 +54,13 @@ pub(crate) struct Slot {
 }
 
 impl Slot {
-    pub(crate) fn new(cancel: CancellationToken, generation: Round) -> Self {
+    pub(crate) fn new(cancel: CancellationToken, generation: Round, requested: Authority) -> Self {
         Self {
             generation,
             cancel,
             lease: None,
             session: None,
+            requested,
             constraints: RelayReadConstraints::unknown(),
             installed: InstalledSubscriptions::empty(),
             attending: BTreeMap::new(),
@@ -61,6 +72,22 @@ impl Slot {
             state: fava_diagnostics::RelaySessionState::Connecting,
             reconnects: 0,
         }
+    }
+
+    /// Whether this slot can still reach `authority`, right now.
+    ///
+    /// Asked of the live connection once one exists; before that, this slot
+    /// has proved nothing yet, so the authority it was opened to reach is the
+    /// best available answer.
+    pub(crate) fn can_serve(&self, authority: &Authority) -> bool {
+        self.session
+            .as_ref()
+            .map_or(&self.requested == authority, |session| {
+                RelaySessionExt::connection(session)
+                    .borrow()
+                    .authentication
+                    .can_serve(authority)
+            })
     }
 
     /// Void everything installed on the previous generation.

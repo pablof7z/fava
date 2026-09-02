@@ -2,7 +2,7 @@
 //!
 //! The implementer of [`Transport`] owns every byte, every socket, every clock
 //! the socket is measured against, and every connection number a session ever
-//! wears. It owns a registry keyed by `RelaySessionKey`, so [`Transport::acquire_session`]
+//! wears. It owns a registry keyed by relay and authority, so [`Transport::acquire_session`]
 //! is a lookup-then-maybe-dial rather than a dial (`ARCH:1593`, `GOALS:936`).
 //! It owns the refcount on each entry and the deterministic close that fires
 //! when the count reaches zero (`ARCH:1628`). It owns reconnect policy,
@@ -29,10 +29,10 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+use nostr::types::RelayUrl;
 use tokio::sync::broadcast;
 
 pub use error::TransportError;
-use fava_relay::RelaySessionKey;
 pub use fava_relay::{Authentication, Authority, BoundedText, Connectivity};
 pub use fava_wire::SubscriptionId;
 pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportFailure};
@@ -84,9 +84,10 @@ pub trait Transport: Send + Sync {
     /// transport is shutting down.
     fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_>;
 
-    /// Current holder count for one key, or `None` when no session is
-    /// registered. This is the observable proof that acquire-or-reuse happened.
-    fn holders(&self, key: &RelaySessionKey) -> Option<NonZeroUsize>;
+    /// Current holder count for one relay and authority, or `None` when no
+    /// session is registered. This is the observable proof that
+    /// acquire-or-reuse happened.
+    fn holders(&self, relay: &RelayUrl, authority: &Authority) -> Option<NonZeroUsize>;
 
     /// Every session whose relay has just asked it to authenticate.
     ///

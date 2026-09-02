@@ -123,7 +123,7 @@ fn replay_omission_refuses_without_consuming_the_next_command() {
 
 #[test]
 fn unknown_demand_id_is_a_typed_domain_refusal_not_a_crash() {
-    let output = run("auth answer 9 authenticate\nquit\n");
+    let output = run("auth answer 9 decline\nquit\n");
     assert!(!output.status.success());
     let rows = rows(&output);
     assert_eq!(rows[0]["kind"], "domain-failed");

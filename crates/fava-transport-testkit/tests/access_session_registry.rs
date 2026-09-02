@@ -1,20 +1,22 @@
-//! The fake transport registry isolates same-URL sessions by exact access.
+//! The fake transport registry opens one connection per relay, and a second
+//! only once the first can no longer reach what is being asked of it.
 
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::{Authentication, Authority};
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, Transport, TransportBounds,
-    TransportDeadlines,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySessionExt, Transport,
+    TransportBounds, TransportDeadlines,
 };
 use fava_transport_testkit::FakeTransport;
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
 
-fn request(key: RelaySessionKey) -> OpenRelaySession {
+fn request(relay: RelayUrl, authority: Authority) -> OpenRelaySession {
     OpenRelaySession {
-        key,
+        relay,
+        authority,
         deadlines: TransportDeadlines {
             establish: Duration::from_millis(100),
             write: Duration::from_millis(100),
@@ -30,94 +32,143 @@ fn request(key: RelaySessionKey) -> OpenRelaySession {
     }
 }
 
+/// Nothing has told the relay who is asking yet, so a fresh connection can
+/// still become anyone's: public and authenticated demand for the same relay
+/// share it rather than opening two sockets.
 #[tokio::test(flavor = "current_thread")]
-async fn same_url_public_and_authenticated_open_distinct_generations()
+async fn a_fresh_connection_can_still_become_anyones() -> Result<(), Box<dyn std::error::Error>> {
+    let relay = RelayUrl::parse("wss://relay.example")?;
+    let alice = Keys::generate().public_key();
+    let transport = FakeTransport::new();
+    let public_lease = transport
+        .acquire_session(request(relay.clone(), Authority::Unauthenticated))
+        .await?;
+    let private_lease = transport
+        .acquire_session(request(relay.clone(), Authority::As(alice)))
+        .await?;
+    assert_eq!(
+        public_lease.session().identity(),
+        private_lease.session().identity(),
+        "an unasked connection reaches every authority"
+    );
+    assert_eq!(transport.dials(&relay), 1);
+    Ok(())
+}
+
+/// Once a connection is committed to one account, it can never become
+/// anyone else's or become anonymous again: a distinct request opens a
+/// distinct connection, and every other undecided request keeps sharing what
+/// remains reachable.
+#[tokio::test(flavor = "current_thread")]
+async fn an_authenticated_connection_cannot_become_anyone_elses()
 -> Result<(), Box<dyn std::error::Error>> {
     let relay = RelayUrl::parse("wss://relay.example")?;
-    let public = RelaySessionKey {
-        relay: relay.clone(),
-        access: RelayAccess::Public,
-    };
-    let authenticated = RelaySessionKey {
-        relay,
-        access: RelayAccess::Authenticated(Keys::generate().public_key()),
-    };
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
     let transport = FakeTransport::new();
-    let public_lease = transport.acquire_session(request(public.clone())).await?;
-    let private_lease = transport
-        .acquire_session(request(authenticated.clone()))
+
+    let alice_lease = transport
+        .acquire_session(request(relay.clone(), Authority::As(alice)))
         .await?;
-    let public_identity = public_lease.session().identity();
-    let private_identity = private_lease.session().identity();
-    assert_eq!(public_identity.key, public);
-    assert_eq!(private_identity.key, authenticated);
-    assert_ne!(public_identity, private_identity);
-    assert_eq!(transport.dials(&public_identity.key), 1);
-    assert_eq!(transport.dials(&private_identity.key), 1);
+    RelaySessionExt::record_authentication(
+        alice_lease.session(),
+        Authentication::Authenticated { as_of: alice },
+    );
+
+    let bob_lease = transport
+        .acquire_session(request(relay.clone(), Authority::As(bob)))
+        .await?;
+    let anonymous_lease = transport
+        .acquire_session(request(relay.clone(), Authority::Unauthenticated))
+        .await?;
+
+    assert_ne!(
+        alice_lease.session().identity(),
+        bob_lease.session().identity(),
+        "alice's connection cannot become bob's"
+    );
+    assert_ne!(
+        alice_lease.session().identity(),
+        anonymous_lease.session().identity(),
+        "alice's connection cannot become anonymous again"
+    );
+    assert_eq!(
+        bob_lease.session().identity(),
+        anonymous_lease.session().identity(),
+        "bob and anonymous work still share the one remaining undecided connection"
+    );
+    assert_eq!(transport.dials(&relay), 2);
     Ok(())
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn same_correlation_completions_remain_scoped_to_exact_key_and_generation()
+async fn same_correlation_completions_remain_scoped_to_exact_relay_and_generation()
 -> Result<(), Box<dyn std::error::Error>> {
     let relay = RelayUrl::parse("wss://relay.example")?;
-    let public = RelaySessionKey {
-        relay: relay.clone(),
-        access: RelayAccess::Public,
-    };
-    let authenticated = RelaySessionKey {
-        relay,
-        access: RelayAccess::Authenticated(Keys::generate().public_key()),
-    };
+    let alice = Keys::generate().public_key();
     let transport = FakeTransport::new();
-    let public_lease = transport.acquire_session(request(public.clone())).await?;
-    let private_lease = transport
-        .acquire_session(request(authenticated.clone()))
+
+    let alice_lease = transport
+        .acquire_session(request(relay.clone(), Authority::As(alice)))
         .await?;
-    let public_peer = transport.relay(&public).expect("public session");
-    let private_peer = transport
-        .relay(&authenticated)
-        .expect("authenticated session");
-    public_peer.stall_writer();
-    private_peer.stall_writer();
+    RelaySessionExt::record_authentication(
+        alice_lease.session(),
+        Authentication::Authenticated { as_of: alice },
+    );
+    let anonymous_lease = transport
+        .acquire_session(request(relay.clone(), Authority::Unauthenticated))
+        .await?;
+    assert_ne!(
+        alice_lease.session().identity(),
+        anonymous_lease.session().identity()
+    );
+
+    let alice_peer = transport
+        .relay(&relay, &Authority::As(alice))
+        .expect("alice's connection");
+    let anonymous_peer = transport
+        .relay(&relay, &Authority::Unauthenticated)
+        .expect("the remaining anonymous connection");
+    alice_peer.stall_writer();
+    anonymous_peer.stall_writer();
     let correlation = HandoffCorrelation::new(7);
     assert!(matches!(
-        public_lease
+        alice_lease
             .session()
-            .hand_off(b"public".to_vec(), correlation)
+            .hand_off(b"alice".to_vec(), correlation)
             .await,
         HandoffOutcome::HandedOff { .. }
     ));
     assert!(matches!(
-        private_lease
+        anonymous_lease
             .session()
-            .hand_off(b"private".to_vec(), correlation)
+            .hand_off(b"anonymous".to_vec(), correlation)
             .await,
         HandoffOutcome::HandedOff { .. }
     ));
-    let public_generation = public_lease.session().identity();
-    let private_generation = private_lease.session().identity();
+    let alice_generation = alice_lease.session().identity();
+    let anonymous_generation = anonymous_lease.session().identity();
 
-    public_peer.reconnect();
+    alice_peer.reconnect();
 
-    let public_completion = public_peer
+    let alice_completion = alice_peer
         .unflushed_completions()
         .into_iter()
         .next()
-        .expect("public in-flight completion");
-    assert_eq!(public_completion.identity(), &public_generation);
-    assert_eq!(public_completion.correlation(), correlation);
-    assert!(private_peer.unflushed_completions().is_empty());
-    assert_eq!(private_lease.session().identity(), private_generation);
+        .expect("alice's in-flight completion");
+    assert_eq!(alice_completion.identity(), &alice_generation);
+    assert_eq!(alice_completion.correlation(), correlation);
+    assert!(anonymous_peer.unflushed_completions().is_empty());
+    assert_eq!(anonymous_lease.session().identity(), anonymous_generation);
 
-    private_peer.fail_now("private failure");
-    let private_completion = private_peer
+    anonymous_peer.fail_now("anonymous failure");
+    let anonymous_completion = anonymous_peer
         .unflushed_completions()
         .into_iter()
         .next()
-        .expect("private in-flight completion");
-    assert_eq!(private_completion.identity(), &private_generation);
-    assert_eq!(private_completion.correlation(), correlation);
-    assert_ne!(public_completion.identity(), private_completion.identity());
+        .expect("anonymous in-flight completion");
+    assert_eq!(anonymous_completion.identity(), &anonymous_generation);
+    assert_eq!(anonymous_completion.correlation(), correlation);
+    assert_ne!(alice_completion.identity(), anonymous_completion.identity());
     Ok(())
 }

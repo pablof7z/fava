@@ -1,26 +1,15 @@
 use std::collections::BTreeMap;
 
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_write::{Event, Receipt, ReceiptOutcome, RelayDeliveryOutcome, WriteRouting};
+use nostr::types::RelayUrl;
 
-pub(super) fn destinations(
-    routing: &WriteRouting,
-    access: &RelayAccess,
-) -> BTreeMap<RelaySessionKey, RelayDeliveryOutcome> {
+pub(super) fn destinations(routing: &WriteRouting) -> BTreeMap<RelayUrl, RelayDeliveryOutcome> {
     match routing {
         WriteRouting::Automatic => BTreeMap::new(),
         WriteRouting::Explicit(relays) => relays
             .iter()
             .cloned()
-            .map(|relay| {
-                (
-                    RelaySessionKey {
-                        relay,
-                        access: access.clone(),
-                    },
-                    RelayDeliveryOutcome::Pending,
-                )
-            })
+            .map(|relay| (relay, RelayDeliveryOutcome::Pending))
             .collect(),
     }
 }
@@ -94,10 +83,7 @@ mod tests {
             routing,
             WriteRouting::Explicit(vec![relay("first"), relay("second")])
         );
-        assert_eq!(
-            destinations(&routing, &fava_relay::RelayAccess::Public).len(),
-            2
-        );
+        assert_eq!(destinations(&routing).len(), 2);
     }
 
     fn relay(name: &str) -> RelayUrl {

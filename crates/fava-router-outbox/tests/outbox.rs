@@ -37,7 +37,7 @@ fn zero_indexers_remains_unresolved() {
         .unwrap();
     let request = RouteRequest::Write {
         event: EventValue::Unsigned(event),
-        access: fava_relay::RelayAccess::Public,
+        access: fava_relay::Authority::Unauthenticated,
     };
     let router = OutboxRouter::new("nip65", []).unwrap();
     let mut session = router

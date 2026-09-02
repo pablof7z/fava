@@ -10,17 +10,14 @@ use std::time::Duration;
 
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_publisher_nip01::Nip01Publisher;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_transport_testkit::FakeTransport;
 use fava_write::{ReceiptId, RevisionId, WriteId};
 use nostr::event::FinalizeEvent;
 use nostr::types::RelayUrl;
 
-fn key() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse("ws://127.0.0.1:1/").expect("relay URL"),
-        access: RelayAccess::Public,
-    }
+fn key() -> RelayUrl {
+    RelayUrl::parse("ws://127.0.0.1:1/").expect("relay URL")
 }
 
 fn attempt(event: nostr::event::Event) -> PublishAttempt {
@@ -31,6 +28,7 @@ fn attempt(event: nostr::event::Event) -> PublishAttempt {
         revision_id: RevisionId::FIRST,
         number: 1,
         session: key(),
+        authority: Authority::Unauthenticated,
         event,
         timeout: Duration::from_secs(5),
     }
@@ -57,7 +55,7 @@ async fn refused_with(message: &str) -> PublishOutcome {
         let message = message.to_owned();
         tokio::spawn(async move {
             loop {
-                if let Some(relay) = transport.relay(&key())
+                if let Some(relay) = transport.relay(&key(), &Authority::Unauthenticated)
                     && !relay.delivered_frames().is_empty()
                 {
                     let frame = serde_json::json!(["OK", id.to_hex(), false, message]).to_string();

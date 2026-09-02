@@ -10,7 +10,6 @@ mod support;
 use std::collections::{BTreeSet, VecDeque};
 use std::num::NonZeroUsize;
 
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::{
     AttributedSubscription, DeclaredLimit, EoseCompleteness, InstalledSubscription,
     InstalledSubscriptions, PlanConformanceError, PlannedSubscription, RelayReadConstraints,
@@ -111,10 +110,7 @@ fn a_plan_scoped_to_another_relay_is_refused() {
         vec![asked.filter.clone()],
         [demand_id(1)].into_iter().collect(),
     );
-    plan.relay = RelaySessionKey {
-        relay: RelayUrl::parse("wss://other.example").expect("relay URL"),
-        access: RelayAccess::Public,
-    };
+    plan.relay = RelayUrl::parse("wss://other.example").expect("relay URL");
 
     assert_eq!(
         validate_plan(&relay(), &[asked], &unknown(), &nothing(), &plan),

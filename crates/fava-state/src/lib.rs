@@ -2,17 +2,22 @@
 
 use std::collections::BTreeMap;
 
-use fava_relay::RelaySessionKey;
+use fava_relay::Authority;
 use nostr::event::{Event, EventId, Kind, Tag};
 use nostr::key::PublicKey;
 use nostr::nips::nip01::Coordinate;
-use nostr::types::Timestamp;
+use nostr::types::{RelayUrl, Timestamp};
 
-/// One admitted occurrence under one stable logical relay/access identity.
+/// One admitted occurrence under one stable logical relay identity.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RelayOccurrence {
-    /// Exact stable logical relay/access identity.
-    pub session: RelaySessionKey,
+    /// Exact stable logical relay identity.
+    pub session: RelayUrl,
+    /// Authority the connection carried when the relay handed this event
+    /// over. Content a relay hands over under one authority is not
+    /// necessarily content it would hand to another: this travels with the
+    /// occurrence so a later query cannot read it back under a different one.
+    pub authority: Authority,
     /// Caller-supplied local ingress time.
     pub observed_at: Timestamp,
 }
@@ -21,7 +26,7 @@ pub struct RelayOccurrence {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RelayOccurrences {
     event_id: EventId,
-    occurrences: BTreeMap<RelaySessionKey, RelayOccurrence>,
+    occurrences: BTreeMap<RelayUrl, RelayOccurrence>,
 }
 
 impl RelayOccurrences {
@@ -59,11 +64,17 @@ pub struct RelayEvent {
 impl RelayEvent {
     /// Bind one signed event to one actual occurrence.
     #[must_use]
-    pub fn new(event: Event, session: RelaySessionKey, observed_at: Timestamp) -> Self {
+    pub fn new(
+        event: Event,
+        session: RelayUrl,
+        authority: Authority,
+        observed_at: Timestamp,
+    ) -> Self {
         Self {
             event,
             occurrence: RelayOccurrence {
                 session,
+                authority,
                 observed_at,
             },
         }
@@ -104,7 +115,7 @@ pub fn relay_occurrences_for_event(
     {
         return None;
     }
-    let mut occurrences = BTreeMap::<RelaySessionKey, RelayOccurrence>::new();
+    let mut occurrences = BTreeMap::<RelayUrl, RelayOccurrence>::new();
     for contribution in contributions {
         let incoming = contribution.occurrence();
         occurrences
@@ -300,14 +311,14 @@ pub enum RetractionCause {
 /// One element of an ordered atomic transition for relay contributions.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EventStateMutation {
-    /// Insert or update one exact `(EventId, RelaySessionKey)` contribution.
+    /// Insert or update one exact `(EventId, RelayUrl)` contribution.
     Upsert(RelayEvent),
     /// Remove one exact contribution.
     Retract {
         /// Exact event removed.
         event_id: EventId,
-        /// Exact logical relay/access contribution removed.
-        session: RelaySessionKey,
+        /// Exact logical relay contribution removed.
+        session: RelayUrl,
         /// Exact protocol or provider reason.
         cause: RetractionCause,
     },

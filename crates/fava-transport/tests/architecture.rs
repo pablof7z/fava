@@ -138,10 +138,7 @@ fn a_dropped_connection_serves_no_work_it_previously_could() {
     )
     .expect("public key");
     let identity = fava_transport::RelaySessionIdentity {
-        key: fava_relay::RelaySessionKey {
-            relay: nostr::types::RelayUrl::parse("wss://relay.example").expect("relay URL"),
-            access: fava_relay::RelayAccess::Authenticated(alice),
-        },
+        relay: nostr::types::RelayUrl::parse("wss://relay.example").expect("relay URL"),
         connection: fava_transport::RelayConnection::new(1).expect("non-zero"),
     };
     let live = fava_transport::Connection {

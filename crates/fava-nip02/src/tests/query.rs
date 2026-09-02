@@ -6,7 +6,7 @@ use fava_query::{
     SourceRevision, SourceSnapshot, SourceStatus,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::{RelayEvent, relay_occurrences_for_event};
 use fava_write::{EventValue, Kind};
 use nostr::key::Keys;
@@ -85,10 +85,8 @@ fn ordinary_evaluation_keeps_each_authors_newest_contact_list() {
             .map(|event| {
                 SourceEvent::Relay(RelayEvent::new(
                     event,
-                    RelaySessionKey {
-                        relay: RelayUrl::parse("wss://relay.example").unwrap(),
-                        access: RelayAccess::Public,
-                    },
+                    RelayUrl::parse("wss://relay.example").unwrap(),
+                    Authority::Unauthenticated,
                     Timestamp::from(1),
                 ))
             })

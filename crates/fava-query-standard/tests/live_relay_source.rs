@@ -9,17 +9,14 @@ use fava_query::{
     SourceStatus, SourceTerminationCause,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::RelayEvent;
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind};
 use nostr::key::Keys;
 use nostr::types::{RelayUrl, Timestamp};
 
-fn session(url: &str) -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse(url).expect("test relay url parses"),
-        access: RelayAccess::Public,
-    }
+fn session(url: &str) -> RelayUrl {
+    RelayUrl::parse(url).expect("test relay url parses")
 }
 
 fn signed(keys: &Keys, created_at: u64, content: &str) -> Event {
@@ -29,11 +26,16 @@ fn signed(keys: &Keys, created_at: u64, content: &str) -> Event {
         .expect("test event signs")
 }
 
-fn admitted(event: Event, session: RelaySessionKey) -> SourceEvent {
-    SourceEvent::Relay(RelayEvent::new(event, session, Timestamp::from(1)))
+fn admitted(event: Event, session: RelayUrl) -> SourceEvent {
+    SourceEvent::Relay(RelayEvent::new(
+        event,
+        session,
+        Authority::Unauthenticated,
+        Timestamp::from(1),
+    ))
 }
 
-fn live_relay(session: RelaySessionKey, events: Vec<SourceEvent>) -> SourceSnapshot {
+fn live_relay(session: RelayUrl, events: Vec<SourceEvent>) -> SourceSnapshot {
     SourceSnapshot {
         kind: SourceKind::LiveRelay { session },
         revision: SourceRevision(1),

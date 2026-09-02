@@ -3,8 +3,8 @@
 use std::num::NonZeroUsize;
 
 use fava_query::{BoundedText, ObservationId, QueryBranchId, RelaySourceState};
-use fava_relay::RelaySessionKey;
 use fava_wire::SubscriptionId;
+use nostr::types::RelayUrl;
 
 use crate::providers::ProviderOperation;
 
@@ -18,7 +18,7 @@ pub struct QueryDiagnostic {
     /// Route revision currently bound to this observation, when automatic.
     pub route_revision: Option<u64>,
     /// Relay destinations the bound route revision names.
-    pub route_relays: Vec<RelaySessionKey>,
+    pub route_relays: Vec<RelayUrl>,
     /// Logical demand this observation currently holds, per relay per branch.
     pub demand: Vec<LogicalDemandDiagnostic>,
     /// Desired-plan revision currently installed for this observation.
@@ -37,7 +37,7 @@ pub struct QueryDiagnostic {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LogicalDemandDiagnostic {
     /// Relay session this demand is assigned to.
-    pub session: RelaySessionKey,
+    pub session: RelayUrl,
     /// Branch that needs it.
     pub branch: QueryBranchId,
     /// How far this relay has got with this observation's demand.
@@ -48,7 +48,7 @@ pub struct LogicalDemandDiagnostic {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ObservationWireBinding {
     /// Relay session.
-    pub session: RelaySessionKey,
+    pub session: RelayUrl,
     /// Wire subscription id.
     pub subscription: SubscriptionId,
     /// Total observations sharing this wire subscription, including this one.

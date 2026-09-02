@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
 use fava_query::{Query, QuerySource, SourceEvent};
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_routing::RoutePlan;
 use fava_write::{
     EventValue, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, RevisionId,
@@ -82,29 +82,10 @@ fn row_mutation_refuses_an_access_authority_that_cannot_be_trusted() {
         );
     }
 
-    // Contradictory. The authority and the sessions the write was routed to are
-    // two records of one decision; choosing either would send work somewhere it
-    // was never accepted for.
-    let relay = RelayUrl::parse("wss://contradiction.example").unwrap();
-    let other = nostr::key::Keys::generate().public_key();
-    let (contradiction_path, _first, _second) = explicit_path("contradictory-access");
-    mutate_row(&contradiction_path, |row| {
-        set(
-            row,
-            "/receipt/access",
-            serde_json::to_value(fava_relay::RelayAccess::Authenticated(other)).unwrap(),
-        );
-    });
-    let _ = relay;
-    let contradiction = RedbWriteStore::open(contradiction_path)
-        .err()
-        .expect("an authority contradicting its destinations refuses");
-    assert!(
-        contradiction
-            .to_string()
-            .contains("contradicts its destination"),
-        "unexpected contradiction refusal: {contradiction}"
-    );
+    // Contradictory no longer has a door: a destination used to carry its own
+    // access alongside the receipt's, so the two could disagree. A destination
+    // is now a bare relay, so there is nothing left for the receipt's authority
+    // to contradict.
 }
 
 #[test]
@@ -150,10 +131,7 @@ fn row_mutation_refuses_unsound_ordered_route_shapes() {
 #[test]
 fn row_mutation_refuses_missing_extra_and_substituted_explicit_lanes() {
     let (missing_path, _first, second) = explicit_path("missing-explicit-lane");
-    let second_lane = RelaySessionKey {
-        relay: second.clone(),
-        access: RelayAccess::Public,
-    };
+    let second_lane = second.clone();
     mutate_typed_receipt(&missing_path, |receipt| {
         receipt
             .current
@@ -165,10 +143,7 @@ fn row_mutation_refuses_missing_extra_and_substituted_explicit_lanes() {
     assert_lane_mismatch(missing_path, "missing");
 
     let (extra_path, _, _) = explicit_path("extra-explicit-lane");
-    let extra = RelaySessionKey {
-        relay: RelayUrl::parse("wss://extra.example").unwrap(),
-        access: RelayAccess::Public,
-    };
+    let extra = RelayUrl::parse("wss://extra.example").unwrap();
     mutate_typed_receipt(&extra_path, |receipt| {
         receipt
             .current
@@ -180,14 +155,8 @@ fn row_mutation_refuses_missing_extra_and_substituted_explicit_lanes() {
     assert_lane_mismatch(extra_path, "extra");
 
     let (substituted_path, _, second) = explicit_path("substituted-explicit-lane");
-    let expected = RelaySessionKey {
-        relay: second,
-        access: RelayAccess::Public,
-    };
-    let substitute = RelaySessionKey {
-        relay: RelayUrl::parse("wss://substitute.example").unwrap(),
-        access: RelayAccess::Public,
-    };
+    let expected = second;
+    let substitute = RelayUrl::parse("wss://substitute.example").unwrap();
     mutate_typed_receipt(&substituted_path, |receipt| {
         let outcome = receipt
             .current
@@ -435,13 +404,7 @@ fn row_mutation_reconstruction_refuses_every_malformed_invariant() {
     let mut oversized = BTreeMap::new();
     for index in 0..=destination_evidence_capacity() {
         let relay = RelayUrl::parse(&format!("wss://relay-{index}.example")).unwrap();
-        oversized.insert(
-            RelaySessionKey {
-                relay,
-                access: RelayAccess::Public,
-            },
-            RelayDeliveryOutcome::Pending,
-        );
+        oversized.insert(relay, RelayDeliveryOutcome::Pending);
     }
     let receipt = read_receipt(&destination_path);
     let mut publication = receipt.current.publication;
@@ -837,7 +800,7 @@ fn a_stored_write_keeps_its_authority_across_a_reopen() {
             WriteRouting::Explicit(vec![relay.clone()]),
         )
         .unwrap()
-        .under(RelayAccess::Authenticated(account));
+        .under(Authority::As(account));
         store.accept(intent).unwrap().receipt_id
     };
 
@@ -850,14 +813,7 @@ fn a_stored_write_keeps_its_authority_across_a_reopen() {
 
     assert_eq!(
         receipt.access,
-        RelayAccess::Authenticated(account),
+        Authority::As(account),
         "the authority came from the store, not from the reopening process"
-    );
-    assert!(
-        receipt
-            .desired_destinations
-            .iter()
-            .all(|session| session.access == RelayAccess::Authenticated(account)),
-        "its destinations are still sessions under that authority"
     );
 }

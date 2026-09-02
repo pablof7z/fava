@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
+use nostr::types::RelayUrl;
 use serde::{Deserialize, Serialize};
 
 use crate::{EventId, EventValue, InvalidEventValue, ReceiptId, RevisionId, WriteId, WriteRouting};
@@ -96,9 +97,8 @@ pub struct PublicationEvidence {
     pub retired_revisions: Vec<(RevisionId, EventId, Option<EventId>, Option<String>)>,
     /// Current signing fact.
     pub signature: SignatureState,
-    /// Exact current fact for every selected relay session.
-    #[serde(with = "crate::delivery_map")]
-    pub destinations: BTreeMap<RelaySessionKey, RelayDeliveryOutcome>,
+    /// Exact current fact for every selected relay destination.
+    pub destinations: BTreeMap<RelayUrl, RelayDeliveryOutcome>,
 }
 
 /// One current event contribution from the write store.
@@ -161,13 +161,14 @@ pub struct Receipt {
     pub current: LocalWriteEvent,
     /// Selected routing mode.
     pub routing: WriteRouting,
-    /// The relay authority this write was accepted under.
+    /// The authority this write was accepted under.
     ///
     /// Separate from the event's author: a write may be accepted over one
-    /// account's authenticated session and signed by another. Recorded so the
-    /// write resumes under the authority it was accepted with, including after
-    /// a restart, rather than under whatever the resuming process defaults to.
-    pub access: RelayAccess,
+    /// account's authenticated connection and signed by another. Recorded so
+    /// the write resumes under the authority it was accepted with, including
+    /// after a restart, rather than under whatever the resuming process
+    /// defaults to.
+    pub access: Authority,
     /// Aggregate current receipt result.
     pub outcome: ReceiptOutcome,
     /// Last route revision atomically applied to this receipt.
@@ -177,11 +178,9 @@ pub struct Receipt {
     /// Exact bounded shortfalls and settled-absence reasons for the current route.
     pub route_shortfalls: Vec<String>,
     /// Current destinations still required by the live route.
-    #[serde(with = "crate::session_set")]
-    pub desired_destinations: BTreeSet<RelaySessionKey>,
+    pub desired_destinations: BTreeSet<RelayUrl>,
     /// Number of durably authorized attempts per destination.
-    #[serde(with = "crate::attempt_map")]
-    pub attempts: BTreeMap<RelaySessionKey, u32>,
+    pub attempts: BTreeMap<RelayUrl, u32>,
 }
 
 impl Receipt {
@@ -193,7 +192,7 @@ impl Receipt {
 
     /// Current per-destination facts.
     #[must_use]
-    pub fn destinations(&self) -> &BTreeMap<RelaySessionKey, RelayDeliveryOutcome> {
+    pub fn destinations(&self) -> &BTreeMap<RelayUrl, RelayDeliveryOutcome> {
         &self.current.publication.destinations
     }
 
@@ -223,7 +222,7 @@ impl Receipt {
 
     /// Whether the current live route still requires this destination.
     #[must_use]
-    pub fn desires(&self, session: &RelaySessionKey) -> bool {
+    pub fn desires(&self, session: &RelayUrl) -> bool {
         self.desired_destinations.contains(session)
     }
 }

@@ -9,6 +9,7 @@ fava-relay.workspace = true
 fava-state.workspace = true
 fava-transport.workspace = true
 fava-write.workspace = true
+nostr.workspace = true
 
 [lints]
 workspace = true

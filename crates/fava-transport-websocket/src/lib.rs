@@ -1,33 +1,35 @@
 //! WebSocket implementation of the Fava transport contract.
 //!
-//! One socket per [`RelaySessionKey`], shared by every lease holder. The
-//! registry, the refcount, the four deadlines, the two bounded queues, and
-//! reconnect pacing all live here, because that is what `ARCH:1588-1594` and
-//! `GOALS:936` assign to the transport implementer.
+//! One socket per relay and reachable authority, shared by every lease
+//! holder. The registry, the refcount, the four deadlines, the two bounded
+//! queues, and reconnect pacing all live here, because that is what
+//! `ARCH:1588-1594` and `GOALS:936` assign to the transport implementer.
 
 mod backoff;
 mod driver;
 mod identity;
 mod session;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use fava_relay::RelaySessionKey;
+use fava_relay::Authority;
 use fava_transport::{
     LeaseRelease, OpenRelaySession, RelayConnection, RelaySession, RelaySessionFuture,
     RelaySessionIdentity, RelaySessionLease, ReleaseFuture, ReleaseOutcome, Transport,
     TransportError, TransportShutdownFuture,
 };
+use nostr::types::RelayUrl;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::driver::establish;
 use crate::session::{SessionShared, WebSocketRelaySession};
 
-/// WebSocket relay transport with one shared session per relay-access identity.
+/// WebSocket relay transport with one shared session per relay and reachable
+/// authority.
 #[derive(Default)]
 pub struct WebSocketTransport {
     registry: Arc<Registry>,
@@ -39,7 +41,9 @@ pub struct WebSocketTransport {
 const REQUEST_BACKLOG: usize = 64;
 
 struct Registry {
-    entries: Mutex<BTreeMap<RelaySessionKey, Entry>>,
+    /// Every live connection to a relay, grouped by relay: more than one can
+    /// exist when a request needs an authority none of the others can reach.
+    entries: Mutex<BTreeMap<RelayUrl, Vec<Entry>>>,
     shutting_down: AtomicBool,
     entropy: AtomicU64,
     generations: Arc<AtomicU64>,
@@ -68,6 +72,23 @@ impl Default for Registry {
 struct Entry {
     session: Arc<WebSocketRelaySession>,
     holders: usize,
+    /// Every authority an acquire has ever been satisfied under on this
+    /// connection. Introspection looks a connection up by this: it names
+    /// what was acquired, and keeps naming it even after the connection's
+    /// live authentication moves on to a refusal that can no longer reach
+    /// anything.
+    served: BTreeSet<Authority>,
+}
+
+impl Entry {
+    /// Whether this connection can still reach `authority`, right now.
+    fn can_serve(&self, authority: &Authority) -> bool {
+        self.session
+            .router()
+            .connection()
+            .borrow()
+            .can_serve(authority)
+    }
 }
 
 impl WebSocketTransport {
@@ -77,19 +98,24 @@ impl WebSocketTransport {
         Self::default()
     }
 
-    /// Reuse the live session for `key`, if one is registered.
+    /// Reuse a live session for `relay` that can still reach `authority`, if
+    /// one is registered.
     ///
     /// # Panics
     ///
     /// If a thread panicked while holding the session registry.
-    fn reuse(&self, key: &RelaySessionKey) -> Option<RelaySessionLease> {
+    fn reuse(&self, relay: &RelayUrl, authority: &Authority) -> Option<RelaySessionLease> {
         let mut entries = self
             .registry
             .entries
             .lock()
             .expect("registry is not poisoned");
-        let entry = entries.get_mut(key)?;
+        let entry = entries
+            .get_mut(relay)?
+            .iter_mut()
+            .find(|entry| entry.can_serve(authority))?;
         entry.holders += 1;
+        entry.served.insert(*authority);
         let session = Arc::clone(&entry.session);
         let identity = session.identity();
         Some(RelaySessionLease::new(
@@ -106,7 +132,7 @@ impl Transport for WebSocketTransport {
             if self.registry.shutting_down.load(Ordering::SeqCst) {
                 return Err(TransportError::ShuttingDown);
             }
-            if let Some(lease) = self.reuse(&request.key) {
+            if let Some(lease) = self.reuse(&request.relay, &request.authority) {
                 return Ok(lease);
             }
 
@@ -132,16 +158,21 @@ impl Transport for WebSocketTransport {
 
             let session = Arc::new(WebSocketRelaySession { shared, outbound });
             let identity = session.identity();
-            // Another acquire may have dialled the same key while this one was
-            // establishing. The first registration wins; this socket is closed
-            // rather than leaked, so the key keeps exactly one live session.
+            // Another acquire may have dialled a connection reaching the same
+            // authority while this one was establishing. The first
+            // registration wins; this socket is closed rather than leaked.
             let mut entries = self
                 .registry
                 .entries
                 .lock()
                 .expect("registry is not poisoned");
-            if let Some(existing) = entries.get_mut(&request.key) {
+            if let Some(existing) = entries.get_mut(&request.relay).and_then(|connections| {
+                connections
+                    .iter_mut()
+                    .find(|entry| entry.can_serve(&request.authority))
+            }) {
                 existing.holders += 1;
+                existing.served.insert(request.authority);
                 let winner = Arc::clone(&existing.session);
                 drop(entries);
                 let loser = session;
@@ -153,20 +184,24 @@ impl Transport for WebSocketTransport {
                     identity,
                 ));
             }
-            entries.insert(
-                request.key.clone(),
-                Entry {
+            entries
+                .entry(request.relay.clone())
+                .or_default()
+                .push(Entry {
                     session: Arc::clone(&session),
                     holders: 1,
-                },
-            );
+                    served: BTreeSet::from([request.authority]),
+                });
             drop(entries);
             // The relay may ask this connection to authenticate at any point,
-            // including before anything is sent on it.
-            let watched: Arc<dyn RelaySession> = Arc::clone(&session) as Arc<dyn RelaySession>;
+            // including before anything is sent on it. Only a weak reference
+            // is handed to the task: it must not be the thing keeping this
+            // session alive, or it would need itself to end.
+            let watched: Weak<dyn RelaySession> =
+                Arc::downgrade(&(Arc::clone(&session) as Arc<dyn RelaySession>));
             let requests = self.registry.requests.clone();
             tokio::spawn(async move {
-                fava_transport::publish_authentication_requests(&watched, requests).await;
+                fava_transport::publish_authentication_requests(watched, requests).await;
             });
             Ok(RelaySessionLease::new(
                 session,
@@ -180,14 +215,16 @@ impl Transport for WebSocketTransport {
         self.registry.requests.subscribe()
     }
 
-    fn holders(&self, key: &RelaySessionKey) -> Option<NonZeroUsize> {
+    fn holders(&self, relay: &RelayUrl, authority: &Authority) -> Option<NonZeroUsize> {
         let entries = self
             .registry
             .entries
             .lock()
             .expect("registry is not poisoned");
         entries
-            .get(key)
+            .get(relay)?
+            .iter()
+            .find(|entry| entry.served.contains(authority))
             .and_then(|entry| NonZeroUsize::new(entry.holders))
     }
 
@@ -202,6 +239,7 @@ impl Transport for WebSocketTransport {
                     .expect("registry is not poisoned");
                 std::mem::take(&mut *entries)
                     .into_values()
+                    .flatten()
                     .map(|entry| entry.session)
                     .collect()
             };
@@ -232,25 +270,31 @@ pub(crate) fn mint_generation(counter: &AtomicU64) -> Option<RelayConnection> {
 impl Registry {
     fn decrement(
         &self,
-        key: &RelaySessionKey,
+        identity: &RelaySessionIdentity,
     ) -> Option<(Arc<WebSocketRelaySession>, ReleaseOutcome)> {
         let mut entries = self.entries.lock().expect("registry is not poisoned");
-        let entry = entries.get_mut(key)?;
-        entry.holders = entry.holders.saturating_sub(1);
-        if let Some(holders) = NonZeroUsize::new(entry.holders) {
+        let connections = entries.get_mut(&identity.relay)?;
+        let position = connections
+            .iter()
+            .position(|entry| entry.session.identity().connection == identity.connection)?;
+        connections[position].holders = connections[position].holders.saturating_sub(1);
+        if let Some(holders) = NonZeroUsize::new(connections[position].holders) {
             return Some((
-                Arc::clone(&entry.session),
+                Arc::clone(&connections[position].session),
                 ReleaseOutcome::Retained { holders },
             ));
         }
-        let entry = entries.remove(key)?;
+        let entry = connections.remove(position);
+        if connections.is_empty() {
+            entries.remove(&identity.relay);
+        }
         Some((entry.session, ReleaseOutcome::Closed))
     }
 }
 
 impl LeaseRelease for Registry {
     fn release_now(&self, identity: &RelaySessionIdentity) {
-        if let Some((session, ReleaseOutcome::Closed)) = self.decrement(&identity.key) {
+        if let Some((session, ReleaseOutcome::Closed)) = self.decrement(identity) {
             tokio::spawn(async move { session.close().await });
         }
     }
@@ -260,7 +304,7 @@ impl LeaseRelease for Registry {
         identity: &'a RelaySessionIdentity,
     ) -> ReleaseFuture<'a> {
         Box::pin(async move {
-            let Some((session, outcome)) = self.decrement(&identity.key) else {
+            let Some((session, outcome)) = self.decrement(identity) else {
                 return Err(TransportError::Closed(identity.clone()));
             };
             if outcome == ReleaseOutcome::Closed {

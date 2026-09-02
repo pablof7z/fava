@@ -7,7 +7,7 @@ use std::time::Duration;
 use fava_auth::{
     AuthenticationDecision, AuthenticationDemand, AuthenticationPolicy, Authenticator,
 };
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
 use fava_signer_local::LocalSigner;
@@ -55,14 +55,19 @@ impl AuthenticationPolicy for Fixed {
 pub struct Rig {
     authenticator: Authenticator,
     transport: Arc<FakeTransport>,
-    key: RelaySessionKey,
+    relay: RelayUrl,
+    authority: Authority,
+    account: fava_write::PublicKey,
     /// Somebody has to want this connection. Nothing authenticates a relay no
     /// component is talking to.
     lease: fava_transport::RelaySessionLease,
 }
 
 impl Rig {
-    async fn build(decision: AuthenticationDecision, attach_signer: bool) -> Self {
+    async fn build(
+        decision: impl FnOnce(fava_write::PublicKey) -> AuthenticationDecision,
+        attach_signer: bool,
+    ) -> Self {
         let keys = Keys::generate();
         let account = keys.public_key();
         let signers = if attach_signer {
@@ -77,11 +82,10 @@ impl Rig {
             max_tasks: nonzero(1_024),
             max_provider_operations: nonzero(256),
         });
-        let authenticator = Authenticator::new(signers, Arc::new(Fixed(decision)), runtime);
-        let key = RelaySessionKey {
-            relay: RelayUrl::parse("wss://relay.example.com").expect("valid relay url"),
-            access: RelayAccess::Authenticated(account),
-        };
+        let authenticator =
+            Authenticator::new(signers, Arc::new(Fixed(decision(account))), runtime);
+        let relay = RelayUrl::parse("wss://relay.example.com").expect("valid relay url");
+        let authority = Authority::As(account);
         authenticator
             .answer_requests(transport.as_ref())
             .expect("the owner begins answering");
@@ -90,7 +94,8 @@ impl Rig {
         let lease = fava_transport::Transport::acquire_session(
             transport.as_ref(),
             fava_transport::OpenRelaySession {
-                key: key.clone(),
+                relay: relay.clone(),
+                authority,
                 deadlines: fava_transport::TransportDeadlines {
                     establish: std::time::Duration::from_secs(1),
                     write: std::time::Duration::from_secs(1),
@@ -110,7 +115,9 @@ impl Rig {
         let rig = Self {
             authenticator,
             transport,
-            key,
+            relay,
+            authority,
+            account,
             lease,
         };
         rig.settle().await;
@@ -118,32 +125,40 @@ impl Rig {
     }
 
     pub async fn approving() -> Self {
-        Self::build(AuthenticationDecision::Authenticate, true).await
+        Self::build(|as_of| AuthenticationDecision::Authenticate { as_of }, true).await
     }
 
     pub async fn approving_without_signer() -> Self {
-        Self::build(AuthenticationDecision::Authenticate, false).await
+        Self::build(
+            |as_of| AuthenticationDecision::Authenticate { as_of },
+            false,
+        )
+        .await
     }
 
     pub async fn declining() -> Self {
-        Self::build(AuthenticationDecision::Decline, true).await
+        Self::build(|_| AuthenticationDecision::Decline, true).await
     }
 
     pub async fn deferring() -> Self {
-        Self::build(AuthenticationDecision::Defer, true).await
+        Self::build(|_| AuthenticationDecision::Defer, true).await
     }
 
     pub const fn authenticator(&self) -> &Authenticator {
         &self.authenticator
     }
 
-    pub const fn key(&self) -> &RelaySessionKey {
-        &self.key
+    pub const fn relay_url(&self) -> &RelayUrl {
+        &self.relay
+    }
+
+    pub const fn account(&self) -> fava_write::PublicKey {
+        self.account
     }
 
     pub fn relay(&self) -> FakeRelay {
         self.transport
-            .relay(&self.key)
+            .relay(&self.relay, &self.authority)
             .expect("the watch acquired this session")
     }
 

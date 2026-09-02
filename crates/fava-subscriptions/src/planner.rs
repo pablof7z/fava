@@ -1,7 +1,7 @@
 //! The replaceable planner contract and its refusal type.
 
-use fava_relay::RelaySessionKey;
 use fava_transport::BoundedText;
+use nostr::types::RelayUrl;
 use thiserror::Error;
 
 use crate::constraints::RelayReadConstraints;
@@ -89,7 +89,7 @@ pub trait SubscriptionPlanner: Send + Sync {
     /// [`crate::SubscriptionShortfall`] inside `Ok`, never an error.
     fn plan(
         &self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
         demand: &[RelayDemand],
         constraints: &RelayReadConstraints,
         installed: &InstalledSubscriptions,

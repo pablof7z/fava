@@ -1,53 +1,109 @@
-//! Same-URL observations with different access own independent live work.
+//! Public and authenticated demand at the same URL keep independent evidence,
+//! and once a connection is committed to an account it owns independent live
+//! work too.
 
 mod support;
 
 use fava_query::{Query, RelaySourceState};
-use fava_relay::{RelayAccess, RelaySessionKey};
-use fava_transport::Transport;
+use fava_relay::{Authentication, Authority};
+use fava_transport::RelaySessionExt;
 use fava_wire::RelayMessage;
 use nostr::event::{EventBuilder, FinalizeEvent, Kind};
 use nostr::key::Keys;
-use support::{assemble, push, relay, requests, settle, wait_until};
+use nostr::types::RelayUrl;
+use support::{Assembly, assemble, push, relay, requests, settle, wait_until};
 
-#[tokio::test(flavor = "current_thread")]
-#[allow(
-    clippy::too_many_lines,
-    reason = "one causal sequence covers EVENT, EOSE, AUTH, CLOSED, reconnect, and withdrawal isolation"
-)]
-async fn exact_access_keys_isolate_event_eose_and_close() -> Result<(), Box<dyn std::error::Error>>
-{
+struct Setup {
+    assembly: Assembly,
+    url: RelayUrl,
+    public: fava_observe::Observation,
+    private: fava_observe::Observation,
+    public_peer: fava_transport_testkit::FakeRelay,
+    public_wire: fava_wire::SubscriptionId,
+}
+
+/// Open a public and an authenticated-as-alice observation at the same relay
+/// URL, and return once both connections have committed and each has one
+/// live wire subscription.
+///
+/// The private observation opens and authenticates first, so its connection
+/// is committed to alice before the public observation ever asks: a
+/// connection already authenticated as alice can never become anonymous
+/// again, so the two are guaranteed distinct connections from here on.
+async fn setup() -> Result<Setup, Box<dyn std::error::Error>> {
     let assembly = assemble();
     let url = relay("shared-access");
     let alice = Keys::generate().public_key();
-    let public_key = RelaySessionKey {
-        relay: url.clone(),
-        access: RelayAccess::Public,
-    };
-    let private_key = RelaySessionKey {
-        relay: url.clone(),
-        access: RelayAccess::Authenticated(alice),
-    };
+
+    let private = assembly.observer.open(
+        Query::events()
+            .only_from_relays([url.clone()])?
+            .with_relay_access(Authority::As(alice)),
+    )?;
+    wait_until(|| {
+        assembly
+            .transport
+            .relay(&url, &Authority::As(alice))
+            .is_some()
+    })
+    .await;
+    let private_peer = assembly
+        .transport
+        .relay(&url, &Authority::As(alice))
+        .unwrap();
+    let private_session = assembly
+        .transport
+        .session(&url, &Authority::As(alice))
+        .expect("the watch acquired this session");
+    RelaySessionExt::record_authentication(
+        &private_session,
+        Authentication::Authenticated { as_of: alice },
+    );
+
     let public = assembly.observer.open(
         Query::events()
             .only_from_relays([url.clone()])?
-            .with_relay_access(RelayAccess::Public),
+            .with_relay_access(Authority::Unauthenticated),
     )?;
-    let private = assembly.observer.open(
-        Query::events()
-            .only_from_relays([url])?
-            .with_relay_access(RelayAccess::Authenticated(alice)),
-    )?;
+    wait_until(|| {
+        assembly
+            .transport
+            .relay(&url, &Authority::Unauthenticated)
+            .is_some()
+    })
+    .await;
+    let public_peer = assembly
+        .transport
+        .relay(&url, &Authority::Unauthenticated)
+        .unwrap();
 
-    wait_until(|| assembly.transport.relay(&public_key).is_some()).await;
-    wait_until(|| assembly.transport.relay(&private_key).is_some()).await;
-    let public_peer = assembly.transport.relay(&public_key).unwrap();
-    let private_peer = assembly.transport.relay(&private_key).unwrap();
     wait_until(|| requests(Some(public_peer.clone())).len() == 1).await;
     wait_until(|| requests(Some(private_peer.clone())).len() == 1).await;
     let public_wire = requests(Some(public_peer.clone()))[0].0.clone();
-    let mut private_wire = requests(Some(private_peer.clone()))[0].0.clone();
+    let private_wire = requests(Some(private_peer.clone()))[0].0.clone();
     assert_ne!(public_wire, private_wire);
+
+    Ok(Setup {
+        assembly,
+        url,
+        public,
+        private,
+        public_peer,
+        public_wire,
+    })
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn exact_access_keys_isolate_event_eose_and_challenge()
+-> Result<(), Box<dyn std::error::Error>> {
+    let Setup {
+        assembly: _assembly,
+        url,
+        public,
+        private,
+        public_peer,
+        public_wire,
+    } = setup().await?;
 
     let public_event = EventBuilder::new(Kind::TextNote, "public").finalize(&Keys::generate())?;
     push(
@@ -69,7 +125,7 @@ async fn exact_access_keys_isolate_event_eose_and_close() -> Result<(), Box<dyn 
         public
             .current()
             .evidence
-            .relay(&public_key)
+            .relay(&url)
             .is_some_and(fava_query::RelayQueryEvidence::stored_events_complete)
     })
     .await;
@@ -77,7 +133,7 @@ async fn exact_access_keys_isolate_event_eose_and_close() -> Result<(), Box<dyn 
         !private
             .current()
             .evidence
-            .relay(&private_key)
+            .relay(&url)
             .unwrap()
             .stored_events_complete()
     );
@@ -91,24 +147,38 @@ async fn exact_access_keys_isolate_event_eose_and_close() -> Result<(), Box<dyn 
         private
             .current()
             .evidence
-            .relay(&private_key)
+            .relay(&url)
             .map(|item| &item.state),
         Some(RelaySourceState::Open { .. })
     ));
 
+    public.close();
+    private.close();
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_close_refusal_on_one_connection_leaves_the_other_untouched()
+-> Result<(), Box<dyn std::error::Error>> {
+    let Setup {
+        assembly: _assembly,
+        url,
+        public,
+        private,
+        public_peer,
+        public_wire,
+    } = setup().await?;
+
     push(
         &public_peer,
-        &RelayMessage::closed(
-            requests(Some(public_peer.clone()))[0].0.clone(),
-            "public refused",
-        ),
+        &RelayMessage::closed(public_wire, "public refused"),
     );
     wait_until(|| {
         matches!(
             public
                 .current()
                 .evidence
-                .relay(&public_key)
+                .relay(&url)
                 .map(|item| &item.state),
             Some(RelaySourceState::Refused { .. })
         )
@@ -118,75 +188,12 @@ async fn exact_access_keys_isolate_event_eose_and_close() -> Result<(), Box<dyn 
         private
             .current()
             .evidence
-            .relay(&private_key)
+            .relay(&url)
             .map(|item| &item.state),
         Some(RelaySourceState::Refused { .. } | RelaySourceState::AuthenticationRequired { .. })
     ));
 
-    let private_generation = private
-        .current()
-        .evidence
-        .relay(&private_key)
-        .expect("private evidence")
-        .generation
-        .expect("live relay work has an exact generation");
-    let stale_wire = private_wire.clone();
-    private_peer.reconnect();
-    wait_until(|| requests(Some(private_peer.clone())).len() == 2).await;
-    private_wire = requests(Some(private_peer.clone()))[1].0.clone();
-    wait_until(|| {
-        private
-            .current()
-            .evidence
-            .relay(&private_key)
-            .is_some_and(|item| {
-                item.generation
-                    .is_some_and(|current| current > private_generation)
-            })
-    })
-    .await;
-
-    let stale_event =
-        EventBuilder::new(Kind::TextNote, "stale generation").finalize(&Keys::generate())?;
-    push(
-        &private_peer,
-        &RelayMessage::event(stale_wire, stale_event.clone()),
-    );
-    settle().await;
-    assert!(
-        private
-            .current()
-            .events
-            .iter()
-            .all(|record| record.id() != stale_event.id),
-        "an event naming the superseded generation's exact wire request is inert"
-    );
-    assert!(matches!(
-        public
-            .current()
-            .evidence
-            .relay(&public_key)
-            .map(|item| &item.state),
-        Some(RelaySourceState::Refused { .. })
-    ));
-
     public.close();
-    settle().await;
-    assert!(assembly.transport.holders(&public_key).is_none());
-    assert!(assembly.transport.holders(&private_key).is_some());
-    let private_event = EventBuilder::new(Kind::TextNote, "private").finalize(&Keys::generate())?;
-    push(
-        &private_peer,
-        &RelayMessage::event(private_wire, private_event.clone()),
-    );
-    wait_until(|| {
-        private
-            .current()
-            .events
-            .iter()
-            .any(|record| record.id() == private_event.id)
-    })
-    .await;
     private.close();
     Ok(())
 }

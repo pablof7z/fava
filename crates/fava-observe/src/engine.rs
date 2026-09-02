@@ -1,8 +1,13 @@
 //! Reconciliation of logical demand into immutable relay work.
 //!
-//! One reconciliation owner per engine, one slot per relay session, one
-//! transport lease per slot — so a second observation at a relay Fava already
-//! holds reuses the connection and never dials (`GOALS:936`).
+//! One reconciliation owner per engine, one slot per relay connection, one
+//! transport lease per slot — so a second observation at a connection Fava
+//! already holds reuses it and never dials (`GOALS:936`). A relay may need
+//! more than one connection at once: which slot serves a piece of work is a
+//! live question asked of that slot's connection (can it still reach the
+//! authority the work needs?), never a key a demand item is filed under. A
+//! relay's slots therefore live in a `Vec`, scanned by reachability, exactly
+//! as the transport's own connection registry is.
 //!
 //! Demand is never merged by this owner. New demand that no live request
 //! already covers enters a per-relay pending cohort behind one fixed,
@@ -27,7 +32,7 @@ use std::time::Duration;
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
 use fava_query::{BoundedText, RelaySourceState, Round, RoundIssuer, RoundsExhausted};
-use fava_relay::RelaySessionKey;
+use fava_relay::Authority;
 use fava_runtime::{CancellationToken, Runtime, TaskName};
 use fava_subscriptions::{
     InstalledSubscription, InstalledSubscriptions, PlanRevision, PlanRevisionExhausted,
@@ -39,6 +44,7 @@ use fava_transport::{
     TransportDeadlines,
 };
 use fava_wire::SubscriptionId;
+use nostr::types::RelayUrl;
 
 use crate::diagnostics;
 use crate::operations;
@@ -74,19 +80,24 @@ impl Reports {
 }
 
 /// One provider completion, always carrying the generation it was issued under.
+///
+/// The generation alone finds the exact slot a report belongs to: it is
+/// engine-wide monotonic and reused by nothing, including a slot's own
+/// reconnect, which mints a fresh one. A relay's other slots, and its slots'
+/// own earlier generations, never match.
 pub(crate) enum Report {
     Acquired {
-        relay: RelaySessionKey,
+        relay: RelayUrl,
         generation: Round,
         lease: Box<RelaySessionLease>,
     },
     Refused {
-        relay: RelaySessionKey,
+        relay: RelayUrl,
         generation: Round,
         detail: BoundedText,
     },
     Installed {
-        relay: RelaySessionKey,
+        relay: RelayUrl,
         generation: Round,
         revision: fava_subscriptions::PlanRevision,
         plan: Box<SubscriptionPlan>,
@@ -97,18 +108,18 @@ pub(crate) enum Report {
         closed: BTreeSet<SubscriptionId>,
     },
     Flush {
-        relay: RelaySessionKey,
+        relay: RelayUrl,
         generation: Round,
     },
     /// One session's connection state changed.
     Connection {
-        relay: RelaySessionKey,
+        relay: RelayUrl,
         generation: Round,
         state: Box<fava_transport::Connection>,
     },
     /// The connection carrying this relay's work was replaced.
     ConnectionReplaced {
-        relay: RelaySessionKey,
+        relay: RelayUrl,
         generation: Round,
     },
     /// The connection will never reach another state. The state it last
@@ -116,14 +127,15 @@ pub(crate) enum Report {
     ConnectionEnded,
     /// One installed subscription carried something of its own.
     Carried {
-        relay: RelaySessionKey,
+        relay: RelayUrl,
         generation: Round,
         subscription: SubscriptionId,
         item: Box<fava_transport::SubscriptionItem>,
     },
     /// NIP-11 relay-information document fetched for one relay.
     Constraints {
-        relay: RelaySessionKey,
+        relay: RelayUrl,
+        generation: Round,
         constraints: RelayReadConstraints,
     },
 }
@@ -136,7 +148,11 @@ pub(crate) struct Engine {
     pub(crate) root: CancellationToken,
     pub(crate) reports: Reports,
     pub(crate) inbox: tokio::sync::mpsc::Receiver<Report>,
-    pub(crate) slots: BTreeMap<RelaySessionKey, Slot>,
+    /// Every slot this owner holds, by relay. A relay may need more than one
+    /// connection at once; which one serves a piece of demand is decided by
+    /// asking each slot whether it can still reach the authority that demand
+    /// needs (`Slot::can_serve`), never by a key the demand is filed under.
+    pub(crate) slots: BTreeMap<RelayUrl, Vec<Slot>>,
     /// Source of every round this owner issues.
     pub(crate) rounds: RoundIssuer,
     /// Source of every plan revision this owner issues, for every relay.
@@ -202,8 +218,10 @@ impl Engine {
                 }
             }
         }
-        for (_, slot) in std::mem::take(&mut self.slots) {
-            slot.cancel.cancel();
+        for (_, bucket) in std::mem::take(&mut self.slots) {
+            for slot in bucket {
+                slot.cancel.cancel();
+            }
         }
     }
 
@@ -216,37 +234,60 @@ impl Engine {
     /// to group until a cohort exists.
     fn reconcile(&mut self) {
         let desired = self.registry.desired();
-        let removed: Vec<RelaySessionKey> = self
+
+        // A relay no longer named by any demand loses every slot it holds.
+        let vacated: Vec<RelayUrl> = self
             .slots
             .keys()
             .filter(|relay| !desired.contains_key(*relay))
             .cloned()
             .collect();
-        for relay in removed {
-            self.release(&relay);
+        for relay in vacated {
+            self.release_relay(&relay);
         }
-        for (relay, demand) in desired {
-            self.establish(&relay, &demand);
-            self.attach(&relay, &demand);
-            let Some(slot) = self.slots.get(&relay) else {
-                continue;
-            };
-            let generation = slot.generation;
-            if slot.orphaned(&demand) {
-                self.flush(&relay, generation);
-                continue;
+
+        for (relay, items) in &desired {
+            // Every authority this relay's demand currently needs must be
+            // reachable from some slot; open one for whichever is not.
+            for (item, authority) in items {
+                if self.slot_index_for(relay, authority).is_none() {
+                    self.establish(relay, authority, std::slice::from_ref(item));
+                }
             }
-            if slot.uncovered(&demand).is_empty() {
-                continue;
+
+            let generations: Vec<Round> = self
+                .slots
+                .get(relay)
+                .map(|bucket| bucket.iter().map(|slot| slot.generation).collect())
+                .unwrap_or_default();
+            for generation in generations {
+                let demand = self.demand_for_slot(relay, generation);
+                // Nothing wants this slot at all: release it outright, the
+                // same way a relay with no desired demand is released below.
+                // `release_slot` cancels its token, which drops every
+                // subscription handle it held and sends each one's own CLOSE
+                // on the way out — there is no completion to wait for.
+                if demand.is_empty() {
+                    self.release_slot(relay, generation);
+                    continue;
+                }
+                self.attach(relay, generation, &demand);
+                let Some(slot) = self.slot(relay, generation) else {
+                    continue;
+                };
+                if slot.orphaned(&demand) {
+                    self.flush(relay, generation);
+                    continue;
+                }
+                if slot.uncovered(&demand).is_empty() || slot.armed {
+                    continue;
+                }
+                let Some(slot) = self.slot_mut(relay, generation) else {
+                    continue;
+                };
+                slot.armed = true;
+                self.arm(relay, generation);
             }
-            let Some(slot) = self.slots.get_mut(&relay) else {
-                continue;
-            };
-            if slot.armed {
-                continue;
-            }
-            slot.armed = true;
-            self.arm(&relay, generation);
         }
     }
 
@@ -256,14 +297,12 @@ impl Engine {
     /// id and its exact filters, and no plan is computed. A joiner attaching to
     /// a request whose stored replay already ended is credited that completion
     /// straight away — the rows are in the local store its own sources read.
-    fn attach(&mut self, relay: &RelaySessionKey, demand: &[RelayDemand]) {
+    fn attach(&mut self, relay: &RelayUrl, generation: Round, demand: &[RelayDemand]) {
         let mut credited = Vec::new();
-        let generation;
         {
-            let Some(slot) = self.slots.get_mut(relay) else {
+            let Some(slot) = self.slot_mut(relay, generation) else {
                 return;
             };
-            generation = slot.generation;
             let mut entries: Vec<(SubscriptionId, InstalledSubscription)> = slot
                 .installed
                 .ids()
@@ -298,7 +337,7 @@ impl Engine {
             }
             slot.installed = InstalledSubscriptions::from_entries(entries);
         }
-        self.publish_plan(relay, demand, None);
+        self.publish_plan(relay, generation, demand, None);
         for id in credited {
             self.registry.record_state(
                 id.owner,
@@ -309,27 +348,43 @@ impl Engine {
                 },
             );
         }
-        self.publish_relay_diagnostic(relay);
+        self.publish_relay_diagnostic(relay, generation);
     }
 
-    /// Acquire the relay session this slot needs, once.
-    fn establish(&mut self, relay: &RelaySessionKey, demand: &[RelayDemand]) {
-        if !self.slots.contains_key(relay) {
+    /// Acquire the relay connection needed to reach `authority`, once.
+    ///
+    /// Returns the generation of the slot now responsible for it, whether
+    /// freshly opened or already in flight. `None` only when the round
+    /// counter itself is exhausted.
+    fn establish(
+        &mut self,
+        relay: &RelayUrl,
+        authority: &Authority,
+        demand: &[RelayDemand],
+    ) -> Option<Round> {
+        let index = if let Some(index) = self.slot_index_for(relay, authority) {
+            index
+        } else {
             let generation = match self.next_round() {
                 Ok(generation) => generation,
                 Err(error) => {
-                    self.publish_owner_refusal(relay, demand, &error);
-                    return;
+                    self.publish_owner_refusal(relay, demand, None, &error);
+                    return None;
                 }
             };
-            self.slots
-                .insert(relay.clone(), Slot::new(self.root.child(), generation));
-        }
+            let bucket = self.slots.entry(relay.clone()).or_default();
+            bucket.push(Slot::new(self.root.child(), generation, *authority));
+            bucket.len() - 1
+        };
         let generation;
         {
-            let slot = self.slots.get_mut(relay).expect("slot was inserted above");
+            let bucket = self
+                .slots
+                .get_mut(relay)
+                .expect("the slot was just found or inserted above");
+            let slot = &mut bucket[index];
             if slot.busy || slot.session.is_some() {
-                return;
+                return Some(slot.generation);
             }
             slot.busy = true;
             slot.state = fava_diagnostics::RelaySessionState::Connecting;
@@ -339,7 +394,8 @@ impl Engine {
                 &self.providers.transport,
                 &self.reports,
                 OpenRelaySession {
-                    key: relay.clone(),
+                    relay: relay.clone(),
+                    authority: *authority,
                     deadlines: self.providers.deadlines,
                     bounds: self.providers.bounds,
                     reconnect_attempts: None,
@@ -349,7 +405,9 @@ impl Engine {
             );
         }
         self.publish_states(relay, demand, generation, &RelaySourceState::Connecting);
+        Some(generation)
     }
+
     /// The next plan revision, never reused for the life of this engine.
     fn next_revision(&mut self) -> Result<PlanRevision, PlanRevisionExhausted> {
         self.plan_revisions.allocate()
@@ -359,27 +417,34 @@ impl Engine {
         self.rounds.allocate()
     }
 
+    /// Report a refusal from this owner itself — the round or revision
+    /// counter is exhausted — rather than from any provider.
+    ///
+    /// `generation` names the slot being retired when one already existed;
+    /// `None` when no slot was ever created for this demand.
     pub(crate) fn publish_owner_refusal(
         &self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
         demand: &[RelayDemand],
+        generation: Option<Round>,
         error: &impl std::fmt::Display,
     ) {
         let state = RelaySourceState::OwnerRefused {
             detail: BoundedText::new(error.to_string()),
         };
-        if let Some(slot) = self.slots.get(relay) {
-            self.publish_states(relay, demand, slot.generation, &state);
-        } else {
-            for item in demand {
-                self.registry
-                    .record_state(item.owner, relay, None, state.clone());
+        match generation {
+            Some(generation) => self.publish_states(relay, demand, generation, &state),
+            None => {
+                for item in demand {
+                    self.registry
+                        .record_state(item.owner, relay, None, state.clone());
+                }
             }
         }
     }
 
     /// Arm one fixed, first-arrival-anchored admission window.
-    pub(crate) fn arm(&self, relay: &RelaySessionKey, generation: Round) {
+    pub(crate) fn arm(&self, relay: &RelayUrl, generation: Round) {
         operations::arm_admission(
             &self.runtime,
             &self.reports,
@@ -391,21 +456,18 @@ impl Engine {
 
     /// Close the admission window and plan this relay session once.
     ///
-    /// The planner receives the *complete* current demand for the session and
-    /// the plan the transport actually accepted, and answers with the diff. It
-    /// is the only component that decides grouping, wire identity, and which
-    /// running subscription has lost its last logical owner.
-    pub(crate) fn flush(&mut self, relay: &RelaySessionKey, generation: Round) -> bool {
-        let demand = self.registry.desired().remove(relay).unwrap_or_default();
+    /// The planner receives the *complete* current demand this slot can serve
+    /// and the plan the transport actually accepted, and answers with the
+    /// diff. It is the only component that decides grouping, wire identity,
+    /// and which running subscription has lost its last logical owner.
+    pub(crate) fn flush(&mut self, relay: &RelayUrl, generation: Round) -> bool {
+        let demand = self.demand_for_slot(relay, generation);
         let session;
         let installed;
         {
-            let Some(slot) = self.slots.get_mut(relay) else {
+            let Some(slot) = self.slot_mut(relay, generation) else {
                 return false;
             };
-            if slot.generation != generation {
-                return false;
-            }
             slot.armed = false;
             // Demand cancelled before the deadline never reaches the planner.
             if slot.uncovered(&demand).is_empty() && !slot.orphaned(&demand) {
@@ -422,13 +484,12 @@ impl Engine {
         let revision = match self.next_revision() {
             Ok(revision) => revision,
             Err(error) => {
-                self.publish_owner_refusal(relay, &demand, &error);
+                self.publish_owner_refusal(relay, &demand, Some(generation), &error);
                 return false;
             }
         };
         let constraints =
-            self.slots
-                .get_mut(relay)
+            self.slot_mut(relay, generation)
                 .map_or_else(RelayReadConstraints::unknown, |slot| {
                     // The last revision this slot issued, so a completion for an
                     // earlier one is refused rather than installed.
@@ -449,7 +510,7 @@ impl Engine {
                     })
             });
         match planned {
-            Ok(planned) => self.execute(relay, &demand, &session, &planned),
+            Ok(planned) => self.execute(relay, generation, &demand, &session, &planned),
             Err(error) => {
                 self.providers.diagnostics.relay(diagnostics::refused_plan(
                     relay,
@@ -463,13 +524,14 @@ impl Engine {
     /// Hand the plan's diff to the wire, opening before closing.
     fn execute(
         &mut self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
+        generation: Round,
         demand: &[RelayDemand],
         session: &Arc<dyn RelaySession>,
         planned: &SubscriptionPlan,
     ) {
         {
-            let Some(slot) = self.slots.get_mut(relay) else {
+            let Some(slot) = self.slot_mut(relay, generation) else {
                 return;
             };
             for id in planned.attribution.ids() {
@@ -479,12 +541,12 @@ impl Engine {
             }
         }
         if planned.is_noop() {
-            self.record_installed(relay, planned, &[], &BTreeSet::new());
-            self.publish_plan(relay, demand, Some(planned));
-            self.publish_relay_diagnostic(relay);
+            self.record_installed(relay, generation, planned, &[], &BTreeSet::new());
+            self.publish_plan(relay, generation, demand, Some(planned));
+            self.publish_relay_diagnostic(relay, generation);
             return;
         }
-        let Some(slot) = self.slots.get(relay) else {
+        let Some(slot) = self.slot(relay, generation) else {
             return;
         };
         operations::install_plan(
@@ -492,7 +554,7 @@ impl Engine {
             &self.reports,
             operations::Installing {
                 relay: relay.clone(),
-                generation: slot.generation,
+                generation,
                 revision: planned.revision,
             },
             Arc::clone(session),
@@ -500,10 +562,10 @@ impl Engine {
             self.providers.deadlines.write,
             slot.cancel.clone(),
         );
-        self.publish_relay_diagnostic(relay);
+        self.publish_relay_diagnostic(relay, generation);
     }
 
-    /// Replace this relay's installed-subscription baseline with exactly what the
+    /// Replace this slot's installed-subscription baseline with exactly what the
     /// transport accepted.
     ///
     /// On a plan the transport accepted in full this is
@@ -512,12 +574,13 @@ impl Engine {
     /// never opened, so its predecessor stays live and no CLOSE was sent.
     pub(crate) fn record_installed(
         &mut self,
-        relay: &RelaySessionKey,
+        relay: &RelayUrl,
+        generation: Round,
         planned: &SubscriptionPlan,
         opened: &[Option<SubscriptionId>],
         closed: &BTreeSet<SubscriptionId>,
     ) {
-        let Some(slot) = self.slots.get_mut(relay) else {
+        let Some(slot) = self.slot_mut(relay, generation) else {
             return;
         };
         slot.installed = crate::plan::accepted(&slot.installed, planned, opened, closed);
@@ -525,4 +588,158 @@ impl Engine {
         slot.settled.retain(|id, _| live.contains(id));
         slot.completeness.retain(|id, _| live.contains(id));
     }
+
+    /// Index, within this relay's slots, of one whose connection can still
+    /// reach `authority`.
+    pub(crate) fn slot_index_for(&self, relay: &RelayUrl, authority: &Authority) -> Option<usize> {
+        slot_index_for(&self.slots, relay, authority)
+    }
+
+    pub(crate) fn slot(&self, relay: &RelayUrl, generation: Round) -> Option<&Slot> {
+        slot(&self.slots, relay, generation)
+    }
+
+    pub(crate) fn slot_mut(&mut self, relay: &RelayUrl, generation: Round) -> Option<&mut Slot> {
+        slot_mut(&mut self.slots, relay, generation)
+    }
+
+    /// Current demand this exact slot can serve, out of everything desired at
+    /// this relay. Derived fresh every time, from the slot's live reachability
+    /// against every current authority requirement — never stored, so a slot
+    /// that stops being able to reach some of what it once served simply stops
+    /// being handed that demand on the next reconcile pass.
+    ///
+    /// Assignment is exclusive, not merely reachable: an item goes to the
+    /// *first* slot (in this relay's stable order) that can serve it, the
+    /// same resolution `establish` itself uses. Filtering each slot only by
+    /// its own `can_serve` would let two slots that are both still reachable
+    /// for the same authority — a freshly opened, uncommitted connection
+    /// reaches everyone, same as any other — both claim the same demand.
+    ///
+    /// Assignment is sticky once made: an item already attached to this
+    /// slot's installed subscriptions stays here regardless of any later
+    /// drift in live reachability — a relay's own unanswered challenge, for
+    /// instance, stops a connection from being *chosen* for fresh anonymous
+    /// work without evicting anonymous work already riding it. Only an item
+    /// not yet attached anywhere is routed by live `can_serve`, and then
+    /// exclusively: the *first* slot (in this relay's stable order) that can
+    /// serve it, the same resolution `establish` itself uses. Filtering each
+    /// slot only by its own `can_serve` would let two slots both still
+    /// reachable for the same authority — a freshly opened, uncommitted
+    /// connection reaches everyone, same as any other — both claim it.
+    pub(crate) fn demand_for_slot(&self, relay: &RelayUrl, generation: Round) -> Vec<RelayDemand> {
+        let Some(slot) = self.slot(relay, generation) else {
+            return Vec::new();
+        };
+        let attached: BTreeSet<fava_subscriptions::DemandId> = slot
+            .installed
+            .ids()
+            .filter_map(|id| slot.installed.get(id))
+            .flat_map(|entry| entry.serves.iter().copied())
+            .collect();
+        self.registry
+            .desired()
+            .remove(relay)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|(item, authority)| {
+                attached.contains(&item.id())
+                    || slot_index_for(&self.slots, relay, authority)
+                        .and_then(|index| self.slots.get(relay)?.get(index))
+                        .is_some_and(|candidate| candidate.generation == generation)
+            })
+            .map(|(item, _)| item)
+            .collect()
+    }
+
+    /// Withdraw every live request and release every slot this relay holds.
+    pub(crate) fn release_relay(&mut self, relay: &RelayUrl) {
+        let Some(bucket) = self.slots.remove(relay) else {
+            return;
+        };
+        for slot in bucket {
+            self.teardown_slot(slot);
+        }
+        self.providers.diagnostics.forget_relay(relay);
+    }
+
+    /// Withdraw and release exactly one of this relay's slots.
+    pub(crate) fn release_slot(&mut self, relay: &RelayUrl, generation: Round) {
+        let Some(bucket) = self.slots.get_mut(relay) else {
+            return;
+        };
+        let Some(index) = bucket.iter().position(|slot| slot.generation == generation) else {
+            return;
+        };
+        let slot = bucket.remove(index);
+        let emptied = bucket.is_empty();
+        if emptied {
+            self.slots.remove(relay);
+            self.providers.diagnostics.forget_relay(relay);
+        }
+        self.teardown_slot(slot);
+    }
+
+    fn teardown_slot(&self, mut slot: Slot) {
+        // Cancelling the slot drops every subscription handle it held, and each
+        // handle sends the relay its own CLOSE on the way out.
+        slot.cancel.cancel();
+        let generation = slot.generation;
+        if let Some(lease) = slot.lease.take() {
+            self.release_lease(lease, generation);
+        }
+    }
+
+    pub(crate) fn release_lease(&self, lease: Box<RelaySessionLease>, generation: Round) {
+        operations::release(
+            &self.runtime,
+            lease,
+            generation,
+            self.providers.deadlines.close,
+        );
+    }
+}
+
+/// Index, within this relay's slots, of one whose connection can still reach
+/// `authority`.
+pub(crate) fn slot_index_for(
+    slots: &BTreeMap<RelayUrl, Vec<Slot>>,
+    relay: &RelayUrl,
+    authority: &Authority,
+) -> Option<usize> {
+    slots
+        .get(relay)?
+        .iter()
+        .position(|slot| slot.can_serve(authority))
+}
+
+/// Index, within this relay's slots, of the one stamped with this exact
+/// generation.
+fn slot_index_by_generation(
+    slots: &BTreeMap<RelayUrl, Vec<Slot>>,
+    relay: &RelayUrl,
+    generation: Round,
+) -> Option<usize> {
+    slots
+        .get(relay)?
+        .iter()
+        .position(|slot| slot.generation == generation)
+}
+
+pub(crate) fn slot<'a>(
+    slots: &'a BTreeMap<RelayUrl, Vec<Slot>>,
+    relay: &RelayUrl,
+    generation: Round,
+) -> Option<&'a Slot> {
+    let index = slot_index_by_generation(slots, relay, generation)?;
+    slots.get(relay)?.get(index)
+}
+
+pub(crate) fn slot_mut<'a>(
+    slots: &'a mut BTreeMap<RelayUrl, Vec<Slot>>,
+    relay: &RelayUrl,
+    generation: Round,
+) -> Option<&'a mut Slot> {
+    let index = slot_index_by_generation(slots, relay, generation)?;
+    slots.get_mut(relay)?.get_mut(index)
 }

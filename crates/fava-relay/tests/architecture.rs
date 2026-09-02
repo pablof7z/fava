@@ -1,7 +1,7 @@
 //! One authentication lifecycle vocabulary exists, and it lives here.
 //!
 //! `fava-auth` owns the lifecycle that produces these values; `fava-relay`
-//! owns the values themselves, beside the `RelayAccess` they describe. A
+//! owns the values themselves, beside the `Authority` they describe. A
 //! second state, outcome, or verdict enum anywhere in the workspace would be
 //! an alternate representation of an existing noun.
 
@@ -75,7 +75,7 @@ fn one_authentication_lifecycle_enum_exists_in_the_workspace() {
     );
     assert!(
         definitions[0].contains("fava-relay"),
-        "the lifecycle enum belongs beside RelayAccess in fava-relay, found at {}",
+        "the lifecycle enum belongs beside Authority in fava-relay, found at {}",
         definitions[0]
     );
 }

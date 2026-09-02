@@ -7,7 +7,7 @@
 use e2e_support::{CommandResult, E2eSession, ResultValue, ShellError};
 use fava::{Kind, PublicKey, QuerySnapshot, Receipt, ReceiptId, RelayDeliveryOutcome};
 use fava_auth::{AnswerError, AuthenticationDecision, AuthenticationDemandId};
-use fava_relay::{AuthenticationState, BoundedText, RelayAccess};
+use fava_relay::{Authentication, Authority, BoundedText};
 use std::num::NonZeroU64;
 
 /// Which relay-access lane a command names: the unauthenticated public lane,
@@ -17,9 +17,10 @@ pub(crate) enum AccessSpec {
     As(String),
 }
 
-pub(crate) const POLICY_USAGE: &str = "policy set <authenticate|decline|defer>";
+pub(crate) const POLICY_USAGE: &str = "policy set <authenticate:<account-alias>|decline|defer>";
 pub(crate) const AUTH_USAGE: &str = "auth <pending|answer|state> ...";
-pub(crate) const AUTH_ANSWER_USAGE: &str = "auth answer <demand-id> <authenticate|decline>";
+pub(crate) const AUTH_ANSWER_USAGE: &str =
+    "auth answer <demand-id> <authenticate:<account-alias>|decline>";
 pub(crate) const AUTH_STATE_USAGE: &str = "auth state <relay-alias> <public|as:<account-alias>>";
 pub(crate) const QUERY_OPEN_USAGE: &str =
     "query open <name> <public|as:<account>> <kind> <relay> [relay ...]";
@@ -40,12 +41,10 @@ pub(crate) fn resolve_relays(
 pub(crate) fn resolve_access(
     session: &E2eSession,
     spec: &AccessSpec,
-) -> Result<RelayAccess, ShellError> {
+) -> Result<Authority, ShellError> {
     match spec {
-        AccessSpec::Public => Ok(RelayAccess::Public),
-        AccessSpec::As(alias) => Ok(RelayAccess::Authenticated(
-            session.account(alias)?.public_key(),
-        )),
+        AccessSpec::Public => Ok(Authority::Unauthenticated),
+        AccessSpec::As(alias) => Ok(Authority::As(session.account(alias)?.public_key())),
     }
 }
 
@@ -61,22 +60,37 @@ pub(crate) fn parse_access(token: &str) -> Result<AccessSpec, ShellError> {
     }
 }
 
-pub(crate) fn parse_decision(value: &str) -> Result<AuthenticationDecision, ShellError> {
+/// Parse a policy or answer decision. Authenticating names the account in the
+/// same token, `authenticate:<account-alias>`: deciding to authenticate and
+/// deciding as whom are one decision (`fava_auth::AuthenticationDecision`
+/// carries no separate "as whom" elsewhere).
+pub(crate) fn parse_decision(
+    session: &E2eSession,
+    value: &str,
+) -> Result<AuthenticationDecision, ShellError> {
+    if let Some(alias) = value
+        .strip_prefix("authenticate:")
+        .filter(|alias| !alias.is_empty())
+    {
+        let as_of = session.account(alias)?.public_key();
+        return Ok(AuthenticationDecision::Authenticate { as_of });
+    }
     match value {
-        "authenticate" => Ok(AuthenticationDecision::Authenticate),
         "decline" => Ok(AuthenticationDecision::Decline),
         "defer" => Ok(AuthenticationDecision::Defer),
         _ => Err(ShellError::Usage {
-            usage: "authenticate | decline | defer",
+            usage: "authenticate:<account-alias> | decline | defer",
         }),
     }
 }
 
-pub(crate) fn decision_label(decision: AuthenticationDecision) -> &'static str {
+pub(crate) fn decision_label(decision: AuthenticationDecision) -> String {
     match decision {
-        AuthenticationDecision::Authenticate => "authenticate",
-        AuthenticationDecision::Decline => "decline",
-        AuthenticationDecision::Defer => "defer",
+        AuthenticationDecision::Authenticate { as_of } => {
+            format!("authenticate:{}", as_of.to_hex())
+        }
+        AuthenticationDecision::Decline => "decline".to_owned(),
+        AuthenticationDecision::Defer => "defer".to_owned(),
     }
 }
 
@@ -91,17 +105,17 @@ pub(crate) fn parse_demand_id(value: &str) -> Result<AuthenticationDemandId, She
         })
 }
 
-pub(crate) fn access_label(access: &RelayAccess) -> String {
+pub(crate) fn access_label(access: &Authority) -> String {
     match access {
-        RelayAccess::Public => "public".to_owned(),
-        RelayAccess::Authenticated(key) => format!("authenticated:{}", key.to_hex()),
+        Authority::Unauthenticated => "public".to_owned(),
+        Authority::As(key) => format!("authenticated:{}", key.to_hex()),
     }
 }
 
 pub(crate) fn state_result(
     relay: &str,
     access: &str,
-    state: Option<AuthenticationState>,
+    state: Option<Authentication>,
 ) -> Result<CommandResult, ShellError> {
     let (name, message, truncated) = state_fields(state);
     CommandResult::success("auth-state", format!("{relay} {access} is {name}"))
@@ -112,19 +126,15 @@ pub(crate) fn state_result(
         .with_field("truncated_bytes", truncated)
 }
 
-fn state_fields(state: Option<AuthenticationState>) -> (&'static str, String, u64) {
+fn state_fields(state: Option<Authentication>) -> (&'static str, String, u64) {
     match state {
         None => ("unknown", String::new(), 0),
-        Some(AuthenticationState::ChallengeReceived) => ("challenge-received", String::new(), 0),
-        Some(AuthenticationState::Declined) => ("declined", String::new(), 0),
-        Some(AuthenticationState::Attempted) => ("attempted", String::new(), 0),
-        Some(AuthenticationState::AwaitingAnswer) => ("awaiting-answer", String::new(), 0),
-        Some(AuthenticationState::Accepted) => ("accepted", String::new(), 0),
-        Some(AuthenticationState::AcceptedButStillRefused { message }) => {
-            bounded_text("accepted-but-still-refused", &message)
-        }
-        Some(AuthenticationState::Rejected { message }) => bounded_text("rejected", &message),
-        Some(AuthenticationState::Failed { reason }) => bounded_text("failed", &reason),
+        Some(Authentication::None) => ("none", String::new(), 0),
+        Some(Authentication::Requested { .. }) => ("requested", String::new(), 0),
+        Some(Authentication::Authenticating { .. }) => ("authenticating", String::new(), 0),
+        Some(Authentication::Authenticated { .. }) => ("authenticated", String::new(), 0),
+        Some(Authentication::Declined) => ("declined", String::new(), 0),
+        Some(Authentication::Failed { reason }) => bounded_text("failed", &reason),
     }
 }
 
@@ -179,11 +189,9 @@ pub(crate) fn receipt_result(
     receipt: &Receipt,
 ) -> Result<CommandResult, ShellError> {
     let mut destination_relays = Vec::new();
-    let mut destination_accesses = Vec::new();
     let mut destination_outcomes = Vec::new();
-    for (session, outcome) in receipt.destinations() {
-        destination_relays.push(ResultValue::text(session.relay.to_string()));
-        destination_accesses.push(ResultValue::text(access_label(&session.access)));
+    for (relay, outcome) in receipt.destinations() {
+        destination_relays.push(ResultValue::text(relay.to_string()));
         destination_outcomes.push(ResultValue::text(outcome_label(outcome)));
     }
     CommandResult::success(kind, summary)
@@ -196,10 +204,6 @@ pub(crate) fn receipt_result(
         .with_field("route_settled", receipt.route_settled)?
         .with_field("outcome", format!("{:?}", receipt.outcome))?
         .with_field("destination_relays", ResultValue::array(destination_relays))?
-        .with_field(
-            "destination_accesses",
-            ResultValue::array(destination_accesses),
-        )?
         .with_field(
             "destination_outcomes",
             ResultValue::array(destination_outcomes),
@@ -264,9 +268,9 @@ pub(crate) fn help() -> CommandResult {
                 [
                     "account new|import|add-pubkey|list|switch|replace|remove|clear",
                     "relay add|list|remove",
-                    "policy set <authenticate|decline|defer>",
+                    "policy set <authenticate:<account-alias>|decline|defer>",
                     "auth pending",
-                    "auth answer <demand-id> <authenticate|decline>",
+                    "auth answer <demand-id> <authenticate:<account-alias>|decline>",
                     "auth state <relay> <public|as:<account>>",
                     "query open <name> <public|as:<account>> <kind> <relay>...",
                     "query snapshot|wait|close <name> ...",

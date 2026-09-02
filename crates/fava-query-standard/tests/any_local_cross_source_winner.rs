@@ -2,7 +2,7 @@
 
 use fava_query::{Query, QueryEvaluator, SourceEvent, SourceKind, SourceRevision, SourceSnapshot};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::RelayEvent;
 use fava_write::{
     EventValue, LocalWriteEvent, PublicationEvidence, ReceiptId, RevisionId, SignatureState,
@@ -38,16 +38,13 @@ fn wrong_access_same_id_cannot_leak_occurrence_through_local_record()
     let signed = EventBuilder::new(Kind::Metadata, "shared")
         .custom_created_at(Timestamp::from(20))
         .finalize(&author)?;
-    let public_key = RelaySessionKey {
-        relay,
-        access: RelayAccess::Public,
-    };
     let relay_source = SourceSnapshot::current(
         SourceKind::EventCache,
         SourceRevision(1),
         vec![SourceEvent::Relay(RelayEvent::new(
             signed.clone(),
-            public_key,
+            relay,
+            Authority::Unauthenticated,
             Timestamp::from(1),
         ))],
     );
@@ -56,7 +53,7 @@ fn wrong_access_same_id_cannot_leak_occurrence_through_local_record()
         SourceRevision(1),
         vec![SourceEvent::Local(local(signed.clone())?)],
     );
-    let query = Query::events().with_relay_access(RelayAccess::Authenticated(alice.public_key()));
+    let query = Query::events().with_relay_access(Authority::As(alice.public_key()));
     let result = StandardQueryEvaluator.evaluate(&query, &[relay_source, write_source])?;
     assert_eq!(result.events.len(), 1);
     assert_eq!(result.events[0].id(), signed.id);

@@ -6,7 +6,6 @@ use std::time::Duration;
 use fava::{Fava, Kind, Receipt, ReceiptId};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{Query, QuerySnapshot};
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
     RouterSession,
@@ -182,16 +181,7 @@ fn contribution(relays: &[RelayUrl]) -> RouteContribution {
         destinations: relays
             .iter()
             .cloned()
-            .map(|relay| {
-                RouteDestination::new(
-                    RelaySessionKey {
-                        relay,
-                        access: RelayAccess::Public,
-                    },
-                    BTreeSet::new(),
-                    "controlled route revision",
-                )
-            })
+            .map(|relay| RouteDestination::new(relay, BTreeSet::new(), "controlled route revision"))
             .collect(),
         coverage: BTreeMap::new(),
         unresolved: BTreeSet::new(),

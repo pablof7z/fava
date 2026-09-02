@@ -6,9 +6,9 @@ use std::sync::Arc;
 use fava_query::{
     ObservationId, Query, QueryAcquisition, QueryBranchId, QuerySnapshot, RouteOrigin,
 };
-use fava_relay::RelaySessionKey;
 use fava_routing::{RoutePlan, RouteRequest, Router, RouterSession};
 use fava_subscriptions::{RelayDemand, demand_for_query};
+use nostr::types::RelayUrl;
 
 use crate::error::ObserveError;
 
@@ -56,9 +56,8 @@ pub(crate) fn bind(
     let request = RouteRequest::Read(query.clone());
     match query.source().acquisition() {
         QueryAcquisition::Explicit(relays) => {
-            let plan =
-                RoutePlan::explicit(relays.iter().cloned(), query.access(), &request.targets())
-                    .map_err(|error| ObserveError::Relay(error.to_string()))?;
+            let plan = RoutePlan::explicit(relays.iter().cloned(), &request.targets())
+                .map_err(|error| ObserveError::Relay(error.to_string()))?;
             Ok(RouteBinding {
                 plan,
                 session: None,
@@ -100,7 +99,7 @@ pub(crate) fn demand_for(
     query: &Query,
     plan: &RoutePlan,
     origin: Origin,
-) -> BTreeMap<RelaySessionKey, (RelayDemand, RouteOrigin)> {
+) -> BTreeMap<RelayUrl, (RelayDemand, RouteOrigin)> {
     let demand = demand_for_query(id, branch, query);
     plan.destinations
         .keys()

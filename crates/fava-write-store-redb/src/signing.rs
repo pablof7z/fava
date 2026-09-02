@@ -341,7 +341,7 @@ impl RedbWriteStore {
                 .map(|session| (session, fava_write::RelayDeliveryOutcome::Pending))
                 .collect()
         } else {
-            destinations(&receipt.routing, &receipt.access)
+            destinations(&receipt.routing)
         };
         let publication = PublicationEvidence {
             receipt_id,

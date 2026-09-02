@@ -1,4 +1,3 @@
-use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, PublicationEvidence, Receipt, ReceiptId,
@@ -8,6 +7,7 @@ use fava_write_store::{
     WriteStoreError, apply_route_to_receipt, validate_current_revision, validate_delivery_outcome,
     validate_receipt_text,
 };
+use nostr::types::RelayUrl;
 
 use super::MemoryWriteStore;
 use super::model::{UnsignedEventView, destinations, settle};
@@ -275,7 +275,7 @@ impl MemoryWriteStore {
                 .map(|session| (session, RelayDeliveryOutcome::Pending))
                 .collect()
         } else {
-            destinations(&receipt.routing, &receipt.access)
+            destinations(&receipt.routing)
         };
         let publication = PublicationEvidence {
             receipt_id,
@@ -351,7 +351,7 @@ impl MemoryWriteStore {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
     ) -> Result<Receipt, WriteStoreError> {
         let mut state = self.lock_state()?;
@@ -414,7 +414,7 @@ impl MemoryWriteStore {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError> {

@@ -1,22 +1,17 @@
 # fava-relay
 
-Neutral logical relay identity. This crate owns only public/authenticated access
-and the relay URL plus access key. Transport generations remain transport-owned.
+Neutral logical relay identity, and what work requires of a connection.
+Access is not identity: a relay is named by its URL alone, and work states
+the `Authority` it needs of a connection — no authentication, or
+authentication as one exact account. Connectivity and authentication are
+facts a connection carries, not facts a relay is keyed by.
 
 ```rust
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use nostr::key::Keys;
-use nostr::types::RelayUrl;
 
-let relay = RelayUrl::parse("wss://relay.example")?;
-let public = RelaySessionKey {
-    relay: relay.clone(),
-    access: RelayAccess::Public,
-};
-let authenticated = RelaySessionKey {
-    relay,
-    access: RelayAccess::Authenticated(Keys::generate().public_key()),
-};
-assert_ne!(public, authenticated);
+let unauthenticated = Authority::Unauthenticated;
+let authenticated = Authority::As(Keys::generate().public_key());
+assert_ne!(unauthenticated, authenticated);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

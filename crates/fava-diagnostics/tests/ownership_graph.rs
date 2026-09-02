@@ -10,15 +10,11 @@ use fava_diagnostics::{
     RelaySessionState, RelaySourceState, Round, WireSubscriptionDiagnostic,
 };
 use fava_query::RoundIssuer;
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_wire::SubscriptionId;
 use nostr::types::{RelayUrl, Timestamp};
 
-fn session(name: &str) -> RelaySessionKey {
-    RelaySessionKey {
-        relay: RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL"),
-        access: RelayAccess::Public,
-    }
+fn session(name: &str) -> RelayUrl {
+    RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
 }
 
 fn observation(value: u64) -> ObservationId {
@@ -43,7 +39,7 @@ fn generation(sequence: u64) -> Round {
 }
 
 fn relay_fact(
-    session: RelaySessionKey,
+    session: RelayUrl,
     sequence: u64,
     holders: usize,
     subscription: SubscriptionId,
@@ -62,11 +58,12 @@ fn relay_fact(
             closed: None,
         }],
         reconnect_attempts: 0,
+        authentication: fava_relay::Authentication::None,
     }
 }
 
 fn demand(
-    session: &RelaySessionKey,
+    session: &RelayUrl,
     branch: QueryBranchId,
     state: RelaySourceState,
 ) -> LogicalDemandDiagnostic {
@@ -78,7 +75,7 @@ fn demand(
 }
 
 fn binding(
-    session: &RelaySessionKey,
+    session: &RelayUrl,
     subscription: &SubscriptionId,
     holders: usize,
 ) -> ObservationWireBinding {
@@ -91,7 +88,7 @@ fn binding(
 
 fn query_fact(
     observation: ObservationId,
-    route_relays: Vec<RelaySessionKey>,
+    route_relays: Vec<RelayUrl>,
     demand: Vec<LogicalDemandDiagnostic>,
     wire: Vec<ObservationWireBinding>,
     coalesced_updates: u64,
@@ -228,6 +225,7 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
                 closed: Some(BoundedText::new(&hostile)),
             }],
             reconnect_attempts: 1,
+            authentication: fava_relay::Authentication::None,
         });
     }
 
@@ -248,15 +246,19 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
         assert!(closed.truncated_bytes() > 0);
     }
 
-    // Republishing the same session replaces rather than evicting a peer.
+    // Republishing the same session under the same generation replaces
+    // rather than evicting a peer: it is the same connection reporting a
+    // later fact about itself.
     let held = snapshot.relays[1].session.clone();
+    let held_generation = snapshot.relays[1].generation;
     diagnostics.relay(RelayDiagnostic {
         session: held.clone(),
-        generation: Some(generation(9)),
+        generation: held_generation,
         state: RelaySessionState::Closed,
         holders: 0,
         subscriptions: Vec::new(),
         reconnect_attempts: 0,
+        authentication: fava_relay::Authentication::None,
     });
     let replaced = diagnostics.snapshot();
     assert_eq!(replaced.relays.len(), 2);
@@ -266,8 +268,32 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
         .iter()
         .find(|fact| fact.session == held)
         .expect("republished session is retained once");
-    assert_eq!(current.generation.map(Round::sequence), NonZeroU64::new(9));
+    assert_eq!(current.generation, held_generation);
     assert_eq!(current.state, RelaySessionState::Closed);
+
+    // A later generation of the *same* session is a different connection —
+    // one relay may hold more than one at once (GOALS:3.3) — and is tracked
+    // as its own fact rather than replacing the one above.
+    diagnostics.relay(RelayDiagnostic {
+        session: held.clone(),
+        generation: Some(generation(9)),
+        state: RelaySessionState::Open,
+        holders: 1,
+        subscriptions: Vec::new(),
+        reconnect_attempts: 0,
+        authentication: fava_relay::Authentication::None,
+    });
+    let with_second_connection = diagnostics.snapshot();
+    let same_session: Vec<_> = with_second_connection
+        .relays
+        .iter()
+        .filter(|fact| fact.session == held)
+        .collect();
+    assert_eq!(
+        same_session.len(),
+        2,
+        "a second connection to the same relay is a second fact, not a replacement"
+    );
 }
 
 /// A limit shortfall is attributable to one scope, and the bound-kind and scope

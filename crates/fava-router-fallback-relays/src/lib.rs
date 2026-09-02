@@ -5,7 +5,6 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use fava_query::{Query, QuerySnapshot};
-use fava_relay::RelaySessionKey;
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
@@ -64,15 +63,7 @@ impl FallbackRelayRouter {
         if targets.is_empty() {
             return RouteContribution::default();
         }
-        let sessions: BTreeSet<_> = self
-            .relays
-            .iter()
-            .cloned()
-            .map(|relay| RelaySessionKey {
-                relay,
-                access: request.access(),
-            })
-            .collect();
+        let sessions: BTreeSet<_> = self.relays.clone();
         let coverage = targets
             .iter()
             .cloned()

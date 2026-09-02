@@ -4,7 +4,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 use fava_query::{EventRecord, Query, QuerySnapshot};
-use fava_relay::RelaySessionKey;
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
@@ -15,7 +14,7 @@ use nostr::types::RelayUrl;
 /// Router contributing relays justified by Nostr references and observations.
 pub struct HintRouter {
     name: String,
-    evidence: Arc<Mutex<BTreeMap<EventId, BTreeSet<RelaySessionKey>>>>,
+    evidence: Arc<Mutex<BTreeMap<EventId, BTreeSet<RelayUrl>>>>,
 }
 
 impl HintRouter {
@@ -44,7 +43,7 @@ impl HintRouter {
     }
 
     fn contribution(&self, request: &RouteRequest) -> RouteContribution {
-        let mut by_target = BTreeMap::<RouteTarget, BTreeSet<RelaySessionKey>>::new();
+        let mut by_target = BTreeMap::<RouteTarget, BTreeSet<RelayUrl>>::new();
         if let Some(event) = request.event() {
             for tag in event.tags() {
                 let values = tag.as_slice();
@@ -64,10 +63,7 @@ impl HintRouter {
                 by_target
                     .entry(RouteTarget::ReferencedEvent(event_id))
                     .or_default()
-                    .insert(RelaySessionKey {
-                        relay,
-                        access: request.access(),
-                    });
+                    .insert(relay);
             }
         }
         let evidence = self

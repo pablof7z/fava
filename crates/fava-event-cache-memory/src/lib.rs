@@ -10,10 +10,10 @@ use fava_query::{
     SourceChanges, SourceCoverage, SourceEvent, SourceKind, SourceRetraction, SourceRevision,
     SourceSnapshot, SourceStatus,
 };
-use fava_relay::RelaySessionKey;
 use fava_state::{EventStateMutation, RelayEvent, RetractionCause};
 use nostr::event::{EventId, Kind};
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 /// Bounded in-memory cache with coherent latest-state observations.
@@ -28,7 +28,7 @@ pub struct MemoryEventCache {
 #[derive(Clone, Debug, Default)]
 struct CacheState {
     revision: u64,
-    events: BTreeMap<(EventId, RelaySessionKey), RelayEvent>,
+    events: BTreeMap<(EventId, RelayUrl), RelayEvent>,
     /// Retractions applied to reach `revision`. Reset by every commit, so a
     /// snapshot reports exactly what its own revision removed.
     retractions: Vec<SourceRetraction>,
@@ -173,7 +173,7 @@ impl MemoryEventCache {
 impl EventCache for MemoryEventCache {
     fn source_coverage(
         &self,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         filter: &Filter,
     ) -> Result<Option<SourceCoverage>, EventCacheError> {
         let guard = self

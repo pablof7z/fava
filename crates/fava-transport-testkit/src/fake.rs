@@ -3,15 +3,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use fava_relay::RelaySessionKey;
+use fava_relay::Authority;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, LeaseRelease, OpenRelaySession, RelayConnection,
     RelaySession, RelaySessionFuture, RelaySessionIdentity, RelaySessionLease, ReleaseFuture,
     ReleaseOutcome, Transport, TransportError, TransportFailure, TransportShutdownFuture,
 };
+use nostr::types::RelayUrl;
 use tokio::sync::{Notify, broadcast};
 
 use crate::session::FakeSession;
@@ -33,9 +34,11 @@ pub struct FakeTransport {
 const REQUEST_BACKLOG: usize = 64;
 
 struct FakeState {
-    entries: Mutex<BTreeMap<RelaySessionKey, Entry>>,
-    dials: Mutex<BTreeMap<RelaySessionKey, Arc<AtomicUsize>>>,
-    held: Mutex<BTreeSet<RelaySessionKey>>,
+    /// Every live connection to a relay, grouped by relay: more than one can
+    /// exist when a request needs an authority none of the others can reach.
+    entries: Mutex<BTreeMap<RelayUrl, Vec<Entry>>>,
+    dials: Mutex<BTreeMap<RelayUrl, Arc<AtomicUsize>>>,
+    held: Mutex<BTreeSet<RelayUrl>>,
     gate: Notify,
     shutting_down: AtomicBool,
     generations: Arc<AtomicU64>,
@@ -62,6 +65,23 @@ impl Default for FakeState {
 struct Entry {
     session: Arc<FakeSession>,
     holders: usize,
+    /// Every authority an acquire has ever been satisfied under on this
+    /// connection. Introspection (`session`, `relay`, `holders`) looks a
+    /// connection up by this: it names what a test acquired, and must keep
+    /// naming it even after the connection's live authentication moves on to
+    /// a refusal that can no longer reach anything.
+    served: BTreeSet<Authority>,
+}
+
+impl Entry {
+    /// Whether this connection can still reach `authority`, right now.
+    fn can_serve(&self, authority: &Authority) -> bool {
+        self.session
+            .router
+            .connection()
+            .borrow()
+            .can_serve(authority)
+    }
 }
 
 impl FakeTransport {
@@ -71,71 +91,84 @@ impl FakeTransport {
         Self::default()
     }
 
-    /// The live session for one key, for reading what its connection says.
+    /// The live session reachable for `relay` under `authority`, for reading
+    /// what its connection says.
     ///
     /// # Panics
     ///
     /// If a previous test thread panicked while holding the registry lock.
     #[must_use]
-    pub fn session(&self, key: &RelaySessionKey) -> Option<Arc<dyn RelaySession>> {
+    pub fn session(
+        &self,
+        relay: &RelayUrl,
+        authority: &Authority,
+    ) -> Option<Arc<dyn RelaySession>> {
         let entries = self.state.entries.lock().expect("registry is not poisoned");
         entries
-            .get(key)
+            .get(relay)?
+            .iter()
+            .find(|entry| entry.served.contains(authority))
             .map(|entry| Arc::clone(&entry.session) as Arc<dyn RelaySession>)
     }
 
-    /// Controls for the session currently registered under `key`.
+    /// Controls for the connection currently reachable for `relay` under
+    /// `authority`.
     ///
     /// # Panics
     ///
     /// If a previous test thread panicked while holding the registry lock.
     #[must_use]
-    pub fn relay(&self, key: &RelaySessionKey) -> Option<FakeRelay> {
+    pub fn relay(&self, relay: &RelayUrl, authority: &Authority) -> Option<FakeRelay> {
         let entries = self.state.entries.lock().expect("registry is not poisoned");
-        entries.get(key).map(|entry| FakeRelay {
-            session: Arc::clone(&entry.session),
-        })
+        entries
+            .get(relay)?
+            .iter()
+            .find(|entry| entry.served.contains(authority))
+            .map(|entry| FakeRelay {
+                session: Arc::clone(&entry.session),
+            })
     }
 
-    /// Total sockets opened for `key`, counting every reconnect.
+    /// Total sockets opened for `relay`, counting every reconnect and every
+    /// distinct connection.
     ///
     /// # Panics
     ///
     /// If a previous test thread panicked while holding the dial counters.
     #[must_use]
-    pub fn dials(&self, key: &RelaySessionKey) -> usize {
+    pub fn dials(&self, relay: &RelayUrl) -> usize {
         self.state
             .dials
             .lock()
             .expect("dial counters are not poisoned")
-            .get(key)
+            .get(relay)
             .map_or(0, |count| count.load(Ordering::SeqCst))
     }
 
-    /// Suspend establishment for `key` so an acquire stays pending.
+    /// Suspend establishment for `relay` so an acquire stays pending.
     ///
     /// # Panics
     ///
     /// If a previous test thread panicked while holding the establishment gate.
-    pub fn hold_establishment(&self, key: &RelaySessionKey) {
+    pub fn hold_establishment(&self, relay: &RelayUrl) {
         self.state
             .held
             .lock()
             .expect("establishment gate is not poisoned")
-            .insert(key.clone());
+            .insert(relay.clone());
     }
 
-    /// Let a held establishment for `key` complete.
+    /// Let a held establishment for `relay` complete.
     ///
     /// # Panics
     ///
     /// If a previous test thread panicked while holding the establishment gate.
-    pub fn release_establishment(&self, key: &RelaySessionKey) {
+    pub fn release_establishment(&self, relay: &RelayUrl) {
         self.state
             .held
             .lock()
             .expect("establishment gate is not poisoned")
-            .remove(key);
+            .remove(relay);
         self.state.gate.notify_waiters();
     }
 
@@ -149,7 +182,7 @@ impl FakeTransport {
         self.state.generations.store(u64::MAX, Ordering::SeqCst);
     }
 
-    async fn await_establishment(&self, key: &RelaySessionKey) {
+    async fn await_establishment(&self, relay: &RelayUrl) {
         loop {
             let notified = self.state.gate.notified();
             if !self
@@ -157,7 +190,7 @@ impl FakeTransport {
                 .held
                 .lock()
                 .expect("establishment gate is not poisoned")
-                .contains(key)
+                .contains(relay)
             {
                 return;
             }
@@ -172,7 +205,7 @@ impl Transport for FakeTransport {
             if self.state.shutting_down.load(Ordering::SeqCst) {
                 return Err(TransportError::ShuttingDown);
             }
-            if let Some(lease) = self.state.reuse(&request.key) {
+            if let Some(lease) = self.state.reuse(&request.relay, &request.authority) {
                 return Ok(lease);
             }
             let generation = self
@@ -181,7 +214,7 @@ impl Transport for FakeTransport {
                 .ok_or(TransportError::GenerationExhausted)?;
             if tokio::time::timeout(
                 request.deadlines.establish,
-                self.await_establishment(&request.key),
+                self.await_establishment(&request.relay),
             )
             .await
             .is_err()
@@ -200,10 +233,12 @@ impl Transport for FakeTransport {
         self.state.requests.subscribe()
     }
 
-    fn holders(&self, key: &RelaySessionKey) -> Option<NonZeroUsize> {
+    fn holders(&self, relay: &RelayUrl, authority: &Authority) -> Option<NonZeroUsize> {
         let entries = self.state.entries.lock().expect("registry is not poisoned");
         entries
-            .get(key)
+            .get(relay)?
+            .iter()
+            .find(|entry| entry.served.contains(authority))
             .and_then(|entry| NonZeroUsize::new(entry.holders))
     }
 
@@ -214,6 +249,7 @@ impl Transport for FakeTransport {
                 let mut entries = self.state.entries.lock().expect("registry is not poisoned");
                 std::mem::take(&mut *entries)
                     .into_values()
+                    .flatten()
                     .map(|entry| entry.session)
                     .collect()
             };
@@ -236,10 +272,18 @@ impl FakeState {
         RelayConnection::new(previous + 1)
     }
 
-    fn reuse(self: &Arc<Self>, key: &RelaySessionKey) -> Option<RelaySessionLease> {
+    fn reuse(
+        self: &Arc<Self>,
+        relay: &RelayUrl,
+        authority: &Authority,
+    ) -> Option<RelaySessionLease> {
         let mut entries = self.entries.lock().expect("registry is not poisoned");
-        let entry = entries.get_mut(key)?;
+        let entry = entries
+            .get_mut(relay)?
+            .iter_mut()
+            .find(|entry| entry.can_serve(authority))?;
         entry.holders += 1;
+        entry.served.insert(*authority);
         let session = Arc::clone(&entry.session);
         let identity = session.identity();
         Some(RelaySessionLease::new(
@@ -258,7 +302,7 @@ impl FakeState {
             let mut dials = self.dials.lock().expect("dial counters are not poisoned");
             Arc::clone(
                 dials
-                    .entry(request.key.clone())
+                    .entry(request.relay.clone())
                     .or_insert_with(|| Arc::new(AtomicUsize::new(0))),
             )
         };
@@ -273,39 +317,51 @@ impl FakeState {
         self.entries
             .lock()
             .expect("registry is not poisoned")
-            .insert(
-                request.key.clone(),
-                Entry {
-                    session: Arc::clone(&session),
-                    holders: 1,
-                },
-            );
-        let watched: Arc<dyn RelaySession> = Arc::clone(&session) as Arc<dyn RelaySession>;
+            .entry(request.relay.clone())
+            .or_default()
+            .push(Entry {
+                session: Arc::clone(&session),
+                holders: 1,
+                served: BTreeSet::from([request.authority]),
+            });
+        // Only a weak reference is handed to the task: it must not be the
+        // thing keeping this session alive, or it would need itself to end.
+        let watched: Weak<dyn RelaySession> =
+            Arc::downgrade(&(Arc::clone(&session) as Arc<dyn RelaySession>));
         let requests = self.requests.clone();
         tokio::spawn(async move {
-            fava_transport::publish_authentication_requests(&watched, requests).await;
+            fava_transport::publish_authentication_requests(watched, requests).await;
         });
         RelaySessionLease::new(session, Arc::clone(self) as Arc<dyn LeaseRelease>, identity)
     }
 
-    fn decrement(&self, key: &RelaySessionKey) -> Option<(Arc<FakeSession>, ReleaseOutcome)> {
+    fn decrement(
+        &self,
+        identity: &RelaySessionIdentity,
+    ) -> Option<(Arc<FakeSession>, ReleaseOutcome)> {
         let mut entries = self.entries.lock().expect("registry is not poisoned");
-        let entry = entries.get_mut(key)?;
-        entry.holders = entry.holders.saturating_sub(1);
-        if let Some(holders) = NonZeroUsize::new(entry.holders) {
+        let connections = entries.get_mut(&identity.relay)?;
+        let position = connections
+            .iter()
+            .position(|entry| entry.session.identity().connection == identity.connection)?;
+        connections[position].holders = connections[position].holders.saturating_sub(1);
+        if let Some(holders) = NonZeroUsize::new(connections[position].holders) {
             return Some((
-                Arc::clone(&entry.session),
+                Arc::clone(&connections[position].session),
                 ReleaseOutcome::Retained { holders },
             ));
         }
-        let entry = entries.remove(key)?;
+        let entry = connections.remove(position);
+        if connections.is_empty() {
+            entries.remove(&identity.relay);
+        }
         Some((entry.session, ReleaseOutcome::Closed))
     }
 }
 
 impl LeaseRelease for FakeState {
     fn release_now(&self, identity: &RelaySessionIdentity) {
-        if let Some((session, ReleaseOutcome::Closed)) = self.decrement(&identity.key) {
+        if let Some((session, ReleaseOutcome::Closed)) = self.decrement(identity) {
             session.mark_closed();
         }
     }
@@ -315,7 +371,7 @@ impl LeaseRelease for FakeState {
         identity: &'a RelaySessionIdentity,
     ) -> ReleaseFuture<'a> {
         Box::pin(async move {
-            let Some((session, outcome)) = self.decrement(&identity.key) else {
+            let Some((session, outcome)) = self.decrement(identity) else {
                 return Err(TransportError::Closed(identity.clone()));
             };
             if outcome == ReleaseOutcome::Closed {

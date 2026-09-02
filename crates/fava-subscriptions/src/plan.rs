@@ -5,10 +5,10 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use fava_relay::RelaySessionKey;
 use fava_transport::BoundedText;
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 use thiserror::Error;
 
 use crate::demand::DemandId;
@@ -294,7 +294,7 @@ pub enum ShortfallReason {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubscriptionPlan {
     /// Exact relay session this plan applies to.
-    pub relay: RelaySessionKey,
+    pub relay: RelayUrl,
     /// Monotonic revision of the desired plan.
     pub revision: PlanRevision,
     /// Wire subscriptions to open now. Never contains an installed id.

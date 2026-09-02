@@ -20,6 +20,25 @@ See proposal.md — Why. The measurements there come from five independent canva
 
 *Alternative.* One enum with authentication states threaded between `Connected` and `Ended` reads well on a diagram and badly in code: `Ended` and `Authenticated` are not alternatives to each other, and expressing "connected, whatever its authentication" needs a match over half the variants.
 
+**Two facts, not one enum.** A connection's authentication answers two separate questions, and an independent review found both defects that follow from conflating them.
+
+What the relay has accepted on this connection is one fact. How the outstanding challenge is going is another. A single enum forced them together, so `Failed` came to mean both "the relay refused our proof" and "we could not produce one" — and six of its nine producers are the second kind, where the relay was told nothing at all. The most reachable is a connection with no account, challenged by a relay that challenges everyone: it lands in `Failed` and can no longer carry the anonymous work it exists for. The mirror is worse: a connection the relay accepted as one account, challenged again and declined, lands in `Declined`, which the matching rule reads as free to carry anonymous work — on a connection the relay knows by name.
+
+So:
+
+```rust
+pub struct Authentication {
+    /// Who the relay has accepted on this connection. Once it knows, it knows.
+    pub established: Option<PublicKey>,
+    /// How the challenge in front of us is going.
+    pub progress: Progress,
+}
+```
+
+`can_serve(Unauthenticated)` reads `established`, and nothing else. Failing to answer leaves it `None`, because the relay learned nothing; being refused by the relay leaves it `None` for the same reason. Only acceptance sets it, and nothing clears it while the connection lives. That is what makes anonymity a property of the type rather than of an enumeration everyone must reason about.
+
+*Alternative.* Keeping one enum and adding variants — a refused-by-us distinct from a refused-by-them, a declined-after-accepted — reaches nine states whose only real distinction is a yes/no about the relay, and every reader has to get the grouping right. The split makes the question that matters a field.
+
 **Matching by reachability, not by name.** Work states its requirement; a connection serves it if it can still reach that state. Unauthenticated can still become Bob's; authenticated as Alice cannot become Bob's or become anonymous. So a relay may hold more than one connection, but because two pieces of work genuinely cannot share one — not because a key said so.
 
 This replaces access-as-identity and is strictly more expressive: the old keying could not represent "either of these will do", which is what an unauthenticated connection is to work that will authenticate. It also makes the anonymity property explicit. Under the old design an anonymous write avoided an authenticated socket because a different key named a different socket; under this one it avoids it because an authenticated connection cannot satisfy the requirement.

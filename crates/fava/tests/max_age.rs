@@ -9,7 +9,7 @@ use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{QueryBranchId, RelaySourceState, RelayUrl};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::Transport;
 use fava_transport_testkit::{FakeRelay, FakeTransport};
@@ -82,7 +82,12 @@ async fn limited_eose_does_not_create_coverage() {
     );
     first.close();
     wait_until(|| !withdrawals(&peer).is_empty()).await;
-    wait_until(|| transport.holders(&key(&relay)).is_none()).await;
+    wait_until(|| {
+        transport
+            .holders(&key(&relay), &Authority::Unauthenticated)
+            .is_none()
+    })
+    .await;
 
     let second = fava.observe(query.clone()).await.expect("reopen");
     let reopened_peer = established(&transport, &relay).await;
@@ -174,17 +179,16 @@ fn relay(name: &str) -> RelayUrl {
     RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
 }
 
-fn key(relay: &RelayUrl) -> RelaySessionKey {
-    RelaySessionKey {
-        relay: relay.clone(),
-        access: RelayAccess::Public,
-    }
+fn key(relay: &RelayUrl) -> RelayUrl {
+    relay.clone()
 }
 
 async fn established(transport: &FakeTransport, relay: &RelayUrl) -> FakeRelay {
     let key = key(relay);
-    wait_until(|| transport.relay(&key).is_some()).await;
-    transport.relay(&key).expect("relay established")
+    wait_until(|| transport.relay(&key, &Authority::Unauthenticated).is_some()).await;
+    transport
+        .relay(&key, &Authority::Unauthenticated)
+        .expect("relay established")
 }
 
 async fn only_request(peer: &FakeRelay) -> SubscriptionId {

@@ -7,12 +7,12 @@ Evaluation qualifies each atomic relay contribution by access and, for
 
 ```rust
 use fava_query::Query;
-use fava_relay::RelayAccess;
+use fava_relay::Authority;
 use nostr::key::Keys;
 
-let public = Query::events().with_relay_access(RelayAccess::Public);
+let public = Query::events().with_relay_access(Authority::Unauthenticated);
 let authenticated = Query::events()
-    .with_relay_access(RelayAccess::Authenticated(Keys::generate().public_key()));
+    .with_relay_access(Authority::As(Keys::generate().public_key()));
 assert_ne!(public, authenticated);
 ```
 

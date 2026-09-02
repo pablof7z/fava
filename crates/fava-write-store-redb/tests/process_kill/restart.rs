@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use fava_query::{Query, QuerySnapshot};
-use fava_relay::RelayAccess;
 use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
     RouterSession,
@@ -216,10 +215,7 @@ impl RouterSession for ImmediateSession {
 fn route_contribution(relay: RelayUrl) -> RouteContribution {
     RouteContribution {
         destinations: vec![RouteDestination::new(
-            RelaySessionKey {
-                relay,
-                access: RelayAccess::Public,
-            },
+            relay,
             BTreeSet::default(),
             "generation-bound route",
         )],
@@ -266,14 +262,8 @@ async fn assert_router_reopens_for_current_generation(path: PathBuf, generation:
         receipt.current.publication.revision_id,
         RevisionId::try_from(generation + 1).expect("nonzero revision identity")
     );
-    assert!(receipt.destinations().contains_key(&RelaySessionKey {
-        relay: router.current.clone(),
-        access: RelayAccess::Public,
-    }));
-    assert!(!receipt.destinations().contains_key(&RelaySessionKey {
-        relay: router.stale.clone(),
-        access: RelayAccess::Public,
-    }));
+    assert!(receipt.destinations().contains_key(&router.current.clone()));
+    assert!(!receipt.destinations().contains_key(&router.stale.clone()));
     assert_eq!(router.opens.load(Ordering::SeqCst), 2);
     assert_eq!(router.closes.load(Ordering::SeqCst), 1);
 }

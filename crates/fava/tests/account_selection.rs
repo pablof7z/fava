@@ -12,7 +12,7 @@ use fava::{EventBuilder, Fava, Kind, Query};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::RelayAccess;
+use fava_relay::Authority;
 use fava_signer_local::LocalSigner;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_testkit::FakeTransport;
@@ -175,12 +175,10 @@ async fn one_selection_serves_a_read_and_a_write() {
         tokio::task::yield_now().await;
     }
 
-    let authenticated = fava_relay::RelaySessionKey {
-        relay,
-        access: RelayAccess::Authenticated(alice.public_key()),
-    };
     assert!(
-        transport.relay(&authenticated).is_some(),
+        transport
+            .relay(&relay, &Authority::As(alice.public_key()))
+            .is_some(),
         "the read ran over the selected account's session"
     );
     assert_eq!(
@@ -200,18 +198,16 @@ async fn a_query_under_a_selection_uses_that_accounts_authority() {
     let query = Query::events()
         .only_from_relays([relay.clone()])
         .expect("relay selection")
-        .with_relay_access(RelayAccess::Authenticated(alice.public_key()));
+        .with_relay_access(Authority::As(alice.public_key()));
     let _observation = fava.observe(query).await.expect("live query opens");
     for _ in 0..64 {
         tokio::task::yield_now().await;
     }
 
-    let authenticated = fava_relay::RelaySessionKey {
-        relay,
-        access: RelayAccess::Authenticated(alice.public_key()),
-    };
     assert!(
-        transport.relay(&authenticated).is_some(),
+        transport
+            .relay(&relay, &Authority::As(alice.public_key()))
+            .is_some(),
         "the read ran over the selected account's session"
     );
 }
@@ -240,16 +236,16 @@ async fn an_authenticated_write_routes_under_its_own_authority() {
         .expect("the receipt exists");
     assert_eq!(
         receipt.access,
-        RelayAccess::Authenticated(alice.public_key()),
+        Authority::As(alice.public_key()),
         "the write recorded the authority it was accepted under"
     );
-    assert!(
-        receipt
-            .destinations()
-            .keys()
-            .all(|session| session.access == RelayAccess::Authenticated(alice.public_key())),
-        "every destination is a session under that authority, got {:?}",
-        receipt.destinations().keys().collect::<Vec<_>>()
+    // A destination is a bare relay now: the receipt's authority is the only
+    // record of what it was accepted under, so the destination set is simply
+    // the explicit route, not a per-destination access to compare.
+    assert_eq!(
+        receipt.destinations().keys().collect::<Vec<_>>(),
+        vec![&relay],
+        "every destination is the explicit route named",
     );
 }
 
@@ -276,7 +272,7 @@ async fn a_write_with_no_selection_is_public_work() {
         .expect("the receipt exists");
     assert_eq!(
         receipt.access,
-        RelayAccess::Public,
+        Authority::Unauthenticated,
         "a current account may author work without making the connection authenticated"
     );
 }

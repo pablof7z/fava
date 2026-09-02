@@ -17,7 +17,7 @@ use fava_publication::Publication;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query::{Query, QueryEvaluator, QuerySnapshot, QuerySource};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
     RouterSession,
@@ -476,10 +476,7 @@ impl CountingRouter {
     fn contribution(&self, request: &RouteRequest) -> RouteContribution {
         RouteContribution {
             destinations: vec![RouteDestination::new(
-                RelaySessionKey {
-                    relay: self.relay.clone(),
-                    access: RelayAccess::Public,
-                },
+                self.relay.clone(),
                 request.targets(),
                 "semantic test route",
             )],
@@ -563,7 +560,7 @@ impl Transport for NoopTransport {
         tokio::sync::broadcast::Sender::new(1).subscribe()
     }
 
-    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+    fn holders(&self, _relay: &RelayUrl, _authority: &Authority) -> Option<NonZeroUsize> {
         None
     }
 
@@ -587,19 +584,21 @@ pub fn signed_source(
     builder.finalize(keys).expect("source signs")
 }
 
-pub fn relay_session() -> RelaySessionKey {
-    RelaySessionKey {
-        relay: relay_url(),
-        access: RelayAccess::Public,
-    }
+pub fn relay_session() -> RelayUrl {
+    relay_url()
 }
 
-pub fn relay_occurrence() -> (RelaySessionKey, Timestamp) {
+pub fn relay_occurrence() -> (RelayUrl, Timestamp) {
     (relay_session(), Timestamp::from(1))
 }
 
-pub fn relay_event(event: Event, occurrence: (RelaySessionKey, Timestamp)) -> RelayEvent {
-    RelayEvent::new(event, occurrence.0, occurrence.1)
+pub fn relay_event(event: Event, occurrence: (RelayUrl, Timestamp)) -> RelayEvent {
+    RelayEvent::new(
+        event,
+        occurrence.0,
+        Authority::Unauthenticated,
+        occurrence.1,
+    )
 }
 
 pub fn relay_url() -> RelayUrl {

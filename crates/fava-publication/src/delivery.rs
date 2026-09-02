@@ -3,10 +3,10 @@ use std::time::Duration;
 
 use fava_delivery::{DeliveryDecision, DeliveryFacts};
 use fava_publisher::{PublishAttempt, PublishOutcome};
-use fava_relay::RelaySessionKey;
 use fava_write::{
     EventId, EventValue, Receipt, ReceiptId, RelayDeliveryOutcome, RevisionId, WriteId,
 };
+use nostr::types::RelayUrl;
 use tokio::sync::{mpsc, watch};
 
 use super::Publication;
@@ -17,15 +17,8 @@ impl Publication {
     pub(super) fn start_lanes(
         &self,
         receipt: &Receipt,
-        active: &mut BTreeMap<RelaySessionKey, (WriteId, ReceiptId, RevisionId, EventId, u64)>,
-        finished: &mpsc::Sender<(
-            RelaySessionKey,
-            WriteId,
-            ReceiptId,
-            RevisionId,
-            EventId,
-            u64,
-        )>,
+        active: &mut BTreeMap<RelayUrl, (WriteId, ReceiptId, RevisionId, EventId, u64)>,
+        finished: &mpsc::Sender<(RelayUrl, WriteId, ReceiptId, RevisionId, EventId, u64)>,
         cancel: &watch::Receiver<bool>,
     ) {
         if !matches!(receipt.current.event, EventValue::Signed(_)) {
@@ -88,7 +81,7 @@ impl Publication {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: RelaySessionKey,
+        session: RelayUrl,
         mut cancel: watch::Receiver<bool>,
     ) {
         loop {
@@ -142,7 +135,7 @@ impl Publication {
         receipt_id: ReceiptId,
         revision_id: RevisionId,
         event_id: EventId,
-        session: &RelaySessionKey,
+        session: &RelayUrl,
         prior_attempts: u32,
     ) {
         let Some(attempt_number) = prior_attempts.checked_add(1) else {
@@ -167,6 +160,7 @@ impl Publication {
             revision_id,
             number: attempt_number,
             session: session.clone(),
+            authority: receipt.access,
             event,
             timeout: ATTEMPT_TIMEOUT,
         };

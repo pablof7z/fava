@@ -1,27 +1,7 @@
-//! Neutral immutable logical relay/access identity and its bounded facts.
+//! Neutral immutable logical relay identity, what work requires of a
+//! connection, and the bounded facts a connection carries.
 
 use nostr::key::PublicKey;
-use nostr::types::RelayUrl;
-
-/// Exact application-selected access authority for relay work.
-#[derive(
-    Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
-)]
-pub enum RelayAccess {
-    /// Public unauthenticated relay authority.
-    Public,
-    /// Relay authority authenticated as one exact protocol public key.
-    Authenticated(PublicKey),
-}
-
-/// Stable logical relay and access identity shared across owners.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct RelaySessionKey {
-    /// Exact normalized relay URL.
-    pub relay: RelayUrl,
-    /// Exact access authority.
-    pub access: RelayAccess,
-}
 
 /// Relay- or OS-supplied text retained under a Fava-owned byte bound.
 ///

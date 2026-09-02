@@ -110,7 +110,8 @@ pub async fn require_acquire_reuses_live_session<T: Transport>(
     transport: &T,
     request: OpenRelaySession,
 ) -> Result<(), String> {
-    let key = request.key.clone();
+    let relay = request.relay.clone();
+    let authority = request.authority;
     let first = transport
         .acquire_session(request.clone())
         .await
@@ -120,10 +121,10 @@ pub async fn require_acquire_reuses_live_session<T: Transport>(
         .await
         .map_err(|error| format!("second acquire failed: {error}"))?;
 
-    if transport.holders(&key) != NonZeroUsize::new(2) {
+    if transport.holders(&relay, &authority) != NonZeroUsize::new(2) {
         return Err(format!(
             "expected two holders, got {:?}",
-            transport.holders(&key)
+            transport.holders(&relay, &authority)
         ));
     }
     if first.session().identity() != second.session().identity() {

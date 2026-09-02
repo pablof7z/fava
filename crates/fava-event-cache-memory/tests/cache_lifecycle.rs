@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_relay::Authority;
 use fava_state::RelayEvent;
 use nostr::event::Event;
 use nostr::event::{EventBuilder, FinalizeEvent, Kind, Tag};
@@ -19,10 +19,8 @@ use nostr::types::{RelayUrl, Timestamp};
 fn cached(event: Event, at: u64) -> RelayEvent {
     RelayEvent::new(
         event,
-        RelaySessionKey {
-            relay: RelayUrl::parse("wss://relay.example").expect("relay url"),
-            access: RelayAccess::Public,
-        },
+        RelayUrl::parse("wss://relay.example").expect("relay url"),
+        Authority::Unauthenticated,
         Timestamp::from(at),
     )
 }
@@ -221,39 +219,52 @@ fn concurrent_admissions_keep_one_replaceable_winner() {
     assert_eq!(committed, 0);
 }
 
+/// A relay is one occurrence now, whatever authority observed it under:
+/// access stopped being part of a relay's identity. A later admission of the
+/// same event at the same relay only replaces the occurrence when it is
+/// strictly earlier; an equal-time admission under a different authority
+/// changes nothing, and the earlier authority survives.
 #[test]
-fn same_url_different_access_sessions_are_retained_independently() {
+fn same_relay_admissions_under_different_authority_are_one_occurrence() {
     let cache = MemoryEventCache::default();
     let keys = Keys::generate();
     let event = note(&keys, 10, "served under two authorities", Vec::new());
     let relay = RelayUrl::parse("wss://same.example").unwrap();
     let authenticated = Keys::generate().public_key();
-    for access in [
-        RelayAccess::Public,
-        RelayAccess::Authenticated(authenticated),
-    ] {
-        assert!(
-            cache
-                .admit(
-                    RelayEvent::new(
-                        event.clone(),
-                        RelaySessionKey {
-                            relay: relay.clone(),
-                            access,
-                        },
-                        Timestamp::from(11),
-                    ),
+
+    assert!(
+        cache
+            .admit(
+                RelayEvent::new(
+                    event.clone(),
+                    relay.clone(),
+                    Authority::Unauthenticated,
                     Timestamp::from(11),
-                )
-                .unwrap()
-        );
-    }
+                ),
+                Timestamp::from(11),
+            )
+            .unwrap()
+    );
+    assert!(
+        !cache
+            .admit(
+                RelayEvent::new(
+                    event,
+                    relay,
+                    Authority::As(authenticated),
+                    Timestamp::from(11),
+                ),
+                Timestamp::from(11),
+            )
+            .unwrap(),
+        "an equal-time admission at an already-occupied relay changes nothing"
+    );
     cache
         .transact(&|current| {
-            assert_eq!(current.len(), 2);
-            assert_ne!(
-                current[0].occurrence().session.access,
-                current[1].occurrence().session.access
+            assert_eq!(current.len(), 1, "one relay is one occurrence");
+            assert_eq!(
+                current[0].occurrence().authority,
+                Authority::Unauthenticated
             );
             Vec::new()
         })
