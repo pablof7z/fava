@@ -9,7 +9,7 @@
 
 use std::num::NonZeroUsize;
 
-use fava_relay::{AuthenticationState, BoundedText};
+use fava_relay::{BoundedText, Progress};
 use fava_state::RetractionCause;
 use nostr::event::EventId;
 use nostr::types::{RelayUrl, Timestamp};
@@ -214,10 +214,17 @@ pub enum RelaySourceState {
         /// When it arrived.
         at: Timestamp,
     },
-    /// The relay demands NIP-42 authentication for this request.
+    /// The relay's connection has an outstanding NIP-42 challenge: it asked,
+    /// and nothing has decided what to do about it yet.
+    ///
+    /// Carries the connection's own [`Progress`], the one place that fact is
+    /// kept, rather than a second, query-side opinion about it. A connection
+    /// that has since resolved the challenge — accepted, declined, or been
+    /// refused — is reported through that resolution, not through this: this
+    /// variant exists only while the question is still open.
     AuthenticationRequired {
-        /// How far NIP-42 authentication has got on this session.
-        state: AuthenticationState,
+        /// The connection's own record of how the challenge is going.
+        progress: Progress,
         /// When the requirement was learned.
         at: Timestamp,
     },

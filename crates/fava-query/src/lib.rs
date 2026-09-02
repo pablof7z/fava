@@ -11,7 +11,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use fava_relay::{AuthenticationState, Authority, BoundedText};
+pub use fava_relay::{Authority, BoundedText, Progress};
 
 use fava_state::{RelayEvent, RelayOccurrences};
 use fava_write::{EventValue, LocalWriteEvent, PublicationEvidence};

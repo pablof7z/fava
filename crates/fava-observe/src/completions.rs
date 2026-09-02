@@ -228,8 +228,34 @@ impl Engine {
         generation: Round,
         state: fava_transport::Connection,
     ) -> bool {
-        if self.slot(relay, generation).is_none() {
+        let Some(slot) = self.slot(relay, generation) else {
             return false;
+        };
+        // The relay asked and nothing has decided what to do about it yet.
+        // Reported only for a slot this very demand opened to reach an
+        // account (`Authority::As`): an anonymous slot never asked to be
+        // authenticated, so a relay that challenges it anyway is not this
+        // demand's fact (`GOALS:1111`, RELAY-008's isolation). This is the
+        // connection's own fact, published the moment it becomes true; a
+        // later resolution (accepted, declined, refused) is reported through
+        // its own arrival rather than a repeat of this one, so a relay's own
+        // words about a specific subscription are never overwritten by a
+        // stale restatement of "still asking".
+        if matches!(slot.requested, Authority::As(_))
+            && matches!(
+                state.authentication.progress,
+                fava_relay::Progress::Requested { .. }
+            )
+        {
+            self.publish_state_for_relay(
+                relay,
+                generation,
+                &RelaySourceState::AuthenticationRequired {
+                    progress: state.authentication.progress.clone(),
+                    at: Timestamp::now(),
+                },
+            );
+            self.publish_relay_diagnostic(relay, generation);
         }
         let fava_relay::Connectivity::Disconnected { detail, spent } = state.connectivity else {
             return false;

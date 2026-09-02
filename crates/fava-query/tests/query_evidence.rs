@@ -6,9 +6,9 @@
 use std::num::NonZeroU64;
 
 use fava_query::{
-    AuthenticationState, BoundedText, DesiredPlanEvidence, ObservationId, QueryBranchId,
-    QueryEvidence, QueryShortfall, RelayDeadline, RelayQueryEvidence, RelayShortfall,
-    RelaySourceState, RelayWithdrawal, RoundIssuer, RouteOrigin, SourceKind,
+    BoundedText, DesiredPlanEvidence, ObservationId, Progress, QueryBranchId, QueryEvidence,
+    QueryShortfall, RelayDeadline, RelayQueryEvidence, RelayShortfall, RelaySourceState,
+    RelayWithdrawal, RoundIssuer, RouteOrigin, SourceKind,
 };
 use nostr::types::{RelayUrl, Timestamp};
 
@@ -116,7 +116,9 @@ fn every_relay_failure_mode_is_a_distinct_typed_fact() {
             at: Timestamp::from(3),
         },
         RelaySourceState::AuthenticationRequired {
-            state: AuthenticationState::Declined,
+            progress: Progress::Requested {
+                challenge: "nonce-one".to_owned(),
+            },
             at: Timestamp::from(4),
         },
         RelaySourceState::TimedOut {
