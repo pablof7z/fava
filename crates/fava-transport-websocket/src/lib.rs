@@ -19,8 +19,8 @@ use std::time::Duration;
 use fava_relay::Authority;
 use fava_transport::{
     LeaseRelease, OpenRelaySession, RelayConnection, RelaySession, RelaySessionFuture,
-    RelaySessionIdentity, RelaySessionLease, ReleaseFuture, ReleaseOutcome, Transport,
-    TransportError, TransportShutdownFuture,
+    RelaySessionLease, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
+    TransportShutdownFuture,
 };
 use nostr::types::RelayUrl;
 use tokio::sync::{broadcast, mpsc};
@@ -116,12 +116,9 @@ impl WebSocketTransport {
             .find(|entry| entry.can_serve(authority))?;
         entry.holders += 1;
         entry.served.insert(*authority);
-        let session = Arc::clone(&entry.session);
-        let identity = session.identity();
         Some(RelaySessionLease::new(
-            session,
+            Arc::clone(&entry.session) as Arc<dyn RelaySession>,
             Arc::clone(&self.registry) as Arc<dyn LeaseRelease>,
-            identity,
         ))
     }
 }
@@ -157,7 +154,6 @@ impl Transport for WebSocketTransport {
             tokio::spawn(driver::drive(Arc::clone(&shared), inbound, socket));
 
             let session = Arc::new(WebSocketRelaySession { shared, outbound });
-            let identity = session.identity();
             // Another acquire may have dialled a connection reaching the same
             // authority while this one was establishing. The first
             // registration wins; this socket is closed rather than leaked.
@@ -177,11 +173,9 @@ impl Transport for WebSocketTransport {
                 drop(entries);
                 let loser = session;
                 tokio::spawn(async move { loser.close().await });
-                let identity = winner.identity();
                 return Ok(RelaySessionLease::new(
                     winner,
                     Arc::clone(&self.registry) as Arc<dyn LeaseRelease>,
-                    identity,
                 ));
             }
             entries
@@ -206,7 +200,6 @@ impl Transport for WebSocketTransport {
             Ok(RelaySessionLease::new(
                 session,
                 Arc::clone(&self.registry) as Arc<dyn LeaseRelease>,
-                identity,
             ))
         })
     }
@@ -283,13 +276,14 @@ pub(crate) fn mint_generation(counter: &AtomicU64) -> Option<RelayConnection> {
 impl Registry {
     fn decrement(
         &self,
-        identity: &RelaySessionIdentity,
+        held: &Arc<dyn RelaySession>,
     ) -> Option<(Arc<WebSocketRelaySession>, ReleaseOutcome)> {
+        let relay = held.identity().relay;
         let mut entries = self.entries.lock().expect("registry is not poisoned");
-        let connections = entries.get_mut(&identity.relay)?;
+        let connections = entries.get_mut(&relay)?;
         let position = connections
             .iter()
-            .position(|entry| entry.session.identity().connection == identity.connection)?;
+            .position(|entry| std::ptr::addr_eq(Arc::as_ptr(&entry.session), Arc::as_ptr(held)))?;
         connections[position].holders = connections[position].holders.saturating_sub(1);
         if let Some(holders) = NonZeroUsize::new(connections[position].holders) {
             return Some((
@@ -299,26 +293,26 @@ impl Registry {
         }
         let entry = connections.remove(position);
         if connections.is_empty() {
-            entries.remove(&identity.relay);
+            entries.remove(&relay);
         }
         Some((entry.session, ReleaseOutcome::Closed))
     }
 }
 
 impl LeaseRelease for Registry {
-    fn release_now(&self, identity: &RelaySessionIdentity) {
-        if let Some((session, ReleaseOutcome::Closed)) = self.decrement(identity) {
+    fn release_now(&self, held: &Arc<dyn RelaySession>) {
+        if let Some((session, ReleaseOutcome::Closed)) = self.decrement(held) {
             tokio::spawn(async move { session.close().await });
         }
     }
 
     fn release_deterministically<'a>(
         &'a self,
-        identity: &'a RelaySessionIdentity,
+        held: &'a Arc<dyn RelaySession>,
     ) -> ReleaseFuture<'a> {
         Box::pin(async move {
-            let Some((session, outcome)) = self.decrement(identity) else {
-                return Err(TransportError::Closed(identity.clone()));
+            let Some((session, outcome)) = self.decrement(held) else {
+                return Err(TransportError::Closed(held.identity()));
             };
             if outcome == ReleaseOutcome::Closed {
                 session.close().await?;

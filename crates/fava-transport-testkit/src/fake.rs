@@ -9,8 +9,8 @@ use std::time::Duration;
 use fava_relay::Authority;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, LeaseRelease, OpenRelaySession, RelayConnection,
-    RelaySession, RelaySessionFuture, RelaySessionIdentity, RelaySessionLease, ReleaseFuture,
-    ReleaseOutcome, Transport, TransportError, TransportFailure, TransportShutdownFuture,
+    RelaySession, RelaySessionFuture, RelaySessionLease, ReleaseFuture, ReleaseOutcome, Transport,
+    TransportError, TransportFailure, TransportShutdownFuture,
 };
 use nostr::types::RelayUrl;
 use tokio::sync::{Notify, broadcast};
@@ -293,12 +293,9 @@ impl FakeState {
             .find(|entry| entry.can_serve(authority))?;
         entry.holders += 1;
         entry.served.insert(*authority);
-        let session = Arc::clone(&entry.session);
-        let identity = session.identity();
         Some(RelaySessionLease::new(
-            session,
+            Arc::clone(&entry.session) as Arc<dyn RelaySession>,
             Arc::clone(self) as Arc<dyn LeaseRelease>,
-            identity,
         ))
     }
 
@@ -322,7 +319,6 @@ impl FakeState {
             Arc::clone(&self.generations),
             Arc::clone(&self.subscriptions),
         ));
-        let identity = session.identity();
         self.entries
             .lock()
             .expect("registry is not poisoned")
@@ -341,18 +337,19 @@ impl FakeState {
         tokio::spawn(async move {
             fava_transport::publish_authentication_requests(watched, requests).await;
         });
-        RelaySessionLease::new(session, Arc::clone(self) as Arc<dyn LeaseRelease>, identity)
+        RelaySessionLease::new(session, Arc::clone(self) as Arc<dyn LeaseRelease>)
     }
 
     fn decrement(
         &self,
-        identity: &RelaySessionIdentity,
+        held: &Arc<dyn RelaySession>,
     ) -> Option<(Arc<FakeSession>, ReleaseOutcome)> {
+        let relay = held.identity().relay;
         let mut entries = self.entries.lock().expect("registry is not poisoned");
-        let connections = entries.get_mut(&identity.relay)?;
+        let connections = entries.get_mut(&relay)?;
         let position = connections
             .iter()
-            .position(|entry| entry.session.identity().connection == identity.connection)?;
+            .position(|entry| std::ptr::addr_eq(Arc::as_ptr(&entry.session), Arc::as_ptr(held)))?;
         connections[position].holders = connections[position].holders.saturating_sub(1);
         if let Some(holders) = NonZeroUsize::new(connections[position].holders) {
             return Some((
@@ -362,26 +359,26 @@ impl FakeState {
         }
         let entry = connections.remove(position);
         if connections.is_empty() {
-            entries.remove(&identity.relay);
+            entries.remove(&relay);
         }
         Some((entry.session, ReleaseOutcome::Closed))
     }
 }
 
 impl LeaseRelease for FakeState {
-    fn release_now(&self, identity: &RelaySessionIdentity) {
-        if let Some((session, ReleaseOutcome::Closed)) = self.decrement(identity) {
+    fn release_now(&self, held: &Arc<dyn RelaySession>) {
+        if let Some((session, ReleaseOutcome::Closed)) = self.decrement(held) {
             session.mark_closed();
         }
     }
 
     fn release_deterministically<'a>(
         &'a self,
-        identity: &'a RelaySessionIdentity,
+        held: &'a Arc<dyn RelaySession>,
     ) -> ReleaseFuture<'a> {
         Box::pin(async move {
-            let Some((session, outcome)) = self.decrement(identity) else {
-                return Err(TransportError::Closed(identity.clone()));
+            let Some((session, outcome)) = self.decrement(held) else {
+                return Err(TransportError::Closed(held.identity()));
             };
             if outcome == ReleaseOutcome::Closed {
                 session.close().await?;
@@ -486,11 +483,10 @@ impl FakeRelay {
 /// Releasing it reports [`ReleaseOutcome::Closed`] and closes the session.
 #[must_use]
 pub fn detached_lease(session: Arc<dyn RelaySession>) -> RelaySessionLease {
-    let identity = session.identity();
     let release = Arc::new(DetachedRelease {
         session: Arc::clone(&session),
     });
-    RelaySessionLease::new(session, release, identity)
+    RelaySessionLease::new(session, release)
 }
 
 /// The single holder of a detached lease, so releasing it closes the session.
@@ -499,11 +495,11 @@ struct DetachedRelease {
 }
 
 impl LeaseRelease for DetachedRelease {
-    fn release_now(&self, _identity: &RelaySessionIdentity) {}
+    fn release_now(&self, _held: &Arc<dyn RelaySession>) {}
 
     fn release_deterministically<'a>(
         &'a self,
-        _identity: &'a RelaySessionIdentity,
+        _held: &'a Arc<dyn RelaySession>,
     ) -> ReleaseFuture<'a> {
         Box::pin(async move {
             self.session.close().await?;

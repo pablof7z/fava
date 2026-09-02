@@ -513,3 +513,51 @@ async fn an_exhausted_reconnect_budget_reaches_a_publisher_still_waiting() {
          exhausted budget, not the transient drop that preceded it: got {settlement:?}"
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_lease_taken_before_a_reconnect_still_releases_its_entry() {
+    let (listener, key) = listener().await;
+    let server = tokio::spawn(async move {
+        // The first generation is closed by the relay; the second is the one
+        // the release has to close.
+        let (stream, _) = listener.accept().await.expect("first connection");
+        let mut socket = accept_async(stream).await.expect("WebSocket accepts");
+        socket
+            .close(None)
+            .await
+            .expect("relay closes generation one");
+        let (stream, _) = listener.accept().await.expect("second connection");
+        let mut socket = accept_async(stream).await.expect("WebSocket accepts");
+        while socket.next().await.is_some() {}
+    });
+
+    let transport = WebSocketTransport::new();
+    let mut request = request(key.clone());
+    request.reconnect_attempts = Some(frames(4));
+    let authority = request.authority;
+    let lease = transport
+        .acquire_session(request)
+        .await
+        .expect("session opens");
+    let before = lease.session().identity();
+    let session = std::sync::Arc::clone(lease.session());
+    let mut connection = fava_transport::RelaySessionExt::connection(&session);
+    until(&mut connection, |state| {
+        matches!(state.connectivity, fava_transport::Connectivity::Connected)
+            && state.identity != before
+    })
+    .await;
+    drop(connection);
+    drop(session);
+
+    assert_eq!(
+        lease.release().await.expect("the lease finds its entry"),
+        ReleaseOutcome::Closed
+    );
+    assert_eq!(transport.holders(&key, &authority), None);
+    assert!(transport.sessions().is_empty());
+    tokio::time::timeout(Duration::from_secs(2), server)
+        .await
+        .expect("the relay sees the socket close")
+        .expect("the server task ends");
+}

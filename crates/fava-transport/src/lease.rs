@@ -2,20 +2,20 @@
 
 use std::sync::Arc;
 
-use crate::{RelaySession, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, TransportError};
+use crate::{RelaySession, ReleaseFuture, ReleaseOutcome, TransportError};
 
 /// Hook the transport registry installs so a lease can decrement its refcount
 /// without the contract crate knowing the registry's shape.
 pub trait LeaseRelease: Send + Sync {
-    /// Decrement the holder count for `identity`. MUST be non-blocking and
+    /// Decrement the holder count for `session`. MUST be non-blocking and
     /// MUST NOT await. Closing, if this was the last holder, is scheduled by
     /// the transport, not performed here.
-    fn release_now(&self, identity: &RelaySessionIdentity);
+    fn release_now(&self, session: &Arc<dyn RelaySession>);
 
     /// Decrement and drive deterministic close when this was the last holder.
     fn release_deterministically<'a>(
         &'a self,
-        identity: &'a RelaySessionIdentity,
+        session: &'a Arc<dyn RelaySession>,
     ) -> ReleaseFuture<'a>;
 }
 
@@ -27,22 +27,16 @@ pub trait LeaseRelease: Send + Sync {
 pub struct RelaySessionLease {
     session: Arc<dyn RelaySession>,
     registry: Arc<dyn LeaseRelease>,
-    identity: RelaySessionIdentity,
     released: bool,
 }
 
 impl RelaySessionLease {
     /// Construct a lease. Called only by a `Transport` implementation.
     #[must_use]
-    pub fn new(
-        session: Arc<dyn RelaySession>,
-        registry: Arc<dyn LeaseRelease>,
-        identity: RelaySessionIdentity,
-    ) -> Self {
+    pub fn new(session: Arc<dyn RelaySession>, registry: Arc<dyn LeaseRelease>) -> Self {
         Self {
             session,
             registry,
-            identity,
             released: false,
         }
     }
@@ -53,13 +47,6 @@ impl RelaySessionLease {
         &self.session
     }
 
-    /// Identity at the moment of acquisition. Use `session().identity()` for
-    /// the current connection.
-    #[must_use]
-    pub fn acquired_identity(&self) -> &RelaySessionIdentity {
-        &self.identity
-    }
-
     /// Release deterministically, awaiting close when this is the last holder.
     ///
     /// # Errors
@@ -68,15 +55,15 @@ impl RelaySessionLease {
     pub async fn release(mut self) -> Result<ReleaseOutcome, TransportError> {
         self.released = true;
         let registry = Arc::clone(&self.registry);
-        let identity = self.identity.clone();
-        registry.release_deterministically(&identity).await
+        let session = Arc::clone(&self.session);
+        registry.release_deterministically(&session).await
     }
 }
 
 impl Drop for RelaySessionLease {
     fn drop(&mut self) {
         if !self.released {
-            self.registry.release_now(&self.identity);
+            self.registry.release_now(&self.session);
         }
     }
 }
