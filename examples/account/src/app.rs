@@ -262,7 +262,7 @@ impl App {
             let observation = query.observation.get().get();
             for session in query.route_relays {
                 route_observations.push(ResultValue::from(observation));
-                route_relays.push(ResultValue::text(session.relay.to_string()));
+                route_relays.push(ResultValue::text(session.to_string()));
                 route_revisions.push(
                     query
                         .route_revision
@@ -271,12 +271,12 @@ impl App {
             }
             for demand in query.demand {
                 demand_observations.push(ResultValue::from(observation));
-                demand_relays.push(ResultValue::text(demand.session.relay.to_string()));
+                demand_relays.push(ResultValue::text(demand.session.to_string()));
                 demand_states.push(ResultValue::text(format!("{:?}", demand.state)));
             }
             for wire in query.wire {
                 wire_observations.push(ResultValue::from(observation));
-                wire_relays.push(ResultValue::text(wire.session.relay.to_string()));
+                wire_relays.push(ResultValue::text(wire.session.to_string()));
                 wire_subscriptions.push(ResultValue::text(wire.subscription.to_string()));
             }
         }
