@@ -61,6 +61,8 @@ Eleven findings against the landed commits. Three are already assigned; the rest
 - [x] 6b.10 Make an exhausted reconnect budget reach the handles on the real transport as it does on the fake; verify a publisher sees the same ending either way
 - [x] 6b.11 Delete the connection-state enum the two states replaced; verify a grep finds only its definition and re-export, then neither
 
+- [ ] 6b.12 Let a listener that fell behind recover the demands it missed. Answering no longer blocks the loop, so a lag is rare, but a burst of distinct challenges can still outrun it and a lost demand is lost for the life of that connection — the publisher only republishes a *changed* challenge. The component that answers cannot recover on its own: it holds no connections and the transport offers a count of holders, not a list. Give it a way to ask which connections are waiting to be answered, and have it ask after a lag; verify a demand dropped by a lagging listener is still answered, and that nothing polls
+
 ## 7. Verification
 
 - [ ] 7.1 Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, and `cargo test --workspace --doc --locked`; verify every one passes
