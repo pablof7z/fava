@@ -41,7 +41,7 @@ impl Router for HintRouter {
         Query::events()
             .ids(referenced)
             .map_err(|error| RouterError::Refused(error.to_string()))
-            .map(|query| vec![query.cache_only()])
+            .map(|query| vec![query.cache_only().with_relay_access(request.access())])
     }
 
     fn preview(

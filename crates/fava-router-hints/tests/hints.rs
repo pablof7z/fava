@@ -16,7 +16,8 @@ use nostr::types::{RelayUrl, Timestamp};
 #[test]
 fn the_events_a_request_references_are_asked_of_the_cache() {
     let target = signed_target();
-    let request = reply_to(&target, &relay("hinted"));
+    let account = Keys::generate().public_key();
+    let request = reply_to(&target, &relay("hinted"), Authority::As(account));
 
     let queries = HintRouter::new("hints")
         .queries(&request, &RoutePlan::default())
@@ -28,6 +29,7 @@ fn the_events_a_request_references_are_asked_of_the_cache() {
         Some(BTreeSet::from([target.id]))
     );
     assert_eq!(queries[0].freshness(), Freshness::CacheOnly);
+    assert_eq!(queries[0].access(), &Authority::As(account));
 }
 
 #[test]
@@ -39,7 +41,7 @@ fn reference_hint_and_actual_relay_evidence_are_independent_reasons() {
 
     let contribution = router
         .preview(
-            &reply_to(&target, &hinted),
+            &reply_to(&target, &hinted, Authority::Unauthenticated),
             &RoutePlan::default(),
             &[seen_at(&target, &observed)],
         )
@@ -59,7 +61,7 @@ fn replacing_the_snapshot_replaces_the_relays_it_justified() {
     let second = relay("second");
     let mut session = HintRouter::new("hints")
         .open(
-            reply_to(&target, &hinted),
+            reply_to(&target, &hinted, Authority::Unauthenticated),
             Arc::new(RoutePlan::default()),
             vec![seen_at(&target, &first)],
         )
@@ -89,7 +91,7 @@ fn signed_target() -> Event {
         .unwrap()
 }
 
-fn reply_to(target: &Event, hint: &RelayUrl) -> RouteRequest {
+fn reply_to(target: &Event, hint: &RelayUrl, access: Authority) -> RouteRequest {
     let reply = EventBuilder::new(Kind::TextNote)
         .tag(Tag::parse(["e", &target.id.to_hex(), hint.as_str(), "reply"]).expect("e tag"))
         .by(Keys::generate().public_key())
@@ -97,7 +99,7 @@ fn reply_to(target: &Event, hint: &RelayUrl) -> RouteRequest {
         .unwrap();
     RouteRequest::Write {
         event: EventValue::Unsigned(reply),
-        access: Authority::Unauthenticated,
+        access,
     }
 }
 
