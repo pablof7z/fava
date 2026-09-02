@@ -1,8 +1,8 @@
 //! Delivery of decoded relay messages to the handle that owns each wire key.
 //!
-//! The socket reader decodes each frame exactly once and asks
-//! [`fava_transport::correlation`] which wire key it belongs to. A message no
-//! live handle claims is counted, never delivered as another component's work.
+//! The socket reader decodes each frame exactly once and this is what decides
+//! which wire key it belongs to. A message no live handle claims is counted,
+//! never delivered as another component's work.
 
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
@@ -14,7 +14,7 @@ use tokio::sync::watch;
 use fava_wire::{RelayMessage, SubscriptionId};
 
 use crate::BoundedText;
-use crate::routed::{Correlation, SessionEnded, Settlement, SubscriptionItem, correlation};
+use crate::routed::{SessionEnded, Settlement, SubscriptionItem};
 use crate::session::Connection;
 use fava_relay::{Connectivity, Progress};
 use nostr::event::EventId;
@@ -366,8 +366,24 @@ impl Router {
     ///
     /// If a prior holder of this session's router lock panicked.
     pub fn deliver(&self, message: RelayMessage<'static>) {
-        match correlation(&message) {
-            Correlation::Subscription(id) => {
+        match &message {
+            RelayMessage::Event {
+                subscription_id, ..
+            }
+            | RelayMessage::EndOfStoredEvents(subscription_id)
+            | RelayMessage::Closed {
+                subscription_id, ..
+            }
+            | RelayMessage::Count {
+                subscription_id, ..
+            }
+            | RelayMessage::NegMsg {
+                subscription_id, ..
+            }
+            | RelayMessage::NegErr {
+                subscription_id, ..
+            } => {
+                let id = subscription_id.as_ref().clone();
                 let held = self.subscriptions.lock().expect("router is not poisoned");
                 let Some(mailbox) = held.get(&id) else {
                     drop(held);
@@ -378,7 +394,8 @@ impl Router {
                 drop(held);
                 mailbox.offer(subscription_item(message));
             }
-            Correlation::Acknowledgement(event) => {
+            RelayMessage::Ok { event_id, .. } => {
+                let event = *event_id;
                 let held = self
                     .acknowledgements
                     .lock()
@@ -395,10 +412,7 @@ impl Router {
                     mailbox.offer(settlement.clone());
                 }
             }
-            Correlation::Challenge => {
-                let RelayMessage::Auth { challenge } = &message else {
-                    return;
-                };
+            RelayMessage::Auth { challenge } => {
                 // A demand is what the connection now is, not a message
                 // addressed to somebody. Stated here it cannot outlive the
                 // connection it arrived on, and a relay repeating itself is
@@ -408,7 +422,7 @@ impl Router {
                     connection.authentication.progress = Progress::Requested { challenge };
                 });
             }
-            Correlation::Unclaimed => {
+            RelayMessage::Notice(_) => {
                 self.unrouted.unclaimed.fetch_add(1, Ordering::SeqCst);
             }
         }
@@ -466,24 +480,6 @@ impl Router {
         {
             mailbox.close();
         }
-    }
-
-    /// Whether any wire key is still held. The router retains nothing across a
-    /// generation, and this is how a test proves it.
-    ///
-    /// # Panics
-    ///
-    /// If a prior holder of this session's router lock panicked.
-    pub fn retained(&self) -> usize {
-        self.subscriptions
-            .lock()
-            .expect("router is not poisoned")
-            .len()
-            + self
-                .acknowledgements
-                .lock()
-                .expect("router is not poisoned")
-                .len()
     }
 }
 

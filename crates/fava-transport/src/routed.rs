@@ -8,7 +8,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use fava_wire::{RelayMessage, SubscriptionId};
+use fava_wire::SubscriptionId;
 use nostr::event::{Event, EventId};
 
 use crate::BoundedText;
@@ -27,33 +27,6 @@ pub enum SessionEnded {
     },
     /// The reconnect budget is spent; no further connection will appear.
     ReconnectExhausted {
-        /// Number of attempts actually made.
-        attempts: usize,
-        /// Exact reason of the final attempt.
-        detail: BoundedText,
-    },
-}
-
-/// A change in the state of one session's connection.
-///
-/// Any lease holder can read these, whether or not it holds a subscription or
-/// an outstanding acknowledgement: what a component proved to the relay, and
-/// what it parked awaiting an answer, belong to the connection that carried
-/// them.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ConnectionState {
-    /// The connection dropped. A reconnect may follow.
-    Disconnected {
-        /// Exact scoped reason.
-        detail: BoundedText,
-    },
-    /// A new connection is live. Every holder MUST replay its demand.
-    Reconnected {
-        /// The connection now current.
-        identity: crate::RelaySessionIdentity,
-    },
-    /// The reconnect budget is spent; no further connection will appear.
-    Unreachable {
         /// Number of attempts actually made.
         attempts: usize,
         /// Exact reason of the final attempt.
@@ -131,49 +104,6 @@ pub trait Acknowledgement: Send {
     /// on it alongside something else -- a publication watching for an
     /// authentication challenge, say -- without giving it up to do so.
     fn settled(&mut self) -> SettlementFuture<'_>;
-}
-
-/// What a decoded relay message correlates to, if anything.
-///
-/// The mapping is fixed: subscription-correlated messages by subscription id,
-/// `OK` by event id, `AUTH` to the challenge reader, and everything else to
-/// nobody.
-#[must_use]
-pub fn correlation(message: &RelayMessage<'_>) -> Correlation {
-    match message {
-        RelayMessage::Event {
-            subscription_id, ..
-        }
-        | RelayMessage::EndOfStoredEvents(subscription_id)
-        | RelayMessage::Closed {
-            subscription_id, ..
-        }
-        | RelayMessage::Count {
-            subscription_id, ..
-        }
-        | RelayMessage::NegMsg {
-            subscription_id, ..
-        }
-        | RelayMessage::NegErr {
-            subscription_id, ..
-        } => Correlation::Subscription(subscription_id.as_ref().clone()),
-        RelayMessage::Ok { event_id, .. } => Correlation::Acknowledgement(*event_id),
-        RelayMessage::Auth { .. } => Correlation::Challenge,
-        RelayMessage::Notice(_) => Correlation::Unclaimed,
-    }
-}
-
-/// The wire key a decoded relay message belongs to.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Correlation {
-    /// Belongs to the handle holding this subscription id.
-    Subscription(SubscriptionId),
-    /// Belongs to every handle awaiting this event's verdict.
-    Acknowledgement(EventId),
-    /// Belongs to the session's challenge reader.
-    Challenge,
-    /// Belongs to nobody. Counted, never delivered as another's work.
-    Unclaimed,
 }
 
 /// Future yielding one subscription item.

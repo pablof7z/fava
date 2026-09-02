@@ -39,9 +39,9 @@ pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportF
 pub use lease::{LeaseRelease, RelaySessionLease};
 pub use request::{OpenRelaySession, TransportBounds, TransportDeadlines};
 pub use routed::{
-    Acknowledgement, CloseFuture, ConnectionState, Correlation, PublishFuture, RelaySessionExt,
-    RoutedAcknowledgement, RoutedSubscription, SessionEnded, Settlement, SettlementFuture,
-    SubscribeFuture, Subscription, SubscriptionFuture, SubscriptionItem, correlation,
+    Acknowledgement, CloseFuture, PublishFuture, RelaySessionExt, RoutedAcknowledgement,
+    RoutedSubscription, SessionEnded, Settlement, SettlementFuture, SubscribeFuture, Subscription,
+    SubscriptionFuture, SubscriptionItem,
 };
 pub use router::{Mailbox, Router, Unrouted};
 pub use session::{
