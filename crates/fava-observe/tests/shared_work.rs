@@ -447,3 +447,42 @@ async fn a_late_joiner_of_a_completed_request_is_credited_the_earned_completion(
     first.close();
     second.close();
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plan_that_retains_a_completed_request_leaves_its_completion_standing() {
+    let shared = relay("shared");
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
+    let assembly = assemble();
+
+    let first = assembly
+        .observer
+        .open(metadata_of(alice, &shared))
+        .expect("first query opens");
+    wait_until(|| requests(assembly.peer(&shared)).len() == 1).await;
+    let peer = assembly.established(&shared);
+    let installed = requests(Some(peer.clone()))[0].0.clone();
+    push(&peer, &fava_wire::RelayMessage::eose(installed));
+    wait_until(|| relay_evidence(&first, &shared).stored_events_complete()).await;
+
+    // Demand no running request covers: the plan opens a second request and
+    // retains the first, which had no transition of its own to report.
+    let second = assembly
+        .observer
+        .open(metadata_of(bob, &shared))
+        .expect("second query opens");
+    wait_until(|| requests(Some(peer.clone())).len() == 2).await;
+    settle().await;
+
+    assert!(
+        relay_evidence(&first, &shared).stored_events_complete(),
+        "a retained request keeps the completion it earned, got {:?}",
+        relay_evidence(&first, &shared).state
+    );
+    assert!(
+        first.current().evidence.all_relays_stored_events_complete(),
+        "the completed observation's only relay is still complete"
+    );
+    first.close();
+    second.close();
+}

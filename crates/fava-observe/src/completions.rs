@@ -161,7 +161,7 @@ impl Engine {
     }
 
     /// Install exactly what the transport accepted, and report the request as
-    /// open to every observation the accepted subscriptions now serve.
+    /// open to every observation the newly opened subscriptions now serve.
     #[allow(
         clippy::too_many_arguments,
         reason = "one plan's application names the relay, its generation, its revision, the plan, what opened, what is attending each opened subscription, and what closed"
@@ -203,11 +203,12 @@ impl Engine {
             return false;
         };
         let requested_at = Timestamp::now();
-        let owners: Vec<ObservationId> = slot
-            .installed
-            .ids()
-            .filter_map(|id| slot.installed.get(id))
-            .flat_map(|entry| entry.serves.iter().map(|demand| demand.owner))
+        // Only a subscription this plan actually opened had a transition to
+        // report. A retained one keeps the state it already earned.
+        let owners: Vec<ObservationId> = opened
+            .iter()
+            .flatten()
+            .flat_map(|id| slot.owners(id))
             .collect();
         for owner in owners {
             self.registry.record_state(
