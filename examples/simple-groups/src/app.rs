@@ -304,7 +304,7 @@ fn receipt_result(
             .destinations()
             .keys()
             .take(PRESENTATION_LIST_LIMIT)
-            .map(|destination| ResultValue::text(destination.relay.to_string())),
+            .map(|destination| ResultValue::text(destination.to_string())),
     );
     let delivery_outcomes = ResultValue::array(
         receipt
