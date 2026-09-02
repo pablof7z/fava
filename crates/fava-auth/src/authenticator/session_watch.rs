@@ -5,7 +5,7 @@ use std::sync::Arc;
 use fava_relay::{BoundedText, Progress};
 use fava_transport::{RelaySession, Transport};
 
-use super::{Authenticator, WATCH_TASK};
+use super::{ANSWER_TASK, Authenticator, WATCH_TASK};
 use crate::challenge::Challenge;
 
 impl Authenticator {
@@ -22,17 +22,46 @@ impl Authenticator {
     pub fn answer_requests(&self, transport: &dyn Transport) -> Result<(), WatchError> {
         let mut asked = transport.authentication_requests();
         let owner = self.clone();
-        let token = self.cancellation();
+        let runtime = self.inner().runtime.clone();
+        let watch_token = self.cancellation();
+        let answer_token = watch_token.clone();
         self.inner()
             .runtime
-            .spawn_cancellable(WATCH_TASK, token, async move {
+            .spawn_cancellable(WATCH_TASK, watch_token, async move {
                 loop {
                     match asked.recv().await {
-                        Ok(session) => owner.asked(&session).await,
-                        // Lagging means a relay asked while this owner was
-                        // busy answering another. The demand is still on that
-                        // connection; the next thing it does republishes it.
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                        Ok(session) => {
+                            // Answering must not block reading the next ask:
+                            // a signer can be remote and slow, and a relay
+                            // that is kept waiting because a different
+                            // relay's signer is slow has been answered by
+                            // nothing this owner did. Spawned rather than
+                            // awaited, so one slow signer costs this loop
+                            // nothing.
+                            let answering = owner.clone();
+                            let token = answer_token.clone();
+                            let _ = runtime.spawn_cancellable(ANSWER_TASK, token, async move {
+                                answering.asked(&session).await;
+                            });
+                        }
+                        // The buffer overflowed: this owner fell behind the
+                        // relays it watches. Answering no longer blocks this
+                        // loop, so the usual cause -- one slow signer holding
+                        // every other relay's demand behind it -- is gone;
+                        // what remains is a burst of distinct challenges
+                        // arriving faster than tasks can be spawned to read
+                        // them, which is far rarer. It is not impossible, and
+                        // what overflowed is genuinely gone: a lost
+                        // connection is not republished, because
+                        // `publish_authentication_requests` republishes only
+                        // a challenge that differs from the last one it sent,
+                        // and this owner never saw the one it lost. Nothing
+                        // here can single out which connection that was, so
+                        // the honest response is to make the loss observable
+                        // rather than pretend it recovers on its own.
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                            owner.record_lagged(skipped);
+                        }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
                     }
                 }
