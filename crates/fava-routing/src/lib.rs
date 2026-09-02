@@ -255,7 +255,7 @@ impl RoutePlan {
         revision: u64,
         contribution: &RouteContribution,
     ) -> Result<Self, RouterError> {
-        chain::validate_combined(contribution)?;
+        chain::validate_bounds(contribution)?;
         let mut destinations = BTreeMap::<RelayUrl, PlannedRelay>::new();
         let mut coverage = contribution.coverage.clone();
         let mut unresolved = contribution.unresolved.clone();

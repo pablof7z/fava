@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use fava::EventBuilder;
-use fava_routing::{RouteContribution, RouteDestination, RoutePlan, RouteRequest};
+use fava_routing::{PlannedRelay, RouteContribution, RouteDestination, RoutePlan, RouteRequest};
 use fava_write::{
     EventValue, Kind, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteIntent,
     WriteIntentError, WriteRouting,
@@ -163,25 +163,23 @@ fn automatic_route_fanout_is_bounded_before_receipt_mutation() {
     let accepted = store
         .accept(WriteIntent::event(event, WriteRouting::Automatic).unwrap())
         .unwrap();
-    let destinations = (0..257)
-        .map(|index| {
-            RouteDestination::new(
-                RelayUrl::parse(&format!("wss://automatic-{index}.example")).unwrap(),
-                BTreeSet::new(),
-                "bounded route",
-            )
-        })
-        .collect();
-    let plan = RoutePlan::from_contribution(
-        1,
-        &RouteContribution {
-            destinations,
-            coverage: BTreeMap::new(),
-            unresolved: BTreeSet::new(),
-            shortfalls: Vec::new(),
-        },
-    )
-    .unwrap();
+    let plan = RoutePlan {
+        revision: 1,
+        destinations: (0..257)
+            .map(|index| {
+                let session = RelayUrl::parse(&format!("wss://automatic-{index}.example")).unwrap();
+                (
+                    session.clone(),
+                    PlannedRelay {
+                        session,
+                        targets: BTreeSet::new(),
+                        reasons: BTreeSet::new(),
+                    },
+                )
+            })
+            .collect(),
+        ..RoutePlan::default()
+    };
 
     let error = store
         .apply_route(

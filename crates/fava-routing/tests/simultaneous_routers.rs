@@ -20,6 +20,25 @@ async fn shared_destination_survives_second_then_first_withdrawal() {
     assert_withdrawal_order([1, 0]);
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn a_router_keeps_its_destination_beside_another_router_full_of_shortfalls() {
+    let first = session("first");
+    let second = session("second");
+    let routers: Vec<Arc<dyn Router>> = vec![
+        Arc::new(ControlledRouter::new("first", complaining(first.clone()))),
+        Arc::new(ControlledRouter::new("second", complaining(second.clone()))),
+    ];
+    let request = RouteRequest::Read(Query::events());
+    let plan = fava_routing::preview(&routers, &request, &[Vec::new(), Vec::new()])
+        .expect("both routers contribute");
+
+    assert!(
+        plan.destinations.contains_key(&first) && plan.destinations.contains_key(&second),
+        "diagnostic volume costs no router its destination: {:?}",
+        plan.destinations.keys().collect::<Vec<_>>()
+    );
+}
+
 fn assert_withdrawal_order(order: [usize; 2]) {
     let shared = session("shared");
     let first = Arc::new(ControlledRouter::new("first", covering(shared.clone())));
@@ -137,6 +156,15 @@ impl RouterSession for ControlledSession {
 
 fn session(name: &str) -> RelayUrl {
     RelayUrl::parse(&format!("wss://{name}.example")).expect("relay")
+}
+
+fn complaining(session: RelayUrl) -> RouteContribution {
+    RouteContribution {
+        shortfalls: (0..200)
+            .map(|index| format!("relay list {index} undecodable"))
+            .collect(),
+        ..covering(session)
+    }
 }
 
 fn covering(session: RelayUrl) -> RouteContribution {

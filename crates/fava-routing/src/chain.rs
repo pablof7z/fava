@@ -9,10 +9,7 @@ use crate::{
     RouterSession, merge_coverage,
 };
 
-const CHAIN_ACCUMULATION_FACTOR: usize = 32;
 const MAX_DESTINATIONS: usize = 256;
-const MAX_TARGETS: usize = 256;
-const MAX_COVERAGE: usize = 256;
 const MAX_COVERED_SESSIONS: usize = 256;
 const MAX_SHORTFALLS: usize = 256;
 const MAX_TEXT_BYTES: usize = 4_096;
@@ -264,7 +261,7 @@ impl Composer {
     fn accept(&mut self, index: usize, router: &str, contribution: RouteContribution) {
         let previous = std::mem::replace(&mut self.contributions[index], contribution);
         let answered = std::mem::replace(&mut self.answered[index], true);
-        if let Err(error) = validate_combined(&self.merged()) {
+        if let Err(error) = validate_bounds(&self.merged()) {
             self.contributions[index] = previous;
             self.answered[index] = answered;
             self.record(&bounded_error(router, &error));
@@ -284,13 +281,12 @@ impl Composer {
         let mut combined = self.merged();
         combined.shortfalls.extend(self.shortfalls.iter().cloned());
         let mut discarded = self.discarded;
-        let maximum = MAX_SHORTFALLS * CHAIN_ACCUMULATION_FACTOR;
-        if combined.shortfalls.len() >= maximum {
-            discarded = discarded.saturating_add(combined.shortfalls.len() - maximum + 1);
-            combined.shortfalls.truncate(maximum - 1);
+        if combined.shortfalls.len() >= MAX_SHORTFALLS {
+            discarded = discarded.saturating_add(combined.shortfalls.len() - MAX_SHORTFALLS + 1);
+            combined.shortfalls.truncate(MAX_SHORTFALLS - 1);
         }
         if discarded > 0 {
-            combined.shortfalls.push(format!("chain: {discarded} further route shortfalls discarded beyond the {maximum}-entry bound"));
+            combined.shortfalls.push(format!("chain: {discarded} further route shortfalls discarded beyond the {MAX_SHORTFALLS}-entry bound"));
         }
         combined
     }
@@ -315,7 +311,12 @@ fn attribute(
     for destination in &mut contribution.destinations {
         destination.set_router(router);
     }
-    validate_contribution(&contribution, 1)?;
+    bounded(
+        "route shortfalls",
+        contribution.shortfalls.len(),
+        MAX_SHORTFALLS,
+    )?;
+    validate_bounds(&contribution)?;
     Ok(contribution)
 }
 fn bounded_error(router: &str, error: &RouterError) -> String {
@@ -339,36 +340,18 @@ fn validate_names(routers: &[Arc<dyn Router>]) -> Result<(), RouterError> {
     }
     Ok(())
 }
-fn validate_contribution(
-    contribution: &RouteContribution,
-    factor: usize,
-) -> Result<(), RouterError> {
+pub(crate) fn validate_bounds(contribution: &RouteContribution) -> Result<(), RouterError> {
     bounded(
         "route destinations",
-        contribution.destinations.len(),
-        MAX_DESTINATIONS * factor,
-    )?;
-    bounded(
-        "route coverage targets",
-        contribution.coverage.len(),
-        MAX_COVERAGE * factor,
-    )?;
-    bounded(
-        "unresolved route targets",
-        contribution.unresolved.len(),
-        MAX_TARGETS * factor,
-    )?;
-    bounded(
-        "route shortfalls",
-        contribution.shortfalls.len(),
-        MAX_SHORTFALLS * factor,
+        contribution
+            .destinations
+            .iter()
+            .map(|destination| &destination.session)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        MAX_DESTINATIONS,
     )?;
     for destination in &contribution.destinations {
-        bounded(
-            "destination targets",
-            destination.targets.len(),
-            MAX_TARGETS,
-        )?;
         bounded("route reason", destination.reason.len(), MAX_TEXT_BYTES)?;
     }
     for state in contribution.coverage.values() {
@@ -384,9 +367,6 @@ fn validate_contribution(
         bounded("route shortfall", shortfall.len(), MAX_TEXT_BYTES)?;
     }
     Ok(())
-}
-pub(crate) fn validate_combined(contribution: &RouteContribution) -> Result<(), RouterError> {
-    validate_contribution(contribution, CHAIN_ACCUMULATION_FACTOR)
 }
 fn bounded(label: &str, actual: usize, maximum: usize) -> Result<(), RouterError> {
     if actual > maximum {

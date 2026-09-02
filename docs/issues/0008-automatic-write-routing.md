@@ -40,8 +40,8 @@ the event once.
 ## Bounds
 
 - At most 32 configured routers enter one chain.
-- Each router contribution has at most 256 destinations, coverage targets,
-  unresolved targets, and shortfalls.
+- Each router contribution has at most 256 distinct relay sessions and 256
+  shortfalls, and covers every target the query named.
 - One write receipt accepts at most 256 current desired destinations.
 - Route reason and shortfall text is bounded to 4,096 bytes.
 - Bounds return exact actual and maximum values and commit no partial receipt

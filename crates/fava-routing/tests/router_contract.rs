@@ -1,11 +1,15 @@
 //! Compile conformance for the sole public router/session contract.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use fava_query::{Query, QuerySnapshot};
 use fava_routing::{
-    RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession,
+    CoverageState, RouteContribution, RoutePlan, RouteRequest, RouteTarget, Router, RouterError,
+    RouterSession,
 };
+use nostr::key::{Keys, PublicKey, SecretKey};
+use nostr::types::RelayUrl;
 
 struct ConformingRouter;
 
@@ -111,6 +115,30 @@ fn router_and_session_have_only_the_approved_required_signatures() {
             "a router contract method has a default body: {contract}"
         );
     }
+}
+
+#[test]
+fn an_explicit_plan_carries_every_author_the_query_named() {
+    let targets: BTreeSet<RouteTarget> =
+        (0..600_u32).map(author).map(RouteTarget::Author).collect();
+    let relay = RelayUrl::parse("wss://relay.example").expect("relay");
+
+    let plan = RoutePlan::explicit([relay.clone()], &targets).expect("explicit plan");
+
+    assert_eq!(plan.destinations[&relay].targets, targets);
+    assert!(
+        targets
+            .iter()
+            .all(|target| matches!(plan.coverage.get(target), Some(CoverageState::Covered(_)))),
+        "every named author is covered by the explicit relay"
+    );
+    assert!(plan.settled());
+}
+
+fn author(index: u32) -> PublicKey {
+    let mut bytes = [1_u8; 32];
+    bytes[..4].copy_from_slice(&index.to_be_bytes());
+    Keys::new(SecretKey::from_slice(&bytes).expect("secret key")).public_key()
 }
 
 fn trait_body<'a>(source: &'a str, start: &str) -> &'a str {
