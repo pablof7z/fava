@@ -103,12 +103,14 @@ Eleven findings against the landed commits. Three are already assigned; the rest
   The two `public_api.rs` tests flagged as weak are in a file that declares itself a compile-surface proof; that is their stated job. One reported redundancy was not real: `exact_access_keys_isolate_event_eose_and_challenge` and `a_close_refusal_on_one_connection_leaves_the_other_untouched` fall to the same reversion because one bug breaks all three message kinds, but they cover `EVENT`/`EOSE` and `CLOSED` respectively.
 - [x] 7.5 (measured, and the expectation was wrong) Report the line count removed against the ~8,200 the canvasses measured; verify the number with `wc -l` rather than estimating.
 
-  Measured across the eight crates the canvasses counted, at `006b842a` and at the tip:
+  Measured across the eight crates the canvasses counted, at `006b842a` and at the tip. Re-measured at `09bc441a`, once every task but Symbol Gate was done:
 
   ```
-  production   11,338 → 12,226   +888
-  tests         5,468 →  7,392  +1,924
+  production   11,338 → 12,118   +780
+  tests         5,468 →  7,526  +2,058
   ```
+
+  (Read once mid-change at 12,226 production and 7,392 tests. Production came down 108 after that, mostly from `awaiting_authentication` becoming a default over `Transport::sessions` and the ledger reads it replaced.)
 
   Nothing was removed on balance. The deletions were real — the lease and everything that existed to undo it, the polls, the duplicated lifecycle enum, the sideways trait, the counters nobody read — but the canvasses counted what would go without counting what takes its place. Two states on a watch channel, a matching rule, a request signal, an enumeration for catching up, and a write that waits on its connection are all new code. A dozen bugs found along the way each cost a fix and a test.
 
