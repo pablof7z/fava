@@ -260,17 +260,28 @@ def auth_state_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def require_auth_states(states: list[dict[str, Any]]) -> None:
     expected = [
-        ("accept", "as:alice", "accepted"),
-        ("refuse", "as:dave", "failed"),
+        ("accept", "as:alice", "authenticated"),
+        ("refuse", "as:dave", "unanswerable"),
         ("reject", "as:carol", "declined"),
-        ("reject", "as:bob", "rejected"),
-        ("refuse", "as:alice", "accepted-but-still-refused"),
-        ("nostr", "as:alice", "awaiting-answer"),
-        ("nostr", "as:alice", "attempted"),
+        ("reject", "as:bob", "refused"),
+        ("refuse", "as:alice", "refused"),
+        ("nostr", "as:alice", "requested"),
+        ("nostr", "as:alice", "authenticating"),
     ]
     actual = [(state["relay"], state["access"], state["state"]) for state in states]
     if actual != expected:
         raise HarnessError(f"authentication state sequence differed: {actual} != {expected}")
+    # Two relays refuse the same proof for different reasons, and the state
+    # name no longer separates them -- a refusal is a refusal. The relay's own
+    # words are what carry the difference, so they are what gets asserted.
+    reasons = [
+        (3, "error:", "reject answers a valid AUTH with a plain error"),
+        (4, "restricted:", "accept-refuse answers a valid AUTH with restricted"),
+    ]
+    for index, prefix, why in reasons:
+        message = states[index].get("message", "")
+        if not message.startswith(prefix):
+            raise HarnessError(f"{why}: expected {prefix!r}, got {message!r}")
 
 
 def sign_auth(verify_bin: Path, secret_key: str, relay: str, challenge: str) -> dict[str, Any]:

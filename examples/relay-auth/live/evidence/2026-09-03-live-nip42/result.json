@@ -13,14 +13,14 @@
       "access": "as:alice",
       "message": "",
       "relay": "accept",
-      "state": "accepted",
+      "state": "authenticated",
       "truncated_bytes": 0
     },
     {
       "access": "as:dave",
       "message": "no signer is attached for this account",
       "relay": "refuse",
-      "state": "failed",
+      "state": "unanswerable",
       "truncated_bytes": 0
     },
     {
@@ -34,59 +34,60 @@
       "access": "as:bob",
       "message": "error: authentication rejected by policy",
       "relay": "reject",
-      "state": "rejected",
+      "state": "refused",
       "truncated_bytes": 0
     },
     {
       "access": "as:alice",
       "message": "restricted: pubkey not permitted by policy",
       "relay": "refuse",
-      "state": "accepted-but-still-refused",
+      "state": "refused",
       "truncated_bytes": 0
     },
     {
       "access": "as:alice",
       "message": "",
       "relay": "nostr",
-      "state": "awaiting-answer",
+      "state": "requested",
       "truncated_bytes": 0
     },
     {
       "access": "as:alice",
       "message": "",
       "relay": "nostr",
-      "state": "attempted",
+      "state": "authenticating",
       "truncated_bytes": 0
     }
   ],
   "captures": {
-    "accept-event": "c27e2a6fd4fb3e9f6381fce8d9e82b398cdb96f90d4df303830f2f9d1facf34a",
+    "accept-event": "d6f70c520ddc4ac5d558a88ee5ffd4435bfd14d5b19f1c5bed1086b4b113d3f0",
     "accept-write": "2",
-    "cross-event": "1cdb716cf581e9e88729cf9f6f71117417ec82916f7cc836eb2f200fed43b5bf",
+    "cross-event": "5de9182ce6e8f6a6537c16872df21abbfa2bef4d17b5bb59a237e55083cea09b",
     "cross-write": "7",
     "decline-write": "4",
-    "defer-event": "09e0aa60efc98a1345c2a16b386522f3c9676672527e67486787fafca7caa309",
+    "defer-event": "c04de97810e27de23e158a7c0ca9797f359770cb7a7a65eb2acd31e1f84a5f9b",
     "defer-write": "8",
     "failed-write": "3",
-    "pending-id": "1",
-    "pub-event": "be1146852f355521f7dc461e1403a9cbcb4b114c0a7bc4b7e3f63e2eb751e0de",
+    "pending-connection": "9",
+    "pending-relay": "ws://127.0.0.1:57958",
+    "pub-event": "a0854fbb07e7395acae0161b1a06061598424552a9d3ad1a2133941f1b626fcb",
     "pub-write": "1",
     "refuse-write": "6",
     "reject-write": "5"
   },
   "fixtures": {
     "app": "relay-auth 0.1.0",
-    "app_sha256": "c4b65eda525cea352e98e75d4e9e6ba65a8a9418e63b3df4ba1779edad544061",
+    "app_sha256": "b277b3bd75c3ffdf5a4c00d9d5f27ebd6ca5265fcf59d5d50d0e83392a8387ae",
     "authenticating_relay": "nostr-rs-relay 0.8.12",
     "authenticating_relay_sha256": "772530158c5562ccafabd4d93aa2ac3a686b2203cbeec1ce313791b4e1fc28b9",
     "enforcing_relay": "examples/crates/e2e-support/live/nip42_relay.py (harness-owned)",
-    "nip01_wire_sha256": "e1fd85105ae14151eec551384a3aec7eeb16ee60435115fac2cba84f9f6d982d",
-    "scenario_sha256": "03682de39be8b5126305d0cd8886e1b00914f466bf79b243558e234bc000c86d"
+    "nip01_wire_sha256": "519a5db469f41084379159aafeb6892a21d823c3ef7ca98aa659056ad922d253",
+    "scenario_sha256": "f214c8b350359dbdc9d1d5a644a64a87abf3c14b6fe07a701245ba04986e7480"
   },
   "relays": {
-    "accept": "ws://127.0.0.1:58423",
-    "nostr": "ws://127.0.0.1:58422",
-    "refuse": "ws://127.0.0.1:58425",
-    "reject": "ws://127.0.0.1:58424"
+    "accept": "ws://127.0.0.1:57959",
+    "nostr": "ws://127.0.0.1:57958",
+    "refuse": "ws://127.0.0.1:57961",
+    "reject": "ws://127.0.0.1:57960"
   }
 }

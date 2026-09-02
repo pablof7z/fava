@@ -211,7 +211,7 @@ impl Transport for WebSocketTransport {
         })
     }
 
-    fn awaiting_authentication(&self) -> Vec<Arc<dyn RelaySession>> {
+    fn sessions(&self) -> Vec<Arc<dyn RelaySession>> {
         let entries = self
             .registry
             .entries
@@ -220,18 +220,6 @@ impl Transport for WebSocketTransport {
         entries
             .values()
             .flatten()
-            .filter(|entry| {
-                matches!(
-                    entry
-                        .session
-                        .router()
-                        .connection()
-                        .borrow()
-                        .authentication
-                        .progress,
-                    fava_relay::Progress::Requested { .. }
-                )
-            })
             .map(|entry| Arc::clone(&entry.session) as Arc<dyn RelaySession>)
             .collect()
     }

@@ -10,32 +10,43 @@ publish public 1 "public note on nostr" nostr
 capture pub-write receipt_id
 receipt wait ${pub-write}
 capture pub-event event_id
+query open hold-accept as:alice 1 accept
 publish as:alice 1 "alice accepted" accept
 capture accept-write receipt_id
 receipt wait ${accept-write}
 capture accept-event event_id
 auth state accept as:alice
+query close hold-accept
 account add-pubkey dave e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13
+policy set authenticate:dave
+query open hold-refuse-dave as:dave 1 refuse
 publish as:dave for alice 1 "alices note via daves unsigned session" refuse
 capture failed-write receipt_id
 receipt wait ${failed-write}
 auth state refuse as:dave
+query close hold-refuse-dave
 account switch alice
 policy set decline
+query open hold-reject-carol as:carol 1 reject
 publish as:carol 1 "carol declines" reject
 capture decline-write receipt_id
 receipt wait ${decline-write}
 auth state reject as:carol
+query close hold-reject-carol
 policy set authenticate:bob
+query open hold-reject-bob as:bob 1 reject
 publish as:bob 1 "bob rejected" reject
 capture reject-write receipt_id
 receipt wait ${reject-write}
 auth state reject as:bob
+query close hold-reject-bob
 policy set authenticate:alice
+query open hold-refuse-alice as:alice 1 refuse
 publish as:alice 1 "alice still refused" refuse
 capture refuse-write receipt_id
 receipt wait ${refuse-write}
 auth state refuse as:alice
+query close hold-refuse-alice
 publish as:alice for bob 2 "bobs note via alices session" accept
 capture cross-write receipt_id
 receipt wait ${cross-write}
@@ -45,6 +56,7 @@ query wait accept-read 1
 query snapshot accept-read
 query close accept-read
 policy set defer
+query open hold-nostr as:alice 1 nostr
 publish as:alice 3 "alice deferred on nostr" nostr
 capture defer-write receipt_id
 auth wait
@@ -56,6 +68,7 @@ auth answer ${pending-relay} ${pending-connection} authenticate:alice
 receipt wait ${defer-write}
 capture defer-event event_id
 auth state nostr as:alice
+query close hold-nostr
 routes
 diagnostics
 receipt list

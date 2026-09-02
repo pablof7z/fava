@@ -71,7 +71,15 @@ Eleven findings against the landed commits. Three are already assigned; the rest
 
 - [x] 7.1 Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, and `cargo test --workspace --doc --locked`; verify every one passes
 - [x] 7.2 Build and test both example workspaces and `examples/crates/e2e-support`; verify each passes
-- [ ] 7.3 Run the live proof against the four relays and refresh the committed evidence; verify every authentication state the app drove before is still driven
+- [x] 7.3 Run the live proof against the four relays and refresh the committed evidence; verify every authentication state the app drove before is still driven
+
+  Passed against all four relays; evidence refreshed to `examples/relay-auth/live/evidence/2026-09-03-live-nip42/`. Two things had to change first.
+
+  The app read authentication out of `Fava::diagnostics()`, which reports only relays the *observation* owner leases — so a relay held by a publisher, including one parked waiting to be answered, was invisible, and every check returned `unknown`. `auth state` now asks the transport, which is the only owner of connections. That needed `Transport::sessions()`; `awaiting_authentication` became a default over it, so the trait gained one method and lost the special case.
+
+  A connection's authentication dies with the connection, by design, so a check after the last holder released it is honestly `unknown`. The scenario now holds a query open across each check, which also means every state is read off the same live connection that reached it.
+
+  Every state the app can drive is driven: `authenticated`, `unanswerable`, `declined`, `refused` twice, `requested`, `authenticating`. The two refusals share a name — the change collapsed `AcceptedButStillRefused` into `Refused` deliberately — so the harness now asserts the relay's own words instead, `error:` from `reject` and `restricted:` from `accept-refuse`, which is a stricter check than the name it replaced. `Idle` is the one state no relay here drives: all four challenge on connect.
 - [ ] 7.4 Falsify each new test by reverting the behavior it asserts, one at a time; verify each reversion fails only its own test
 - [x] 7.5 (measured, and the expectation was wrong) Report the line count removed against the ~8,200 the canvasses measured; verify the number with `wc -l` rather than estimating.
 

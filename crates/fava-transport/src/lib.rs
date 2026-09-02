@@ -102,17 +102,44 @@ pub trait Transport: Send + Sync {
     /// request nobody hears is a relay left unanswered.
     fn authentication_requests(&self) -> broadcast::Receiver<Arc<dyn RelaySession>>;
 
+    /// Every session the transport currently holds.
+    ///
+    /// The transport is the only owner of connections, so it is the only
+    /// honest answer to "what is this relay's connection doing right now" --
+    /// whether the asker is a listener catching up on a challenge it missed
+    /// or an operator reading the current state of a connection nothing else
+    /// is watching. Both are the same question with a different filter, so
+    /// there is one method and the filters live at the call sites.
+    ///
+    /// Nothing polls this. A session appears here for exactly as long as
+    /// something holds it: a released connection is closed and gone, and so
+    /// is everything it knew.
+    fn sessions(&self) -> Vec<Arc<dyn RelaySession>>;
+
     /// Every session currently waiting to be answered.
     ///
-    /// The stream above is the ordinary path, and a listener that falls behind
-    /// loses what it missed — a relay only asks again when it has something
-    /// new to ask. This is how that listener catches up: it asks which
-    /// connections are still waiting, rather than waiting for a repetition
-    /// that is not coming.
+    /// [`Transport::authentication_requests`] is the ordinary path, and a
+    /// listener that falls behind loses what it missed -- a relay only asks
+    /// again when it has something new to ask. This is how that listener
+    /// catches up: it asks which connections are still waiting, rather than
+    /// waiting for a repetition that is not coming.
     ///
     /// Nothing polls this. It is read once, after a listener learns it fell
     /// behind.
-    fn awaiting_authentication(&self) -> Vec<Arc<dyn RelaySession>>;
+    fn awaiting_authentication(&self) -> Vec<Arc<dyn RelaySession>> {
+        self.sessions()
+            .into_iter()
+            .filter(|session| {
+                matches!(
+                    RelaySessionExt::connection(session)
+                        .borrow()
+                        .authentication
+                        .progress,
+                    Progress::Requested { .. }
+                )
+            })
+            .collect()
+    }
 
     /// Stop accepting acquisitions, close every registered session within
     /// `deadline`, and join owned resources.

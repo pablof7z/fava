@@ -829,8 +829,8 @@ impl Transport for NoopTransport {
         })
     }
 
-    fn awaiting_authentication(&self) -> Vec<std::sync::Arc<dyn fava_transport::RelaySession>> {
-        // This double never carries a relay's demand.
+    fn sessions(&self) -> Vec<std::sync::Arc<dyn fava_transport::RelaySession>> {
+        // This double holds no connections, so it never carries a demand.
         Vec::new()
     }
 

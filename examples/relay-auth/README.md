@@ -2,7 +2,7 @@
 
 An interactive and replayable shell over Fava's NIP-42 relay-authentication
 surface: `fava_auth::{AuthenticationPolicy, Authenticator}`, `Fava::authentication()`,
-`Fava::with_account`, and `AuthenticationState`.
+`Fava::with_account`, and a connection's `Authentication`.
 
 A relay that requires proof of identity sends an `AUTH` challenge; the
 application decides, per challenge, whether to sign a response, decline, or
@@ -108,15 +108,23 @@ next -- if `publish` blocked for terminal settlement, nothing could ever run
 `auth pending`/`auth answer` to unblock it from the same session. `receipt
 wait <id>` is the explicit door for a caller that does want to block.
 
-## Every reachable `AuthenticationState`
+## Every reachable authentication state
 
-`auth state <relay> <public|as:<account>>` prints one of `unknown` (no
-challenge seen yet), `challenge-received`, `declined`, `attempted`,
-`awaiting-answer`, `accepted`, `accepted-but-still-refused`, `rejected`, or
-`failed`, plus the relay's exact bounded message where one exists. The live
-proof (`live/harness.py`) drives all of these except `challenge-received`,
-which is real but transient: a policy decides synchronously in the same tick
-a challenge arrives, so nothing can observe it standing still on purpose.
+`auth state <relay> <public|as:<account>>` asks the transport for the
+connection currently serving that relay and authority, and prints what that
+connection's authentication says: `unknown` (nothing is connected), `none`
+(connected, never challenged), `requested`, `authenticating`, `declined`,
+`refused`, `unanswerable`, or `authenticated`, plus the relay's exact
+bounded message where one exists.
+
+Authentication belongs to a connection, so the answer disappears with it: a
+relay whose last holder released it reports `unknown`, not the verdict it
+reached before it closed. The live scenario therefore holds a query open
+across every check.
+
+The live proof (`live/harness.py`) drives all of these except `none`, which
+needs a relay that connects without challenging -- all four of the harness's
+relays challenge on connect.
 
 ## Two relays, two different things they prove
 
@@ -133,9 +141,9 @@ harness fully owns, in three fixed modes (`accept`, `reject`,
 `accept-refuse`). It refuses every `REQ` and `EVENT` with `auth-required:`
 until a **verified** kind-22242 event arrives -- verified for real, by
 shelling out to `nip01_wire` (below), never trusted on faith -- and then
-answers exactly per its mode. This is what proves `Rejected`,
-`AcceptedButStillRefused`, and real read/write enforcement; no relay this
-repository can pin does that on its own.
+answers exactly per its mode. This is what proves both refusals -- the plain
+`error:` one and the `restricted:` one -- and real read/write enforcement;
+no relay this repository can pin does that on its own.
 
 `examples/crates/e2e-support/src/bin/nip01_wire.rs` exists because Python
 ships no BIP-340 schnorr implementation: it verifies a delivered event's

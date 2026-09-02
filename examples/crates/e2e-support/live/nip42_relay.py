@@ -27,9 +27,9 @@ Modes (selected once, at process start, with `--mode`):
   (not `restricted:`); the connection is never authenticated.
 * ``accept-refuse``  -- a valid `AUTH` is answered `OK false "restricted: ..."`;
   the connection is never authenticated either, so reads/writes keep failing
-  with `auth-required:`. This is the wire shape Fava classifies as
-  `AcceptedButStillRefused` (see `crates/fava-auth/src/authenticator/answer.rs`):
-  the proof itself was not rejected outright, but the account remains refused.
+  with `auth-required:`. Fava records this as a refusal like any other (see
+  `crates/fava-auth/src/authenticator/answer.rs`); what separates it from
+  ``reject`` is the relay's own wording, not the state it produces.
 
 A malformed or unverifiable `AUTH` (bad signature, wrong challenge, wrong
 kind) is always answered `OK false "invalid: <reason>"`, regardless of mode.

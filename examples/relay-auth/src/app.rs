@@ -8,7 +8,7 @@ use std::time::Duration;
 use e2e_support::{CommandResult, E2eSession, ResultValue, ShellError};
 use fava::{EventBuilder, Fava, Observation, Query};
 use fava_auth::Authenticator;
-use fava_transport::RelaySessionIdentity;
+use fava_transport::{RelaySessionExt, RelaySessionIdentity, Transport};
 
 use crate::render::{
     AUTH_ANSWER_USAGE, AUTH_STATE_USAGE, AUTH_USAGE, AccessSpec, POLICY_USAGE, PUBLISH_USAGE,
@@ -276,13 +276,16 @@ impl App {
     ) -> Result<CommandResult, ShellError> {
         let relay = session.relay(relay_alias)?.clone();
         let authority = resolve_access(session, &parse_access(access_token)?)?;
-        let diagnostics = self.fava.diagnostics();
-        let authentication = diagnostics
-            .relays
+        // Authentication belongs to a connection, so this asks the transport,
+        // which owns them. A relay nothing is connected to has no answer to
+        // give -- not `none`, which would claim a connection that was never
+        // asked.
+        let authentication = Transport::sessions(self.transport.as_ref())
             .into_iter()
-            .filter(|entry| entry.session == relay)
-            .find(|entry| entry.authentication.can_serve(&authority))
-            .map(|entry| entry.authentication);
+            .filter(|open| open.identity().relay == relay)
+            .map(|open| RelaySessionExt::connection(&open).borrow().clone())
+            .find(|connection| connection.authentication.can_serve(&authority))
+            .map(|connection| connection.authentication);
         state_result(relay_alias, access_token, authentication)
     }
 

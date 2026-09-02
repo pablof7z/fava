@@ -229,23 +229,11 @@ impl Transport for FakeTransport {
         })
     }
 
-    fn awaiting_authentication(&self) -> Vec<Arc<dyn RelaySession>> {
+    fn sessions(&self) -> Vec<Arc<dyn RelaySession>> {
         let entries = self.state.entries.lock().expect("registry is not poisoned");
         entries
             .values()
             .flatten()
-            .filter(|entry| {
-                matches!(
-                    entry
-                        .session
-                        .router()
-                        .connection()
-                        .borrow()
-                        .authentication
-                        .progress,
-                    fava_relay::Progress::Requested { .. }
-                )
-            })
             .map(|entry| Arc::clone(&entry.session) as Arc<dyn RelaySession>)
             .collect()
     }

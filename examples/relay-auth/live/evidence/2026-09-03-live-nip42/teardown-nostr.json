@@ -7,10 +7,10 @@
   "output_threads_joined": true,
   "parent_exited_before_teardown": false,
   "permission_denied": false,
-  "pid": 47429,
-  "returncode": -15,
+  "pid": 56690,
+  "returncode": 0,
   "stderr_bytes": 0,
-  "stdout_bytes": 27,
+  "stdout_bytes": 4690,
   "teardown_error": false,
   "term_sent": true
 }

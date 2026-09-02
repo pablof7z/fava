@@ -25,8 +25,8 @@ python3 examples/relay-auth/live/harness.py \
   fixed-mode instances: `accept`, `reject`, `accept-refuse`) proves real
   enforcement: every `REQ` and `EVENT` is refused with `auth-required:` until
   a genuinely verified kind-22242 event arrives, and each mode's exact reply
-  to a *valid* one is what drives `Accepted`, `Rejected`, and
-  `AcceptedButStillRefused`.
+  to a *valid* one is what drives `authenticated` and each of the two
+  refusals.
 
 Every kind-22242 event this relay receives -- from the application under
 test or from this harness's own independent inspection connections -- is
@@ -56,18 +56,31 @@ harness never stops there:
 
 ## What it proves live
 
-- Every `AuthenticationState` but `ChallengeReceived` (real but transient;
-  see the app README), driven through real relay wire traffic and asserted
-  through `auth state`, in this exact order: `accepted` (accept relay),
-  `failed` (no signer attached, over a real connection to `accept-refuse`),
-  `declined` (a local policy decision, never touching the wire), `rejected`
-  (a valid `AUTH` genuinely refused by `reject`), `accepted-but-still-refused`
-  (a valid `AUTH` genuinely refused by `accept-refuse` with `restricted:`),
-  `awaiting-answer` then `attempted` (a deferred demand, answered by a
-  person, completing against `nostr-rs-relay`).
+- Every `Progress` a relay can drive, over real wire traffic, asserted
+  through `auth state` in this exact order: `authenticated` (accept relay),
+  `unanswerable` (a policy naming a pubkey-only account, over a real
+  connection to `accept-refuse`), `declined` (a local policy decision, never
+  touching the wire), `refused` (a valid `AUTH` genuinely refused by
+  `reject`), `refused` again (a valid `AUTH` genuinely refused by
+  `accept-refuse`), `requested` then `authenticating` (a deferred demand,
+  answered by a person, against `nostr-rs-relay`).
+
+  The two refusals share one state name, because a refusal is a refusal
+  whatever prefix the relay chose to say it with. The relay's own words are
+  what separate them, so the harness asserts those directly: `error:` from
+  `reject`, `restricted:` from `accept-refuse`.
+
+  `Progress::Idle` -- connected, never challenged -- is the one state no
+  relay here drives, because all four challenge on connect.
+
+- **Authentication is read off a live connection, not a ledger**: `auth state`
+  asks the transport for the connection serving that relay and authority.
+  Every check above therefore holds a query open across it; a relay nothing
+  is connected to answers `unknown`, because a closed connection took its
+  authentication with it.
 - **A deferred demand is genuinely answered by a person, end to end**: the
   demand appears in `auth pending`, `auth answer authenticate` resolves it,
-  and the session's own verdict moves `awaiting-answer` -> `attempted`. What
+  and the connection's own progress moves `requested` -> `authenticating`. What
   this scenario does *not* show is a write visibly *held open* by that
   demand: the deferred write targets `nostr-rs-relay`, which never gates
   `EVENT` at all, so its own completion says nothing about the auth
@@ -92,5 +105,5 @@ harness never stops there:
   policy -- issue 0053 deliberately removed secret guardrails from every E2E
   testing surface, and this app carries none.
 
-Canonical evidence is in `evidence/2026-09-01-live-nip42/`; `manifest.json`
+Canonical evidence is in `evidence/2026-09-03-live-nip42/`; `manifest.json`
 records every retained artifact's byte count and SHA-256 digest.
