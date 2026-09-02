@@ -58,7 +58,16 @@ for ws in "${WORKSPACES[@]}"; do
   export CARGO_TARGET_DIR="$BUILDS/$(printf '%s' "$ws" | tr -c 'A-Za-z0-9' '-')"
   run "  clippy" cargo clippy --manifest-path "$ws/Cargo.toml" --all-targets --locked -- -D warnings
   run "  test"   cargo test   --manifest-path "$ws/Cargo.toml" --all-targets --locked
-  run "  doc"    cargo test   --manifest-path "$ws/Cargo.toml" --doc --locked
+  # A binary-only package has no library target, and cargo treats asking it
+  # for doc tests as an error rather than as zero of them. The example apps
+  # are binaries; that is not a defect to paper over with an empty lib.
+  if ! grep -q '^\[package\]' "$ws/Cargo.toml" \
+     || grep -q '^\[lib\]' "$ws/Cargo.toml" \
+     || [ -f "$ws/src/lib.rs" ]; then
+    run "  doc"  cargo test --manifest-path "$ws/Cargo.toml" --doc --locked
+  else
+    printf '%-58s%s\n' "  doc" "skipped, no library target"
+  fi
 done
 
 echo
