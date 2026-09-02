@@ -65,7 +65,13 @@ Eleven findings against the landed commits. Three are already assigned; the rest
 
 ## 6c. A falsifier nobody has been running
 
-- [ ] 6c.1 Bring `falsifiers/external-semantic-capability` back to something that compiles, or retire it. Its relay-session fake is missing five methods the session gained when it started speaking NIP-01 — before this change — and two more this change added. It is a separate cargo workspace, so no root gate ever covered it and nobody noticed it rot. Decide whether it still proves something worth keeping; verify by `./scripts/gates` reporting it green, or by its absence from that script
+- [x] 6c.1 Bring `falsifiers/external-semantic-capability` back to something that compiles, or retire it. Its relay-session fake is missing five methods the session gained when it started speaking NIP-01 — before this change — and two more this change added. It is a separate cargo workspace, so no root gate ever covered it and nobody noticed it rot. Decide whether it still proves something worth keeping; verify by `./scripts/gates` reporting it green, or by its absence from that script
+
+  Repaired, not retired: it proves an ordinary external crate can implement Fava's contract with only public API, and this change reshaped exactly that contract. Its fake moved from the old pull model to the current push model -- it owns a real `Router` and implements `hand_off`, `mint_subscription_id`, `router`, `inbound_capacity`, `enqueue`, `sessions` and `authentication_requests`. Nothing under `crates/` moved, no dependency was added, and the fake got smaller: its inbound path now builds the wire message directly instead of round-tripping through JSON.
+
+  The rot came from two places, and the split is the interesting part. `Fava::by` -> `with_account` predates this change (`f2679004`), and had been broken here since, unseen, because no gate reached this workspace -- which is the whole reason this task exists. `desired_destinations` becoming `BTreeSet<RelayUrl>` is ours (`dc927a2c`, task 3.1), fallout of deleting `RelaySessionKey`.
+
+  One finding about the public surface: `fava-transport` re-exports neither `RelayMessage` nor `decode_relay`, so an external crate implementing a session has to reach past it to `nostr` for the type the router consumes.
 
 ## 7. Verification
 

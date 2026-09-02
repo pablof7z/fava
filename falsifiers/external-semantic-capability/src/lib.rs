@@ -1,4 +1,18 @@
 //! External semantic-capability proof compiled outside the Fava workspace.
+//!
+//! ## A surface gap found while repairing this proof's transport fake
+//!
+//! `tests/support/mod.rs` drives `Fava` over a hand-written `Transport` and
+//! `RelaySession`. Delivering an inbound relay message means calling
+//! `fava_transport::Router::deliver`, which takes a `nostr::message::RelayMessage`
+//! -- but `fava_transport` re-exports neither `RelayMessage` nor a decoder for
+//! it (`fava_wire::decode_relay`, which `fava_transport` itself uses internally,
+//! is likewise not re-exported). An external crate implementing `RelaySession`
+//! therefore cannot construct what its own router consumes through
+//! `fava_transport` alone: it has to depend on `nostr` directly and build
+//! `nostr::message::RelayMessage` variants by hand (as this proof now does),
+//! trusting that the type is identical to the one `fava_wire` re-exports rather
+//! than being told so by `fava_transport`'s own public API.
 
 mod capability;
 

@@ -33,7 +33,7 @@ async fn external_capability_composes_through_public_fava() {
     let subscription = harness.transport.subscription().await;
     let accepted = harness
         .fava
-        .by(actor)
+        .with_account(actor)
         .to([harness.relay.clone()])
         .expect("external relay scope validates")
         .publish(insert("alpha").unwrap())
@@ -52,7 +52,7 @@ async fn external_capability_composes_through_public_fava() {
         generation_one
             .desired_destinations
             .iter()
-            .all(|session| session.relay == harness.relay)
+            .all(|destination| *destination == harness.relay)
     );
     assert_eq!(
         generation_one
@@ -192,7 +192,7 @@ async fn external_retired_completion_and_failure_preserve_current() {
     let subscription = harness.transport.subscription().await;
     let accepted = harness
         .fava
-        .by(actor)
+        .with_account(actor)
         .to([harness.relay.clone()])
         .expect("external relay scope validates")
         .publish(insert("alpha").unwrap())

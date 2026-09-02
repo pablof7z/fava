@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -13,19 +13,24 @@ use fava_relay::Authority;
 use fava_signer_local::LocalSigner;
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use fava_transport::{
-    BoundedReason, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
-    RelayConnection, RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySession,
-    RelaySessionFuture, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport,
-    TransportError, TransportFailure, TransportShutdownFuture,
+    BoundedText, Connection, Connectivity, HandoffCorrelation, HandoffFuture, HandoffOutcome,
+    OpenRelaySession, RelayConnection, RelaySession, RelaySessionFuture, RelaySessionIdentity,
+    ReleaseFuture, ReleaseOutcome, Router, SubscriptionId, Transport, TransportFailure,
+    TransportShutdownFuture, publish_authentication_requests, subscription_id,
 };
 use fava_transport_testkit::detached_lease;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{Event, EventId};
 use nostr::key::Keys;
-use serde_json::{Value, json};
-use tokio::sync::Notify;
+use nostr::message::RelayMessage;
+use serde_json::Value;
+use tokio::sync::broadcast;
 
-const DEADLINE: Duration = Duration::from_secs(2);
+/// Unheard authentication requests held before the oldest is dropped.
+///
+/// This proof never exercises NIP-42, so a small backlog is enough; it exists
+/// only to satisfy [`Transport::authentication_requests`].
+const REQUEST_BACKLOG: usize = 8;
 
 mod waits;
 
@@ -74,16 +79,32 @@ pub struct ScriptedTransport {
     shared: Arc<Shared>,
 }
 
-#[derive(Default)]
 struct Shared {
     state: Mutex<ScriptState>,
-    changed: Notify,
+    changed: tokio::sync::Notify,
     opens: AtomicU64,
+    /// Every session the transport currently holds, for [`Transport::sessions`].
+    sessions: Mutex<Vec<Arc<dyn RelaySession>>>,
+    /// Sessions whose relay has asked them to authenticate. Never published
+    /// by this fake, which speaks no NIP-42.
+    requests: broadcast::Sender<Arc<dyn RelaySession>>,
+}
+
+impl Default for Shared {
+    fn default() -> Self {
+        Self {
+            state: Mutex::default(),
+            changed: tokio::sync::Notify::default(),
+            opens: AtomicU64::default(),
+            sessions: Mutex::default(),
+            requests: broadcast::Sender::new(REQUEST_BACKLOG),
+        }
+    }
 }
 
 #[derive(Default)]
 struct ScriptState {
-    subscriptions: HashMap<String, Arc<Inbox>>,
+    subscriptions: HashMap<String, Arc<Router>>,
     publications: Vec<Publication>,
     closed_publications: HashSet<EventId>,
 }
@@ -91,30 +112,7 @@ struct ScriptState {
 #[derive(Clone)]
 struct Publication {
     event: Event,
-    inbox: Arc<Inbox>,
-}
-
-struct Inbox {
-    frames: Mutex<VecDeque<Result<String, TransportError>>>,
-    notify: Notify,
-    closed: AtomicBool,
-    publication: Mutex<Option<EventId>>,
-}
-
-impl Inbox {
-    fn new() -> Self {
-        Self {
-            frames: Mutex::new(VecDeque::new()),
-            notify: Notify::new(),
-            closed: AtomicBool::new(false),
-            publication: Mutex::new(None),
-        }
-    }
-
-    fn push(&self, frame: String) {
-        self.frames.lock().expect("inbox lock").push_back(Ok(frame));
-        self.notify.notify_one();
-    }
+    router: Arc<Router>,
 }
 
 impl ScriptedTransport {
@@ -148,8 +146,11 @@ impl ScriptedTransport {
         .await
     }
 
+    /// Deliver one `EVENT` for `subscription` directly onto the session's
+    /// router, exactly as a transport implementation would after decoding a
+    /// frame off its own socket.
     pub fn deliver(&self, subscription: &str, event: &Event) {
-        let inbox = self
+        let router = self
             .shared
             .state
             .lock()
@@ -158,11 +159,14 @@ impl ScriptedTransport {
             .get(subscription)
             .cloned()
             .expect("subscription exists");
-        inbox.push(json!(["EVENT", subscription, event]).to_string());
+        router.deliver(RelayMessage::Event {
+            subscription_id: std::borrow::Cow::Owned(SubscriptionId::new(subscription)),
+            event: std::borrow::Cow::Owned(event.clone()),
+        });
     }
 
     pub fn eose(&self, subscription: &str) {
-        let inbox = self
+        let router = self
             .shared
             .state
             .lock()
@@ -171,7 +175,9 @@ impl ScriptedTransport {
             .get(subscription)
             .cloned()
             .expect("subscription exists");
-        inbox.push(json!(["EOSE", subscription]).to_string());
+        router.deliver(RelayMessage::EndOfStoredEvents(std::borrow::Cow::Owned(
+            SubscriptionId::new(subscription),
+        )));
     }
 
     pub fn acknowledge(&self, index: usize) -> EventId {
@@ -185,9 +191,11 @@ impl ScriptedTransport {
             .cloned()
             .expect("publication exists");
         let id = publication.event.id;
-        publication
-            .inbox
-            .push(json!(["OK", id, true, "stored"]).to_string());
+        publication.router.deliver(RelayMessage::Ok {
+            event_id: id,
+            status: true,
+            message: std::borrow::Cow::Borrowed("stored"),
+        });
         id
     }
 
@@ -198,7 +206,11 @@ impl ScriptedTransport {
         .await;
     }
 
-    async fn wait_for<T>(&self, label: &str, predicate: impl Fn(&ScriptState) -> Option<T>) -> T {
+    async fn wait_for<T>(
+        &self,
+        label: &str,
+        predicate: impl Fn(&ScriptState) -> Option<T>,
+    ) -> T {
         waits::with_deadline(label, || self.shared.describe(), async {
             loop {
                 let changed = self.shared.changed.notified();
@@ -223,19 +235,86 @@ impl Shared {
             state.closed_publications.len()
         )
     }
+}
 
-    fn sent(
-        &self,
-        inbox: &Arc<Inbox>,
-        identity: &RelaySessionIdentity,
-        correlation: HandoffCorrelation,
-        frame: &str,
-    ) -> HandoffOutcome {
+impl Transport for ScriptedTransport {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
+        let generation = self.shared.opens.fetch_add(1, Ordering::SeqCst) + 1;
+        let owner = Arc::clone(&self.shared);
+        let inbound_capacity = request.bounds.inbound_frames.get();
+        Box::pin(async move {
+            let identity = RelaySessionIdentity {
+                relay: request.relay,
+                connection: RelayConnection::new(generation)
+                    .expect("scripted session connection is non-zero"),
+            };
+            let router = Arc::new(Router::new(Connection {
+                connectivity: Connectivity::Connected,
+                ..Connection::opening(identity.clone())
+            }));
+            let session: Arc<dyn RelaySession> = Arc::new(ScriptedSession {
+                identity,
+                owner: Arc::clone(&owner),
+                router,
+                inbound_capacity,
+                subscription_counter: AtomicU64::new(0),
+                closed: AtomicBool::new(false),
+                publication: Mutex::new(None),
+            });
+            owner
+                .sessions
+                .lock()
+                .expect("session registry is not poisoned")
+                .push(Arc::clone(&session));
+            let watched = Arc::downgrade(&session);
+            let requests = owner.requests.clone();
+            tokio::spawn(publish_authentication_requests(watched, requests));
+            Ok(detached_lease(session))
+        })
+    }
+
+    fn holders(&self, _relay: &RelayUrl, _authority: &Authority) -> Option<std::num::NonZeroUsize> {
+        None
+    }
+
+    fn sessions(&self) -> Vec<Arc<dyn RelaySession>> {
+        self.shared
+            .sessions
+            .lock()
+            .expect("session registry is not poisoned")
+            .clone()
+    }
+
+    fn authentication_requests(&self) -> broadcast::Receiver<Arc<dyn RelaySession>> {
+        self.shared.requests.subscribe()
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+struct ScriptedSession {
+    identity: RelaySessionIdentity,
+    owner: Arc<Shared>,
+    router: Arc<Router>,
+    inbound_capacity: usize,
+    /// Monotonic source of this session's wire subscription identifiers.
+    subscription_counter: AtomicU64,
+    closed: AtomicBool,
+    publication: Mutex<Option<EventId>>,
+}
+
+impl ScriptedSession {
+    /// Parse one outbound frame Fava handed off, and apply its effect to the
+    /// shared script state -- exactly what a real socket write would trigger
+    /// on the relay side, done in-process.
+    fn sent(&self, correlation: HandoffCorrelation, frame: &str) -> HandoffOutcome {
         let refuse = |reason: &str| HandoffOutcome::NotHandedOff {
-            identity: identity.clone(),
+            identity: self.identity.clone(),
             correlation,
             reason: TransportFailure::Disconnected {
-                detail: BoundedReason::new(reason),
+                detail: BoundedText::new(reason),
             },
         };
         let Ok(value) = serde_json::from_str::<Value>(frame) else {
@@ -249,12 +328,13 @@ impl Shared {
                 let Some(subscription) = value.get(1).and_then(Value::as_str) else {
                     return refuse("REQ omitted subscription id");
                 };
-                self.state
+                self.owner
+                    .state
                     .lock()
                     .expect("script lock")
                     .subscriptions
-                    .insert(subscription.to_owned(), Arc::clone(inbox));
-                self.changed.notify_waiters();
+                    .insert(subscription.to_owned(), Arc::clone(&self.router));
+                self.owner.changed.notify_waiters();
             }
             "EVENT" => {
                 let event = value
@@ -264,99 +344,26 @@ impl Shared {
                 let Some(event) = event else {
                     return refuse("EVENT omitted a valid signed event");
                 };
-                *inbox.publication.lock().expect("publication lock") = Some(event.id);
-                self.state
+                *self.publication.lock().expect("publication lock") = Some(event.id);
+                self.owner
+                    .state
                     .lock()
                     .expect("script lock")
                     .publications
                     .push(Publication {
                         event,
-                        inbox: Arc::clone(inbox),
+                        router: Arc::clone(&self.router),
                     });
-                self.changed.notify_waiters();
+                self.owner.changed.notify_waiters();
             }
             "CLOSE" => {}
             _ => return refuse("script received an unsupported command"),
         }
         HandoffOutcome::HandedOff {
-            identity: identity.clone(),
+            identity: self.identity.clone(),
             correlation,
         }
     }
-}
-
-impl Transport for ScriptedTransport {
-    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
-        let generation = self.shared.opens.fetch_add(1, Ordering::SeqCst) + 1;
-        let inbox = Arc::new(Inbox::new());
-        let owner = Arc::clone(&self.shared);
-        Box::pin(async move {
-            let session: Arc<dyn RelaySession> = Arc::new(ScriptedSession {
-                identity: RelaySessionIdentity {
-                    relay: request.relay,
-                    connection: RelayConnection::new(generation)
-                        .expect("scripted session connection is non-zero"),
-                },
-                owner,
-                inbox,
-            });
-            Ok(detached_lease(session))
-        })
-    }
-
-    fn holders(&self, _relay: &RelayUrl, _authority: &Authority) -> Option<std::num::NonZeroUsize> {
-        None
-    }
-
-    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
-        Box::pin(async { Ok(()) })
-    }
-}
-
-struct ScriptedSession {
-    identity: RelaySessionIdentity,
-    owner: Arc<Shared>,
-    inbox: Arc<Inbox>,
-}
-
-/// One consumer's view of a scripted session's inbound frames.
-struct ScriptedStream {
-    identity: RelaySessionIdentity,
-    inbox: Arc<Inbox>,
-}
-
-impl RelayMessageStream for ScriptedStream {
-    fn next_inbound(&mut self) -> RelayInboundFuture<'_> {
-        Box::pin(async move {
-            loop {
-                let notified = self.inbox.notify.notified();
-                if let Some(frame) = self.inbox.frames.lock().expect("inbox lock").pop_front() {
-                    return frame.map(|text| RelayInbound::Frame {
-                        identity: self.identity.clone(),
-                        frame: text.into_bytes(),
-                        received_at: nostr::types::Timestamp::now(),
-                    });
-                }
-                if self.inbox.closed.load(Ordering::SeqCst) {
-                    return Err(TransportError::Closed(self.identity.clone()));
-                }
-                if tokio::time::timeout(DEADLINE, notified).await.is_err() {
-                    let queued = self.inbox.frames.lock().expect("inbox lock").len();
-                    let publication = *self.inbox.publication.lock().expect("publication lock");
-                    return Err(TransportError::Disconnected(
-                        TransportFailure::Disconnected {
-                            detail: BoundedReason::new(format!(
-                                "script inbound deadline exceeded {DEADLINE:?}; last state: queued={queued}, closed={}, publication={publication:?}",
-                                self.inbox.closed.load(Ordering::SeqCst)
-                            )),
-                        },
-                    ));
-                }
-            }
-        })
-    }
-
-    fn close(&mut self) {}
 }
 
 impl RelaySession for ScriptedSession {
@@ -364,9 +371,29 @@ impl RelaySession for ScriptedSession {
         self.identity.clone()
     }
 
-    fn send(&self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'_> {
+    fn router(&self) -> &Router {
+        &self.router
+    }
+
+    fn inbound_capacity(&self) -> usize {
+        self.inbound_capacity
+    }
+
+    fn enqueue(&self, frame: Vec<u8>) {
+        if self.closed.load(Ordering::SeqCst) {
+            return;
+        }
+        let text = String::from_utf8(frame).unwrap_or_default();
+        let _ = self.sent(HandoffCorrelation::new(0), &text);
+    }
+
+    fn mint_subscription_id(&self) -> SubscriptionId {
+        subscription_id(self.subscription_counter.fetch_add(1, Ordering::SeqCst))
+    }
+
+    fn hand_off(&self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'_> {
         Box::pin(async move {
-            if self.inbox.closed.load(Ordering::SeqCst) {
+            if self.closed.load(Ordering::SeqCst) {
                 return HandoffOutcome::NotHandedOff {
                     identity: self.identity.clone(),
                     correlation,
@@ -374,22 +401,20 @@ impl RelaySession for ScriptedSession {
                 };
             }
             let text = String::from_utf8(frame).unwrap_or_default();
-            self.owner
-                .sent(&self.inbox, &self.identity, correlation, &text)
-        })
-    }
-
-    fn messages(&self) -> Box<dyn RelayMessageStream> {
-        Box::new(ScriptedStream {
-            identity: self.identity.clone(),
-            inbox: Arc::clone(&self.inbox),
+            self.sent(correlation, &text)
         })
     }
 
     fn close(&self) -> ReleaseFuture<'_> {
         Box::pin(async move {
-            self.inbox.closed.store(true, Ordering::SeqCst);
-            if let Some(event_id) = *self.inbox.publication.lock().expect("publication lock") {
+            self.closed.store(true, Ordering::SeqCst);
+            self.router.close();
+            self.owner
+                .sessions
+                .lock()
+                .expect("session registry is not poisoned")
+                .retain(|session| session.identity() != self.identity);
+            if let Some(event_id) = *self.publication.lock().expect("publication lock") {
                 self.owner
                     .state
                     .lock()
@@ -398,7 +423,6 @@ impl RelaySession for ScriptedSession {
                     .insert(event_id);
             }
             self.owner.changed.notify_waiters();
-            self.inbox.notify.notify_waiters();
             Ok(ReleaseOutcome::Closed)
         })
     }
