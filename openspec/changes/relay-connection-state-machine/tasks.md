@@ -69,5 +69,16 @@ Eleven findings against the landed commits. Three are already assigned; the rest
 - [ ] 7.2 Build and test both example workspaces and `examples/crates/e2e-support`; verify each passes
 - [ ] 7.3 Run the live proof against the four relays and refresh the committed evidence; verify every authentication state the app drove before is still driven
 - [ ] 7.4 Falsify each new test by reverting the behavior it asserts, one at a time; verify each reversion fails only its own test
-- [ ] 7.5 Report the line count removed against the ~8,200 the canvasses measured; verify the number with `wc -l` rather than estimating
+- [x] 7.5 (measured, and the expectation was wrong) Report the line count removed against the ~8,200 the canvasses measured; verify the number with `wc -l` rather than estimating.
+
+  Measured across the eight crates the canvasses counted, at `006b842a` and at the tip:
+
+  ```
+  production   11,338 → 12,226   +888
+  tests         5,468 →  7,392  +1,924
+  ```
+
+  Nothing was removed on balance. The deletions were real — the lease and everything that existed to undo it, the polls, the duplicated lifecycle enum, the sideways trait, the counters nobody read — but the canvasses counted what would go without counting what takes its place. Two states on a watch channel, a matching rule, a request signal, an enumeration for catching up, and a write that waits on its connection are all new code. A dozen bugs found along the way each cost a fix and a test.
+
+  The change was worth making for what it fixed and for having one owner per fact, and it did not make the code smaller. Both are true and the second was not expected.
 - [ ] 7.6 Sign the changed and added public declarations through Symbol Gate; verify `symbol-gate verify` accepts the result
