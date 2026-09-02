@@ -82,6 +82,7 @@ pub(crate) struct HarnessBuilder {
     publisher: Arc<dyn Publisher>,
     delivery: Arc<dyn DeliveryPolicy>,
     routers: Vec<Arc<dyn Router>>,
+    transport: Arc<dyn Transport>,
 }
 
 impl Default for HarnessBuilder {
@@ -91,6 +92,7 @@ impl Default for HarnessBuilder {
             publisher: Arc::new(NeverPublisher),
             delivery: Arc::new(fava_delivery_standard::StandardDeliveryPolicy::default()),
             routers: Vec::new(),
+            transport: Arc::new(RefusingTransport),
         }
     }
 }
@@ -120,6 +122,15 @@ impl HarnessBuilder {
         self
     }
 
+    /// Select a real transport in place of the default one, which refuses
+    /// every acquisition. Needed to drive a publisher that actually waits on
+    /// connection state, rather than one scripted to return a fixed outcome.
+    #[must_use]
+    pub fn transport(mut self, transport: Arc<dyn Transport>) -> Self {
+        self.transport = transport;
+        self
+    }
+
     #[must_use]
     pub fn build(self) -> Harness {
         let store = Arc::new(MemoryWriteStore::default());
@@ -132,7 +143,7 @@ impl HarnessBuilder {
             session.clone(),
             self.publisher,
             self.delivery,
-            Arc::new(RefusingTransport),
+            self.transport,
             self.routers,
         )
         .expect("test providers assemble");
@@ -155,6 +166,18 @@ impl Harness {
 
     pub fn publish_signed(&self, routing: WriteRouting) -> ReceiptId {
         let intent = WriteIntent::presigned(signed_note(), routing).expect("test intent is valid");
+        self.publication
+            .accept(intent)
+            .expect("acceptance commits")
+            .receipt_id
+    }
+
+    /// Accept the standard signed note under an explicit relay authority,
+    /// rather than the default of none.
+    pub fn publish_signed_as(&self, routing: WriteRouting, access: Authority) -> ReceiptId {
+        let intent = WriteIntent::presigned(signed_note(), routing)
+            .expect("test intent is valid")
+            .under(access);
         self.publication
             .accept(intent)
             .expect("acceptance commits")
@@ -353,6 +376,70 @@ impl Publisher for ScriptedPublisher {
     }
 }
 
+/// Publisher whose single call to `publish` stays pending until the test
+/// releases it, then produces one scripted outcome.
+///
+/// Models what a real publisher waiting on connection state looks like from
+/// the owner's side: one authorized attempt, held open for as long as
+/// whatever it is waiting on takes, resolving to exactly one outcome.
+pub(crate) struct GatedPublisher {
+    outcome: PublishOutcome,
+    attempts: Mutex<u32>,
+    release: Notify,
+    started: Notify,
+}
+
+impl GatedPublisher {
+    #[must_use]
+    pub fn new(outcome: PublishOutcome) -> Self {
+        Self {
+            outcome,
+            attempts: Mutex::new(0),
+            release: Notify::new(),
+            started: Notify::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn attempts(&self) -> u32 {
+        *self
+            .attempts
+            .lock()
+            .expect("attempt counter is not poisoned")
+    }
+
+    /// Await the first call to `publish` reaching its wait, the way a
+    /// challenge reaching the connection would.
+    pub async fn parked(&self) {
+        self.started.notified().await;
+    }
+
+    /// Let the parked call resolve to the scripted outcome.
+    pub fn release(&self) {
+        self.release.notify_waiters();
+    }
+}
+
+impl Publisher for GatedPublisher {
+    fn publish<'a>(
+        &'a self,
+        _attempt: PublishAttempt,
+        _transport: &'a dyn Transport,
+    ) -> Pin<Box<dyn Future<Output = PublishOutcome> + Send + 'a>> {
+        Box::pin(async move {
+            *self
+                .attempts
+                .lock()
+                .expect("attempt counter is not poisoned") += 1;
+            let waiting = self.release.notified();
+            tokio::pin!(waiting);
+            self.started.notify_waiters();
+            waiting.await;
+            self.outcome.clone()
+        })
+    }
+}
+
 struct NeverPublisher;
 
 impl Publisher for NeverPublisher {
@@ -410,6 +497,11 @@ impl Transport for RefusingTransport {
                 },
             ))
         })
+    }
+
+    fn awaiting_authentication(&self) -> Vec<std::sync::Arc<dyn fava_transport::RelaySession>> {
+        // This double never carries a relay's demand.
+        Vec::new()
     }
 
     fn authentication_requests(

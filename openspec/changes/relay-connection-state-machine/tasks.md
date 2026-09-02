@@ -35,9 +35,9 @@
 - [x] 5.0 Remove `state` and `authenticated` from the authentication owner's public surface, along with the copy of connection state they read; verify a grep finds no caller and nothing outside the owner holds a second opinion about a connection
 - [x] 5.1 Delete `AuthenticationOutcomes` and read the connection directly in both callers; verify `fava-observe` and `fava-publication` compile without it and a grep for the name is empty
 - [x] 5.2 Stop republishing authentication from the nine completion handlers, so a relay's own words and an end-of-stored-events are no longer overwritten by an authentication state; verify a test asserts a refusal keeps the relay's message and that a completed stored window survives
-- [ ] 5.3 Park a destination that meets `auth-required:` on its connection's authentication, spending no attempt and eligible for no policy; verify a test asserts the attempt count does not advance while it waits
-- [ ] 5.4 Resume a parked destination when its connection satisfies the write's authority and fail it when it cannot; verify one test drives each transition and asserts the resulting receipt
-- [ ] 5.5 Confirm the deciding component knows nothing of waiting work; verify a test parks a publication, drives the answer through the policy alone, and asserts the publication proceeds
+- [x] 5.3 Park a destination that meets `auth-required:` on its connection's authentication, spending no attempt and eligible for no policy; verify a test asserts the attempt count does not advance while it waits
+- [x] 5.4 Resume a parked destination when its connection satisfies the write's authority and fail it when it cannot; verify one test drives each transition and asserts the resulting receipt
+- [x] 5.5 Confirm the deciding component knows nothing of waiting work; verify a test parks a publication, drives the answer through the policy alone, and asserts the publication proceeds
 
 ## 6. What is left over
 
@@ -56,7 +56,7 @@ Eleven findings against the landed commits. Three are already assigned; the rest
 - [x] 6b.5 Separate what the relay has accepted from how the challenge is going, per the design decision; verify a connection that could not answer still carries anonymous work, and one the relay accepted never carries it again whatever happens to a later challenge
 - [x] 6b.6 Answer each request the transport publishes without the answering loop signing inline, so a slow signer cannot block every other relay and overflow the backlog; verify a request is not lost when a subscriber falls behind, which is the failure the design chose a broadcast to avoid
 - [x] 6b.7 Give the evidence that says a relay demands authentication a producer again, scoped to the observation it concerns rather than every observation at that relay; verify an observation at a relay demanding authentication carries evidence saying so
-- [ ] 6b.8 Restore the hold on a publication whose session is waiting for a person, which was removed as unreachable and was reachable; verify a write refused for want of authentication while a person is being asked stays open
+- [x] 6b.8 Restore the hold on a publication whose session is waiting for a person, which was removed as unreachable and was reachable; verify a write refused for want of authentication while a person is being asked stays open
 - [x] 6b.9 Retire what is kept about connections that are gone — the attempt ledger and demands from superseded connections at the same relay both grow without bound; verify neither retains an entry for a connection that has been replaced
 - [x] 6b.10 Make an exhausted reconnect budget reach the handles on the real transport as it does on the fake; verify a publisher sees the same ending either way
 - [x] 6b.11 Delete the connection-state enum the two states replaced; verify a grep finds only its definition and re-export, then neither

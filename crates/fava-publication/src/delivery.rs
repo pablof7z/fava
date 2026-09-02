@@ -197,12 +197,16 @@ impl Publication {
             // The owner records only what the publisher observed. `GivenUp` is a policy
             // noun the owner must never invent, and this outcome is reached after handoff,
             // so it cannot be reported as a definite pre-handoff failure.
-            // Waiting for the connection to authenticate is not implemented
-            // here yet: a destination that meets this waits on the connection
-            // itself, which is the next slice of this change. Until then it
-            // records what the relay said, which is what it already did — the
-            // branch that asked an authentication component was unreachable in
-            // any assembly, because nothing told that component to watch.
+            //
+            // The publisher already waited: this outcome only reaches the
+            // owner once no connection can still satisfy the write's
+            // authority — refused, declined, unanswerable, or gone for good —
+            // or once the write's authority was anonymous and had nothing to
+            // wait for. While a connection could still reach it, the
+            // publisher's single call to `publish` stayed pending inside
+            // this attempt, spending nothing here: no second `begin_attempt`,
+            // no policy decision, and the destination reads `Attempting` for
+            // as long as it does.
             PublishOutcome::AuthenticationRequired { message } => {
                 RelayDeliveryOutcome::AuthenticationDenied { reason: message }
             }
