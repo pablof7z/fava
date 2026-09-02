@@ -1,0 +1,19 @@
+{
+  "enabled": false,
+  "writes": {
+    "disposition": "block",
+    "bypass": "auto"
+  },
+  "branchChanges": {
+    "disposition": "block",
+    "bypass": "auto"
+  },
+  "discard": {
+    "disposition": "block",
+    "bypass": "auto"
+  },
+  "stash": {
+    "disposition": "block",
+    "bypass": "auto"
+  }
+}

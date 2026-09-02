@@ -7,7 +7,17 @@ Defines which relay authority a write is accepted under, how that survives durab
 
 ### Requirement: A write is accepted under one relay authority and keeps it
 
-A write SHALL record the relay access authority it was accepted under, and SHALL be delivered under that authority for its whole life. A later change of selection, signer, or current account SHALL NOT retarget work already accepted.
+A write SHALL be accepted under exactly one relay authority — no authentication, or authentication as one exact account — and SHALL keep it for its life. The authority SHALL be a requirement the write states of any connection that carries it, not a name selecting one. A connection SHALL carry the write only while it can still satisfy that requirement.
+
+#### Scenario: A write states its authority rather than naming a connection
+
+- **WHEN** a write accepted under an account is routed to a relay
+- **THEN** it is carried by a connection that is, or can still become, authenticated as that account
+
+#### Scenario: A write requiring no authority is never carried by an authenticated connection
+
+- **WHEN** a write accepted under no authority is routed to a relay whose only connection is authenticated
+- **THEN** it is not carried by that connection
 
 #### Scenario: An accepted write keeps its authority
 
@@ -35,7 +45,17 @@ A write's route request SHALL carry its accepted authority, and routing SHALL se
 
 ### Requirement: A parked write resumes under its own authority
 
-A write parked awaiting a signer or a route SHALL resume under the authority recorded at acceptance, including after a process restart. It SHALL NOT resume as public work because the process that resumed it had no selection.
+A write parked for want of authentication SHALL wait for the connection carrying it to satisfy its authority, and SHALL resume under that authority alone. It SHALL NOT consume a retry budget while waiting, and no policy SHALL retire it. It SHALL fail when the connection reaches a state from which its authority can no longer be satisfied.
+
+#### Scenario: A parked write does not spend attempts
+
+- **WHEN** a write meets a relay demanding authentication and waits
+- **THEN** its attempt count does not advance and no policy gives up on it
+
+#### Scenario: A refused authentication fails the write
+
+- **WHEN** the connection a parked write waits on has its authentication refused, rejected, or failed
+- **THEN** the write fails, naming that authentication was required and did not happen
 
 #### Scenario: A write parked for a signer resumes authenticated
 

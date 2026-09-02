@@ -115,7 +115,7 @@ Eleven findings against the landed commits. Three are already assigned; the rest
   Nothing was removed on balance. The deletions were real — the lease and everything that existed to undo it, the polls, the duplicated lifecycle enum, the sideways trait, the counters nobody read — but the canvasses counted what would go without counting what takes its place. Two states on a watch channel, a matching rule, a request signal, an enumeration for catching up, and a write that waits on its connection are all new code. A dozen bugs found along the way each cost a fix and a test.
 
   The change was worth making for what it fixed and for having one owner per fact, and it did not make the code smaller. Both are true and the second was not expected.
-- [ ] 7.6 Sign the changed and added public declarations through Symbol Gate; verify `symbol-gate verify` accepts the result
+- [ ] 7.6 (left open deliberately, at the repository owner's instruction on 2026-09-03: "no need for the symbols to be signed yet") Sign the changed and added public declarations through Symbol Gate; verify `symbol-gate verify` accepts the result
 
   Blocked on the repository owner. Checked on 2026-09-03, and the record four archived changes carry is wrong on one point, so here is what is actually true.
 

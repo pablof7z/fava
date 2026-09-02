@@ -121,16 +121,11 @@ Releasing a handle whose generation has already ended SHALL send nothing, becaus
 - **WHEN** a subscription handle whose generation has ended is released
 - **THEN** no closure is sent
 
-### Requirement: Relay challenges reach one named reader
+### Requirement: A session can refuse a challenge without sending anything
 
-A relay session SHALL expose the relay's authentication challenges through their own accessor. A challenge SHALL NOT be delivered mixed with other messages for a component to filter out, and SHALL NOT require a component to have sent anything to receive it.
+The session SHALL offer a way to record that the application refused to authenticate, distinct from not having decided yet. Refusing SHALL send no frame.
 
-#### Scenario: A challenge arrives without a prior request
+#### Scenario: Refusal is distinguishable from silence
 
-- **WHEN** a relay issues an unsolicited authentication challenge and one component is reading challenges
-- **THEN** that component receives it, having sent nothing to correlate it to
-
-#### Scenario: A challenge does not reach a subscription or an acknowledgement
-
-- **WHEN** a relay issues a challenge while a subscription and a publication are live on the same session
-- **THEN** neither handle observes it
+- **WHEN** the application refuses a challenge
+- **THEN** work waiting on that connection can tell that a decision was made, and no frame reaches the relay

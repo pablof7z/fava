@@ -7,12 +7,12 @@ Defines who Fava authenticates as on a relay connection, when it answers a NIP-4
 
 ### Requirement: One owner holds every relay challenge
 
-Exactly one component SHALL hold NIP-42 challenge state, keyed by relay session identity and connection. No publisher, observation owner, transport, or application SHALL retain a challenge, an authentication verdict, or a derived "already authenticated" flag of its own.
+Exactly one component SHALL decide what to do about a relay's challenge and answer it. The challenge itself is the connection's own state; no publisher, observation owner, or application SHALL keep a copy of a challenge or a verdict of its own.
 
 #### Scenario: Challenge state exists in exactly one place
 
 - **WHEN** a relay issues a challenge and Fava answers it
-- **THEN** the challenge and its verdict are readable only from the authentication owner, and no other component retains either
+- **THEN** the challenge and its verdict are readable only from the connection, and no component keeps a second copy
 
 #### Scenario: A publisher does not authenticate
 
@@ -49,7 +49,17 @@ An authenticated relay session SHALL serve every query and every publication run
 
 ### Requirement: The application decides whether to authenticate
 
-Fava SHALL consult the application's policy for each challenge, carrying the relay, the account identity, and the challenge. Fava SHALL NOT authenticate to a relay the policy declines.
+The application SHALL decide whether to authenticate, and as which account. The decision SHALL be made synchronously and perform no effects. A decision naming an account SHALL be answered as that account; refusing SHALL leave the connection refused; declining to decide SHALL leave the connection as it is, awaiting a person, without signing or sending anything.
+
+#### Scenario: The policy names the account
+
+- **WHEN** a relay challenges a connection and the application's policy chooses to authenticate
+- **THEN** the answer is signed as the account the policy named
+
+#### Scenario: Deciding nothing sends nothing
+
+- **WHEN** the application's policy neither authenticates nor refuses
+- **THEN** nothing is signed, nothing is sent, and the connection stays as the relay left it
 
 #### Scenario: Policy declines an unapproved relay
 
@@ -85,30 +95,21 @@ A policy SHALL be able to defer a challenge to a person without blocking, signin
 - **WHEN** a publication attempt meets a session whose challenge is deferred
 - **THEN** the attempt stays open while the demand is outstanding, rather than being recorded as denied
 
-### Requirement: An answer belongs to the connection it was shown for
-
-A deferred demand SHALL be invalidated when its connection is replaced, and an answer arriving for a replaced connection SHALL resolve nothing. A new connection SHALL begin unauthenticated with a refilled attempt budget.
-
-#### Scenario: A reconnect voids an outstanding demand
-
-- **WHEN** a challenge is deferred and the connection is replaced before a person answers
-- **THEN** the demand is dropped, the change is signalled, and a later answer authenticates nothing
-
-#### Scenario: A new connection is challenged afresh
-
-- **WHEN** a session authenticates and then reconnects
-- **THEN** the new connection is unauthenticated until the relay challenges it again
-
 ### Requirement: A relay's own words survive, and its challenge is refused rather than trimmed
 
-Fava SHALL preserve the relay's own text when it accepts, rejects, or accepts-but-still-refuses. An acceptance that still refuses SHALL be distinguishable from a plain rejection.
+Fava SHALL preserve the relay's own text when authentication fails. Whether the relay rejected outright or accepted and still refused the work, the failure SHALL be reported through one outcome, distinguished only by the relay's own words — no separate state SHALL exist for one machine-readable prefix over another.
 
 A challenge longer than the accepted bound SHALL be refused with a typed error rather than truncated, and truncation SHALL NOT occur anywhere on the path from the socket to that check.
 
 #### Scenario: Acceptance-with-refusal keeps its text
 
 - **WHEN** a relay accepts the authentication and still refuses the work with `restricted:`
-- **THEN** the outcome names acceptance-with-refusal and carries the relay's own message
+- **THEN** the failure carries the relay's own message verbatim, and no separate outcome exists to name the distinction
+
+#### Scenario: A rejection and an acceptance-with-refusal are told apart only by their words
+
+- **WHEN** a relay refuses authentication, whether by rejecting outright or by accepting and still refusing the work
+- **THEN** both are reported through the same failure, and it is the relay's own words that distinguish them, not a separate state
 
 #### Scenario: An oversized challenge is refused, not trimmed
 
@@ -126,25 +127,23 @@ Attempts per connection SHALL be bounded. Once the bound is reached, Fava SHALL 
 
 ### Requirement: An observation learns why it is not being served
 
-An observation on a relay session that demands authentication SHALL report that fact in its evidence, sourced from the authentication owner's outcome for that session identity. The observation owner SHALL NOT derive it from the wire.
-
-Every authentication outcome SHALL be reachable this way.
+An observation on a relay session that demands authentication SHALL report that fact in its evidence, read from the connection it already holds rather than from a separate channel carrying a copy of the same fact.
 
 #### Scenario: An observation reports the relay's demand
 
 - **WHEN** a relay demands authentication for a session an observation is reading
-- **THEN** the observation's evidence for that relay reports it, without the observation owner decoding a challenge
+- **THEN** the observation's evidence for that relay reports it, read from the connection itself rather than decoded from the wire or fetched from elsewhere
 
 #### Scenario: One account's denial leaves other work running
 
 - **WHEN** authentication is denied for one account
 - **THEN** another account's observation, and public-access work on the same relay, continue unaffected
 
-### Requirement: Watching for challenges does not hold a session open
+### Requirement: An answer names what it applies to, even when that is nothing
 
-The authentication owner SHALL release its lease on a relay session when no authenticated work remains for that relay.
+An answer given for a connection that has since been replaced SHALL report that it applies to nothing, rather than reporting that no such demand was ever made.
 
-#### Scenario: The lease is released when the last authenticated work ends
+#### Scenario: A stale answer names its own irrelevance
 
-- **WHEN** the last observation and publication under an authenticated identity for one relay end
-- **THEN** the session's holder count returns to what it was before authentication began
+- **WHEN** an answer is given for a connection that has since been replaced
+- **THEN** it is reported that the answer applies to nothing, not that no demand exists
