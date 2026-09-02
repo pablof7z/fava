@@ -98,6 +98,22 @@ A transport SHALL publish, for each session whose relay demands authentication, 
 - **WHEN** a connection is replaced and the new connection is challenged, even with the same challenge text as before
 - **THEN** the new session is announced
 
+### Requirement: The transport answers what connections it holds
+
+A transport SHALL be able to say which sessions it currently holds, so a component that owns no connection can still read what one is doing. Nothing SHALL poll this.
+
+A session SHALL appear for exactly as long as something holds it: once the last holder releases a connection, neither it nor anything it knew SHALL be reported. A reader asking about a relay nothing is connected to SHALL be told that, and SHALL NOT be given the last state a closed connection reached.
+
+#### Scenario: A listener that fell behind finds the demands it missed
+
+- **WHEN** the component that decides authentication learns it missed announcements
+- **THEN** it can ask which held connections are still waiting to be answered, without waiting for a repetition the relay has no reason to send
+
+#### Scenario: A released connection reports nothing
+
+- **WHEN** the last holder of a connection releases it and a reader then asks about that relay
+- **THEN** no session is reported for it, and the authentication the closed connection had reached is not reported either
+
 ### Requirement: Waiting work resumes because the connection moved
 
 Work waiting for a connection to reach a state SHALL resume when it reaches it, and SHALL fail when the connection reaches a state it can no longer be served from. Nothing SHALL tell the waiting work what happened; it SHALL observe the connection itself. The component deciding authentication SHALL NOT know what work is waiting.

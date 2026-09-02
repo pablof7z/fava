@@ -94,3 +94,5 @@ Eleven findings against the landed commits. Three are already assigned; the rest
 
   The change was worth making for what it fixed and for having one owner per fact, and it did not make the code smaller. Both are true and the second was not expected.
 - [ ] 7.6 Sign the changed and added public declarations through Symbol Gate; verify `symbol-gate verify` accepts the result
+
+  Blocked on the repository owner, like the same task in four archived changes. Checked on 2026-09-03, not recalled: the binary runs (`/Users/pablofernandez/.local/bin/symbol-gate`), and `symbol-gate verify` refuses with `error [trusted_key_missing]` — no trusted key was named, and it will not consult the user-local store at `~/Library/Application Support/symbol-gate/trusted_keys` by default, because running any Symbol Gate command executes the repository's own extractors as the caller. It needs `--trusted-key <path>` naming the owner's key. Nobody but the owner can supply it.
