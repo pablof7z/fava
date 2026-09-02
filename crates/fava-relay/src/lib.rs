@@ -182,7 +182,7 @@ mod connection_tests {
             .public_key()
     }
 
-    use super::{Authentication, Authority, BoundedText, Connectivity, Progress};
+    use super::{Authentication, Authority, BoundedText, Progress};
 
     /// What the relay knows decides anonymous work; nothing else does.
     #[test]
@@ -268,19 +268,5 @@ mod connection_tests {
             },
         };
         assert!(refused.can_serve(&Authority::As(alice)));
-    }
-
-    #[test]
-    fn connectivity_is_three_states_and_says_nothing_about_authentication() {
-        for state in [
-            Connectivity::Disconnected {
-                detail: BoundedText::new("socket closed"),
-                spent: None,
-            },
-            Connectivity::Connecting,
-            Connectivity::Connected,
-        ] {
-            let _ = format!("{state:?}");
-        }
     }
 }

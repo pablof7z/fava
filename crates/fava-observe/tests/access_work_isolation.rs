@@ -135,11 +135,29 @@ async fn exact_access_keys_isolate_event_eose_and_challenge()
             .stored_events_complete()
     );
 
-    // A challenge is not this owner's fact: it belongs to whoever authenticates
-    // the session, and reaches it on the session's own challenge reader. Neither
+    // A relay may challenge a connection that asked for nothing. This
+    // observation wants public access, so a demand on its session is not its
+    // fact -- it is not waiting on an answer and never was. Neither
     // observation changes.
     push(&public_peer, &RelayMessage::auth("public challenge"));
     settle().await;
+    assert!(
+        matches!(
+            public
+                .current()
+                .evidence
+                .relay(&url)
+                .map(|item| &item.state),
+            Some(RelaySourceState::StoredEventsComplete { .. })
+        ),
+        "an anonymous observation is not waiting on a challenge it never provoked, and its \
+         completed window is not overwritten by one, got {:?}",
+        public
+            .current()
+            .evidence
+            .relay(&url)
+            .map(|item| item.state.clone())
+    );
     assert!(matches!(
         private
             .current()

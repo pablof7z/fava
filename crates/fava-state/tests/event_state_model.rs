@@ -21,12 +21,64 @@ fn event(keys: &Keys, kind: Kind, at: u64, content: &str, tags: Vec<Tag>) -> Eve
 }
 
 fn observed(event: Event, session: &RelayUrl, at: u64) -> RelayEvent {
-    RelayEvent::new(
-        event,
-        session.clone(),
+    observed_as(event, session, fava_relay::Authority::Unauthenticated, at)
+}
+
+fn observed_as(
+    event: Event,
+    session: &RelayUrl,
+    authority: fava_relay::Authority,
+    at: u64,
+) -> RelayEvent {
+    RelayEvent::new(event, session.clone(), authority, Timestamp::from(at))
+}
+
+/// One relay is one place an event was seen, whatever the connection that
+/// carried it was authenticated as.
+///
+/// The authority travels with the occurrence so a later query cannot read it
+/// back under a different one -- but it does not split the occurrence in two.
+/// A relay that hands the same event to an anonymous connection and to an
+/// authenticated one has been seen holding it once.
+#[test]
+fn one_relay_under_two_authorities_is_still_one_occurrence() {
+    let author = Keys::generate();
+    let reader = Keys::generate().public_key();
+    let seen = event(&author, Kind::TextNote, 1, "seen twice", Vec::new());
+    let relay = session("wss://one.example");
+
+    let anonymous = observed_as(
+        seen.clone(),
+        &relay,
         fava_relay::Authority::Unauthenticated,
-        Timestamp::from(at),
-    )
+        9,
+    );
+    let authenticated = observed_as(seen.clone(), &relay, fava_relay::Authority::As(reader), 3);
+
+    let occurrences =
+        relay_occurrences_for_event(seen.id, &[anonymous.clone(), authenticated.clone()])
+            .expect("same id");
+    assert_eq!(
+        occurrences.len(),
+        1,
+        "two authorities on one relay are one occurrence, got {occurrences:?}"
+    );
+
+    // And the model agrees when the second arrives against stored state: the
+    // earlier sighting wins outright rather than being kept beside it.
+    assert_eq!(
+        mutations_for_event(
+            std::slice::from_ref(&anonymous),
+            authenticated.clone(),
+            Timestamp::from(20)
+        ),
+        vec![EventStateMutation::Upsert(authenticated.clone())],
+        "the earlier time replaces the occurrence rather than adding one"
+    );
+    assert!(
+        mutations_for_event(&[authenticated], anonymous.clone(), Timestamp::from(20)).is_empty(),
+        "and a later sighting under another authority adds nothing"
+    );
 }
 
 #[test]

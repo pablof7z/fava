@@ -209,3 +209,89 @@ async fn a_slow_signer_on_one_relay_does_not_delay_answering_another() {
         "the slow relay is answered once its signer returns"
     );
 }
+
+#[tokio::test]
+async fn a_signer_finishing_after_a_reconnect_writes_nothing_on_the_replacement() {
+    let keys = Keys::generate();
+    let gate = Arc::new(Notify::new());
+    let relay_url = RelayUrl::parse("wss://slow.example.com").expect("valid relay url");
+
+    let signers = Session::new([Arc::new(GatedSigner {
+        keys: keys.clone(),
+        gate: Arc::clone(&gate),
+    }) as Arc<dyn Signer>])
+    .expect("one signer");
+
+    let runtime = Runtime::new(RuntimeConfig {
+        default_channel_depth: nonzero(1_024),
+        max_tasks: nonzero(1_024),
+        max_provider_operations: nonzero(256),
+    });
+    let authenticator = Authenticator::new(
+        signers,
+        Arc::new(PerRelay(BTreeMap::from([(
+            relay_url.clone(),
+            keys.public_key(),
+        )]))),
+        runtime,
+    );
+
+    let transport = FakeTransport::new();
+    authenticator
+        .answer_requests(
+            &(std::sync::Arc::new(transport.clone())
+                as std::sync::Arc<dyn fava_transport::Transport>),
+        )
+        .expect("the owner begins answering");
+
+    let authority = Authority::As(keys.public_key());
+    let lease = open(&transport, &relay_url, authority).await;
+    let session = std::sync::Arc::clone(lease.session());
+    let relay = transport
+        .relay(&relay_url, &authority)
+        .expect("acquired above");
+
+    relay.push_frame(&challenge_frame("nonce-1"));
+    settle().await;
+    assert!(
+        auth_frames(&relay).is_empty(),
+        "the signer is gated, so nothing has been answered yet"
+    );
+
+    // The connection is replaced while a person is still deciding in the
+    // signer. Everything that follows belongs to a connection that is gone.
+    relay.reconnect();
+    settle().await;
+    assert!(
+        matches!(
+            fava_transport::RelaySessionExt::connection(&session)
+                .borrow()
+                .authentication
+                .progress,
+            fava_relay::Progress::Idle
+        ),
+        "a replacement connection has been asked nothing"
+    );
+
+    gate.notify_one();
+    settle().await;
+
+    // The answer cannot be handed to a connection that was never challenged,
+    // and the refusal that produces belongs to the connection that asked --
+    // which no longer exists. Writing it onto the replacement would mark a
+    // fresh connection unanswerable for a question it was never asked.
+    assert!(
+        matches!(
+            fava_transport::RelaySessionExt::connection(&session)
+                .borrow()
+                .authentication
+                .progress,
+            fava_relay::Progress::Idle
+        ),
+        "a signer finishing late writes nothing onto the connection that replaced it"
+    );
+    assert!(
+        auth_frames(&relay).is_empty(),
+        "and nothing reaches the relay either"
+    );
+}

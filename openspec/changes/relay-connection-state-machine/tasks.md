@@ -86,7 +86,21 @@ Eleven findings against the landed commits. Three are already assigned; the rest
   A connection's authentication dies with the connection, by design, so a check after the last holder released it is honestly `unknown`. The scenario now holds a query open across each check, which also means every state is read off the same live connection that reached it.
 
   Every state the app can drive is driven: `authenticated`, `unanswerable`, `declined`, `refused` twice, `requested`, `authenticating`. The two refusals share a name — the change collapsed `AcceptedButStillRefused` into `Refused` deliberately — so the harness now asserts the relay's own words instead, `error:` from `reject` and `restricted:` from `accept-refuse`, which is a stricter check than the name it replaced. `Idle` is the one state no relay here drives: all four challenge on connect.
-- [ ] 7.4 Falsify each new test by reverting the behavior it asserts, one at a time; verify each reversion fails only its own test
+- [x] 7.4 Falsify each new test by reverting the behavior it asserts, one at a time; verify each reversion fails only its own test
+
+  All 31 new tests swept. Every one failed a reversion of the behavior it asserts except one, and no reversion took down a large unrelated blast radius. The sweep found three tests that proved nothing; all three are now closed.
+
+  **Deleted.** `connectivity_is_three_states_and_says_nothing_about_authentication` contained no assertion -- a loop over three variants calling `format!` and discarding it. No change to production code can fail it, and adding a fourth variant would not either. It was a compile-surface note wearing a test's name.
+
+  **`Authenticator::record`'s stale-identity guard was unexercised.** Deleting `if session.identity() != *identity { return false; }` outright failed *no test in `fava-auth`*. It is load-bearing: a signer can be remote, and if the connection is replaced while a person is deciding, `RelaySessionExt::answer` refuses the handoff and the resulting `Unanswerable` would be written onto the replacement -- marking a fresh connection unanswerable for a question it was never asked. Now `a_signer_finishing_after_a_reconnect_writes_nothing_on_the_replacement`, which fails on exactly that deletion and nothing else.
+
+  **A rule was tested two crates from where it lives.** Making `fava-state`'s `exact_existing` match authority-sensitive fails nothing in `fava-state`; the only test that caught it was `fava-event-cache-memory`'s, which is aimed at `MemoryEventCache` -- a provider that does not decide this, since `EventCache::admit`'s default routes through `mutations_for_event` first. Now `one_relay_under_two_authorities_is_still_one_occurrence` asserts it where it is decided.
+
+  **A test asserted the wrong observation.** The challenge stanza of `exact_access_keys_isolate_event_eose_and_challenge` pushed an `AUTH` at the *public* peer and then checked the *private* observation, which is unaffected either way. Removing the anonymous-slot guard in `completions.rs` passed every test in `fava-observe`. It now asserts the public observation's completed window survives a challenge it never provoked, and fails when that guard goes.
+
+  **Recorded, not acted on.** `a_challenge_on_a_public_connection_still_reaches_the_policy` is falsifiable only through `FakeTransport::dial`: since access stopped being identity, nothing in production can tell a connection opened for public work from one opened for an account that has not authenticated yet. Every reversion in real code failed 4-5 of that file's 7 tests indiscriminately. The websocket transport's identical unconditional spawn is not covered by it.
+
+  The two `public_api.rs` tests flagged as weak are in a file that declares itself a compile-surface proof; that is their stated job. One reported redundancy was not real: `exact_access_keys_isolate_event_eose_and_challenge` and `a_close_refusal_on_one_connection_leaves_the_other_untouched` fall to the same reversion because one bug breaks all three message kinds, but they cover `EVENT`/`EOSE` and `CLOSED` respectively.
 - [x] 7.5 (measured, and the expectation was wrong) Report the line count removed against the ~8,200 the canvasses measured; verify the number with `wc -l` rather than estimating.
 
   Measured across the eight crates the canvasses counted, at `006b842a` and at the tip:
@@ -101,4 +115,12 @@ Eleven findings against the landed commits. Three are already assigned; the rest
   The change was worth making for what it fixed and for having one owner per fact, and it did not make the code smaller. Both are true and the second was not expected.
 - [ ] 7.6 Sign the changed and added public declarations through Symbol Gate; verify `symbol-gate verify` accepts the result
 
-  Blocked on the repository owner, like the same task in four archived changes. Checked on 2026-09-03, not recalled: the binary runs (`/Users/pablofernandez/.local/bin/symbol-gate`), and `symbol-gate verify` refuses with `error [trusted_key_missing]` — no trusted key was named, and it will not consult the user-local store at `~/Library/Application Support/symbol-gate/trusted_keys` by default, because running any Symbol Gate command executes the repository's own extractors as the caller. It needs `--trusted-key <path>` naming the owner's key. Nobody but the owner can supply it.
+  Blocked on the repository owner. Checked on 2026-09-03, and the record four archived changes carry is wrong on one point, so here is what is actually true.
+
+  The trust store is **not** empty. `symbol-gate trust list` reports one trusted key, `npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft`, at `~/Library/Application Support/symbol-gate/trusted_keys`. A bare `symbol-gate verify` refuses with `trusted_key_missing` only because it will not consult that store unless named -- running any Symbol Gate command executes this repository's own extractors as the caller, so a repository you merely scanned could have added a key to it.
+
+  Naming it gets one step further and then stops: `symbol-gate verify --trusted-key <that path>` refuses with `policy_changed` -- no trusted key has signed `.symbol-gate/policy.toml` (digest `78ca531d…`). The policy decides which symbols are reviewable at all, so an unsigned one could remove symbols from review with nothing noticing.
+
+  And the scale is not this change's: `symbol-gate status` reports **1497 of 1500 symbols unsigned**, across 146 files. The entire declared surface is unsigned, not the part this change touched. Signing the policy and the surface needs the owner's secret key, through `symbol-gate review` or a headless signer set with `symbol-gate signer set`. Nobody else can supply it.
+
+  (`symbol-gate status` says so itself: it checks no signature and consults no key, and a coding agent that controls this repository can write any event it likes. Only `verify --trusted-key` means anything.)
