@@ -722,7 +722,7 @@ The publication lifecycle MUST accept:
 1. an `EventBuilder`, which may carry neutral local routing and whose event
    body identifies the author;
 2. an unsigned event whose `pubkey` already identifies the author;
-3. a `EventEdit` that can produce an unsigned replacement from the latest event at its coordinate; or
+3. an `EventEdit` that can produce an unsigned replacement from the latest event at its coordinate; or
 4. a complete pre-signed event.
 
 The accepted form determines the remaining work. It does not create separate publication or receipt systems.
@@ -749,7 +749,7 @@ evidence and does not imply acknowledgement. Applications do not construct
 
 For an unsigned or signed event, the author is the event's `pubkey`.
 
-Before a `EventEdit` has produced an event, the accepted write carries its resolved author. Every edit application MUST produce an event with that author as `pubkey`.
+Before an `EventEdit` has produced an event, the accepted write carries its resolved author. Every edit application MUST produce an event with that author as `pubkey`.
 
 Current-account convenience APIs resolve the selected account before the write is accepted, and the resolved author is committed with it. A later account switch MUST NOT retarget accepted work.
 
@@ -792,7 +792,7 @@ Cancellation or replacement by a newer current event retracts or replaces the wr
 
 ## WRITE-006 — Replaceable-event edits survive source changes
 
-A protocol crate may produce a `EventEdit` before the final event body is known, for example `Follow(Bob)` by Alice.
+A protocol crate may produce an `EventEdit` before the final event body is known, for example `Follow(Bob)` by Alice.
 
 The write store MUST retain the edit and its resolved author independently from the current revision. The protocol crate that defines the edit applies it to the best qualified source state and may apply it again when a newer qualified source appears. If no prior source event exists, it applies the edit to its defined empty state and produces the first event for that coordinate.
 
