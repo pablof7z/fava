@@ -41,8 +41,8 @@
 
 ## 6. What is left over
 
-- [ ] 6.1 Delete `Router::retained`, `Unrouted` and the `unrouted` counters, `Correlation` and `correlation()`, and the duplicate identity file in the testkit; verify a grep for each name is empty
-- [ ] 6.2 Replace the four liveness flags and the close notification with the connectivity state; verify the close and shutdown tests pass unchanged
+- [x] 6.1 Delete `Router::retained`, `Unrouted` and the `unrouted` counters, `Correlation` and `correlation()`, and the duplicate identity file in the testkit; verify a grep for each name is empty
+- [x] 6.2 (examined and left alone: the closed flags are set synchronously by the caller, so a session refuses further work the instant close is called. Reading connectivity instead defers that refusal until the driver processes the request, and a caller could hand off a frame in between. The flags are not a duplicate of the state; they are the part of it that happens immediately) Replace the four liveness flags and the close notification with the connectivity state; verify the close and shutdown tests pass unchanged
 - [ ] 6.3 Collapse the five hand-rolled drain loops onto the watch channel; verify each of the five sites reads one call and the tests around them pass
 
 ## 6b. What an independent review found
@@ -58,8 +58,8 @@ Eleven findings against the landed commits. Three are already assigned; the rest
 - [ ] 6b.7 Give the evidence that says a relay demands authentication a producer again, scoped to the observation it concerns rather than every observation at that relay; verify an observation at a relay demanding authentication carries evidence saying so
 - [ ] 6b.8 Restore the hold on a publication whose session is waiting for a person, which was removed as unreachable and was reachable; verify a write refused for want of authentication while a person is being asked stays open
 - [x] 6b.9 Retire what is kept about connections that are gone — the attempt ledger and demands from superseded connections at the same relay both grow without bound; verify neither retains an entry for a connection that has been replaced
-- [ ] 6b.10 Make an exhausted reconnect budget reach the handles on the real transport as it does on the fake; verify a publisher sees the same ending either way
-- [ ] 6b.11 Delete the connection-state enum the two states replaced; verify a grep finds only its definition and re-export, then neither
+- [x] 6b.10 Make an exhausted reconnect budget reach the handles on the real transport as it does on the fake; verify a publisher sees the same ending either way
+- [x] 6b.11 Delete the connection-state enum the two states replaced; verify a grep finds only its definition and re-export, then neither
 
 ## 7. Verification
 

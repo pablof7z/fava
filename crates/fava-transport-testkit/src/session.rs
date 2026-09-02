@@ -158,12 +158,13 @@ impl FakeSession {
         // Decode once and route, exactly as the real driver does: a fake that
         // only fed the legacy path would let a consumer pass here and fail
         // against a relay.
-        match std::str::from_utf8(frame)
+        // A frame this session cannot read belongs to nobody, so it goes
+        // nowhere.
+        if let Some(message) = std::str::from_utf8(frame)
             .ok()
             .and_then(|text| fava_wire::decode_relay(text).ok())
         {
-            Some(message) => self.router.deliver(message),
-            None => self.router.undecodable(),
+            self.router.deliver(message);
         }
     }
 }

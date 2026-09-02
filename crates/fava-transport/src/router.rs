@@ -106,17 +106,6 @@ impl<T> Mailbox<T> {
     }
 }
 
-/// Counts of traffic that reached no handle. These are the only signal that a
-/// component sent a request outside the verbs, which would otherwise present
-/// as a silent hang.
-#[derive(Default)]
-pub struct Unrouted {
-    /// Decoded messages no live handle's wire key claimed.
-    pub unclaimed: AtomicU64,
-    /// Inbound bytes `fava-wire` refused.
-    pub undecodable: AtomicU64,
-}
-
 /// Every live handle on one session, keyed by the wire key it owns.
 pub struct Router {
     subscriptions: Mutex<BTreeMap<SubscriptionId, Arc<Mailbox<SubscriptionItem>>>>,
@@ -137,8 +126,6 @@ pub struct Router {
     /// newest rather than the oldest. Dropping the sender is how a connection
     /// says it will never reach anything again; `close` is what drops it.
     connection: Mutex<ConnectionCell>,
-    /// Traffic that reached no handle.
-    pub unrouted: Unrouted,
 }
 
 /// The connection watch, plus the last value it carried once the sender
@@ -164,7 +151,6 @@ impl Router {
                 last: connection.clone(),
                 sender: Some(watch::Sender::new(connection)),
             }),
-            unrouted: Unrouted::default(),
         }
     }
 
@@ -387,7 +373,6 @@ impl Router {
                 let held = self.subscriptions.lock().expect("router is not poisoned");
                 let Some(mailbox) = held.get(&id) else {
                     drop(held);
-                    self.unrouted.unclaimed.fetch_add(1, Ordering::SeqCst);
                     return;
                 };
                 let mailbox: Arc<Mailbox<SubscriptionItem>> = Arc::clone(mailbox);
@@ -402,7 +387,6 @@ impl Router {
                     .expect("router is not poisoned");
                 let Some(waiting) = held.get(&event) else {
                     drop(held);
-                    self.unrouted.unclaimed.fetch_add(1, Ordering::SeqCst);
                     return;
                 };
                 let waiting: Vec<_> = waiting.iter().map(Arc::clone).collect();
@@ -422,9 +406,7 @@ impl Router {
                     connection.authentication.progress = Progress::Requested { challenge };
                 });
             }
-            RelayMessage::Notice(_) => {
-                self.unrouted.unclaimed.fetch_add(1, Ordering::SeqCst);
-            }
+            RelayMessage::Notice(_) => {}
         }
     }
 
@@ -432,11 +414,6 @@ impl Router {
     ///
     /// # Panics
     ///
-    /// If a prior holder of this session's router lock panicked.
-    pub fn undecodable(&self) {
-        self.unrouted.undecodable.fetch_add(1, Ordering::SeqCst);
-    }
-
     /// End every live handle, because the wire state they name did not survive
     /// the connection. A released handle reports the ending rather than waiting.
     ///

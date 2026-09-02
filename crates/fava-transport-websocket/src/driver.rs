@@ -280,12 +280,12 @@ fn admit_frame(shared: &SessionShared, frame: &[u8]) -> Option<TransportFailure>
         });
     }
     // Decode exactly once, here, for every handle on this session.
-    match std::str::from_utf8(frame)
+    // A frame this session cannot read belongs to nobody, so it goes nowhere.
+    if let Some(message) = std::str::from_utf8(frame)
         .ok()
         .and_then(|text| fava_wire::decode_relay(text).ok())
     {
-        Some(message) => shared.router.deliver(message),
-        None => shared.router.undecodable(),
+        shared.router.deliver(message);
     }
     None
 }

@@ -43,7 +43,7 @@ pub use routed::{
     RoutedSubscription, SessionEnded, Settlement, SettlementFuture, SubscribeFuture, Subscription,
     SubscriptionFuture, SubscriptionItem,
 };
-pub use router::{Mailbox, Router, Unrouted};
+pub use router::{Mailbox, Router};
 pub use session::{
     Connection, HandoffCorrelation, OpenedSubscription, RelayConnection, RelaySession,
     RelaySessionIdentity, SUBSCRIPTION_ID_BYTES, publish_authentication_requests, subscription_id,

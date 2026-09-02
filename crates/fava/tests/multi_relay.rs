@@ -121,9 +121,8 @@ impl ScriptedSession {
     fn receive(&self, message: &RelayMessage<'_>) {
         // Route it, exactly as a real session does.
         let frame = serde_json::to_string(message).expect("message encodes");
-        match fava_wire::decode_relay(&frame) {
-            Ok(owned) => self.router.deliver(owned),
-            Err(_) => self.router.undecodable(),
+        if let Ok(owned) = fava_wire::decode_relay(&frame) {
+            self.router.deliver(owned);
         }
     }
 
