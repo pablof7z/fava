@@ -496,3 +496,45 @@ async fn a_connection_still_waiting_can_be_found_after_a_lag() {
         "a connection that has been answered is no longer waiting"
     );
 }
+
+/// A connection nobody holds is gone, and so is what it knew.
+#[tokio::test(flavor = "current_thread")]
+async fn a_released_connection_is_reported_by_nothing() {
+    let transport = FakeTransport::new();
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
+    let session = std::sync::Arc::clone(lease.session());
+    let relay = transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("relay is registered");
+
+    relay.push_frame(b"[\"AUTH\",\"nonce-1\"]");
+    for _ in 0..16 {
+        tokio::task::yield_now().await;
+    }
+    assert!(
+        matches!(
+            fava_transport::RelaySessionExt::connection(&session)
+                .borrow()
+                .authentication
+                .progress,
+            fava_transport::Progress::Requested { .. }
+        ),
+        "the relay asked, so this connection is waiting on an answer"
+    );
+    assert_eq!(fava_transport::Transport::sessions(&transport).len(), 1);
+
+    drop(lease);
+
+    // Nothing holds it, so there is no connection to ask about -- not a
+    // connection that remembers being asked. Reading the last state a closed
+    // connection reached is exactly the ledger this change deleted.
+    assert!(
+        fava_transport::Transport::sessions(&transport).is_empty(),
+        "a released connection is held by nobody and reported to nobody"
+    );
+    assert!(fava_transport::Transport::awaiting_authentication(&transport).is_empty());
+    assert_eq!(transport.holders(&key(), &Authority::Unauthenticated), None);
+}
