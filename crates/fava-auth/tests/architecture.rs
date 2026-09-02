@@ -2,9 +2,9 @@
 //!
 //! `fava-auth` owns one lifecycle. It reaches the signer, the transport, the
 //! runtime, and the relay vocabulary, and nothing else. In particular it does
-//! not depend on `fava-query`: that is why `AuthenticationState` lives in
-//! `fava-relay`, where both this crate and query evidence can name it without
-//! either depending on the other.
+//! not depend on `fava-query`: that is why the lifecycle a connection carries
+//! lives in `fava-relay`, where both this crate and query evidence can name it
+//! without either depending on the other.
 
 use std::fs;
 use std::path::{Path, PathBuf};

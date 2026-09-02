@@ -159,7 +159,10 @@ async fn a_slow_signer_on_one_relay_does_not_delay_answering_another() {
 
     let transport = FakeTransport::new();
     authenticator
-        .answer_requests(&transport)
+        .answer_requests(
+            &(std::sync::Arc::new(transport.clone())
+                as std::sync::Arc<dyn fava_transport::Transport>),
+        )
         .expect("the owner begins answering");
 
     let slow_authority = Authority::As(slow_keys.public_key());

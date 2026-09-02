@@ -87,7 +87,7 @@ impl Rig {
         let relay = RelayUrl::parse("wss://relay.example.com").expect("valid relay url");
         let authority = Authority::As(account);
         authenticator
-            .answer_requests(transport.as_ref())
+            .answer_requests(&(Arc::clone(&transport) as Arc<dyn fava_transport::Transport>))
             .expect("the owner begins answering");
         // Nothing authenticates a relay nobody has connected to, so the rig
         // opens the session the test will drive.

@@ -459,3 +459,40 @@ async fn a_relay_asking_to_authenticate_reaches_a_listener() {
         fava_transport::Progress::Requested { .. }
     ));
 }
+
+/// A listener that fell behind can find what it missed.
+#[tokio::test(flavor = "current_thread")]
+async fn a_connection_still_waiting_can_be_found_after_a_lag() {
+    let transport = FakeTransport::new();
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
+    let session = std::sync::Arc::clone(lease.session());
+    let relay = transport
+        .relay(&key(), &Authority::Unauthenticated)
+        .expect("relay is registered");
+
+    assert!(
+        fava_transport::Transport::awaiting_authentication(&transport).is_empty(),
+        "a connection nobody asked is not waiting on an answer"
+    );
+
+    relay.push_frame(b"[\"AUTH\",\"nonce-1\"]");
+    for _ in 0..16 {
+        tokio::task::yield_now().await;
+    }
+
+    // The relay asked and nothing has answered. A listener that missed the
+    // announcement can still find this connection, which is the only way it
+    // ever learns: a relay repeats itself only when it has something new.
+    let waiting = fava_transport::Transport::awaiting_authentication(&transport);
+    assert_eq!(waiting.len(), 1);
+    assert!(std::sync::Arc::ptr_eq(&waiting[0], &session));
+
+    fava_transport::RelaySessionExt::record_progress(&session, fava_transport::Progress::Declined);
+    assert!(
+        fava_transport::Transport::awaiting_authentication(&transport).is_empty(),
+        "a connection that has been answered is no longer waiting"
+    );
+}

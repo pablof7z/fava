@@ -292,7 +292,7 @@ impl FavaBuilder {
                 // It answers the relays that ask, on connections everything
                 // else opened. It opens none of its own.
                 owner
-                    .answer_requests(transport.as_ref())
+                    .answer_requests(&transport)
                     .map_err(|error| BuildError::Runtime(error.to_string()))?;
                 Some(owner)
             }

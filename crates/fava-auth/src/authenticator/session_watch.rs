@@ -19,8 +19,9 @@ impl Authenticator {
     /// # Errors
     ///
     /// Returns [`WatchError`] when the runtime refuses to register the task.
-    pub fn answer_requests(&self, transport: &dyn Transport) -> Result<(), WatchError> {
+    pub fn answer_requests(&self, transport: &Arc<dyn Transport>) -> Result<(), WatchError> {
         let mut asked = transport.authentication_requests();
+        let waiting = Arc::clone(transport);
         let owner = self.clone();
         let runtime = self.inner().runtime.clone();
         let watch_token = self.cancellation();
@@ -45,22 +46,21 @@ impl Authenticator {
                             });
                         }
                         // The buffer overflowed: this owner fell behind the
-                        // relays it watches. Answering no longer blocks this
-                        // loop, so the usual cause -- one slow signer holding
-                        // every other relay's demand behind it -- is gone;
-                        // what remains is a burst of distinct challenges
-                        // arriving faster than tasks can be spawned to read
-                        // them, which is far rarer. It is not impossible, and
-                        // what overflowed is genuinely gone: a lost
-                        // connection is not republished, because
-                        // `publish_authentication_requests` republishes only
-                        // a challenge that differs from the last one it sent,
-                        // and this owner never saw the one it lost. Nothing
-                        // here can single out which connection that was, so
-                        // the honest response is to make the loss observable
-                        // rather than pretend it recovers on its own.
+                        // relays it watches. What overflowed is genuinely
+                        // gone — a relay is republished only when its
+                        // challenge changes, and this owner never saw the one
+                        // it lost. So rather than wait for a repetition that
+                        // is not coming, ask which connections are still
+                        // waiting to be answered and answer those.
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
                             owner.record_lagged(skipped);
+                            for session in waiting.awaiting_authentication() {
+                                let answering = owner.clone();
+                                let token = answer_token.clone();
+                                let _ = runtime.spawn_cancellable(ANSWER_TASK, token, async move {
+                                    answering.asked(&session).await;
+                                });
+                            }
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
                     }

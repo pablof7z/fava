@@ -102,6 +102,18 @@ pub trait Transport: Send + Sync {
     /// request nobody hears is a relay left unanswered.
     fn authentication_requests(&self) -> broadcast::Receiver<Arc<dyn RelaySession>>;
 
+    /// Every session currently waiting to be answered.
+    ///
+    /// The stream above is the ordinary path, and a listener that falls behind
+    /// loses what it missed — a relay only asks again when it has something
+    /// new to ask. This is how that listener catches up: it asks which
+    /// connections are still waiting, rather than waiting for a repetition
+    /// that is not coming.
+    ///
+    /// Nothing polls this. It is read once, after a listener learns it fell
+    /// behind.
+    fn awaiting_authentication(&self) -> Vec<Arc<dyn RelaySession>>;
+
     /// Stop accepting acquisitions, close every registered session within
     /// `deadline`, and join owned resources.
     ///

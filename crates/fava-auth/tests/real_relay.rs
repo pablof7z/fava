@@ -82,7 +82,7 @@ async fn nostr_rs_relay_challenge_and_kind_22242_response_are_exact_wire_frames(
     let authenticator =
         Authenticator::new(signers, Arc::new(AlwaysAuthenticate { account }), runtime);
     authenticator
-        .answer_requests(transport.as_ref())
+        .answer_requests(&transport)
         .expect("the owner begins answering");
     let relay_url = RelayUrl::parse(&proxy_url).expect("proxy url parses");
     let authority = Authority::As(account);

@@ -55,7 +55,7 @@ fn one_authentication_lifecycle_enum_exists_in_the_workspace() {
         for line in text.lines() {
             let line = line.trim_start();
             for noun in [
-                "enum AuthenticationState",
+                "enum Progress",
                 "enum AuthenticationOutcome",
                 "enum AuthenticationVerdict",
                 "enum AuthState",

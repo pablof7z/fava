@@ -354,3 +354,56 @@ async fn an_answer_signed_for_a_connection_that_is_gone_reaches_no_relay() {
         "and nothing further reaches the relay"
     );
 }
+
+#[tokio::test]
+async fn a_relay_repeating_itself_is_not_a_new_question() {
+    let rig = Rig::deferring().await;
+    let mut changed = rig.authenticator().subscribe();
+
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
+    rig.settle().await;
+    assert!(
+        changed.has_changed().unwrap_or(false),
+        "the first ask woke it"
+    );
+    changed.mark_unchanged();
+
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
+    rig.settle().await;
+
+    // The relay said the same thing again. Nothing about this connection
+    // changed, so nobody is woken and nobody is asked twice.
+    assert!(
+        !changed.has_changed().unwrap_or(false),
+        "a repeated challenge is not a change"
+    );
+    assert_eq!(rig.authenticator().pending().len(), 1);
+}
+
+#[tokio::test]
+async fn a_new_nonce_is_answered_against_the_one_the_relay_last_sent() {
+    let rig = Rig::approving().await;
+
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-2"));
+    rig.settle().await;
+
+    // Whatever order the answers were signed in, the connection ends up
+    // answering the question the relay last asked, not an earlier one.
+    let frames = auth_frames(&rig.relay());
+    let answered: Vec<_> = frames
+        .iter()
+        .filter_map(|frame| {
+            frame[1]["tags"]
+                .as_array()?
+                .iter()
+                .find(|tag| tag[0] == "challenge")?[1]
+                .as_str()
+                .map(str::to_owned)
+        })
+        .collect();
+    assert!(
+        answered.contains(&"nonce-2".to_owned()),
+        "the newest question is the one that gets answered, got {answered:?}"
+    );
+}

@@ -312,6 +312,11 @@ impl Transport for NoopTransport {
         })
     }
 
+    fn awaiting_authentication(&self) -> Vec<std::sync::Arc<dyn fava_transport::RelaySession>> {
+        // This double never carries a relay's demand.
+        Vec::new()
+    }
+
     fn authentication_requests(
         &self,
     ) -> tokio::sync::broadcast::Receiver<std::sync::Arc<dyn fava_transport::RelaySession>> {
