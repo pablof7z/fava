@@ -70,7 +70,7 @@ Eleven findings against the landed commits. Three are already assigned; the rest
 ## 7. Verification
 
 - [ ] 7.1 Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, and `cargo test --workspace --doc --locked`; verify every one passes
-- [ ] 7.2 Build and test both example workspaces and `examples/crates/e2e-support`; verify each passes
+- [x] 7.2 Build and test both example workspaces and `examples/crates/e2e-support`; verify each passes
 - [ ] 7.3 Run the live proof against the four relays and refresh the committed evidence; verify every authentication state the app drove before is still driven
 - [ ] 7.4 Falsify each new test by reverting the behavior it asserts, one at a time; verify each reversion fails only its own test
 - [x] 7.5 (measured, and the expectation was wrong) Report the line count removed against the ~8,200 the canvasses measured; verify the number with `wc -l` rather than estimating.
