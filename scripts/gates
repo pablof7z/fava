@@ -12,6 +12,10 @@
 set -u -o pipefail
 
 TIMEOUT=${GATES_TIMEOUT:-1800}
+# Each workspace builds into its own directory. Concurrent cargo runs sharing
+# one target/ have twice left it in a state where rustdoc hangs for minutes,
+# which reads as a broken test rather than a busy disk.
+BUILDS=${GATES_BUILD_DIR:-${TMPDIR:-/tmp}/fava-gates}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || exit 1
 
@@ -51,6 +55,7 @@ run "cargo fmt --all -- --check" cargo fmt --all -- --check
 
 for ws in "${WORKSPACES[@]}"; do
   echo "== $ws"
+  export CARGO_TARGET_DIR="$BUILDS/$(printf '%s' "$ws" | tr -c 'A-Za-z0-9' '-')"
   run "  clippy" cargo clippy --manifest-path "$ws/Cargo.toml" --all-targets --locked -- -D warnings
   run "  test"   cargo test   --manifest-path "$ws/Cargo.toml" --all-targets --locked
   run "  doc"    cargo test   --manifest-path "$ws/Cargo.toml" --doc --locked
